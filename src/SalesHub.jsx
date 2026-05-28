@@ -608,6 +608,21 @@ export default function SalesHub() {
     if(activeQuote?.id===id) setActiveQuote(null);
     setDeleteConfirm(null);
   }
+
+  function duplicateQuote(q) {
+    const newId = Date.now();
+    const newNum = nextQNum();
+    const duped = {
+      ...q,
+      id: newId,
+      quoteNum: newNum,
+      saved: false,
+      savedBy: "",
+      savedDate: "",
+      lineItems: q.lineItems.map(li => ({ ...li, id: Date.now() + Math.random() })),
+    };
+    setActiveQuote(duped);
+  }
   function openEmailModal(q) {
     const total=q.lineItems.reduce((a,li)=>a+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0);
     const prods=[...new Set(q.lineItems.map(li=>li.description||li.sku).filter(Boolean))].join(", ");
@@ -748,7 +763,7 @@ export default function SalesHub() {
           {activeTab==="quotes"&&<QuotesTab quotes={filteredQuotes} activeQuote={activeQuote} searchQ={searchQ} setSearchQ={setSearchQ}
             productsCAD={productsCAD} productsUSD={productsUSD} createNewQuote={createNewQuote}
             setActiveQuote={setActiveQuote} saveQuote={saveQuote} editQuote={q=>setActiveQuote({...q,saved:false})}
-            openEmailModal={openEmailModal} generatePDF={generatePDF} deleteConfirm={deleteConfirm} setDeleteConfirm={setDeleteConfirm} deleteQuote={deleteQuote} T={T}/>}
+            openEmailModal={openEmailModal} generatePDF={generatePDF} deleteConfirm={deleteConfirm} setDeleteConfirm={setDeleteConfirm} deleteQuote={deleteQuote} duplicateQuote={duplicateQuote} T={T}/>}
           {activeTab==="dims"&&<DimsTab dims={dims} setDims={setDims} T={T}/>}
           {activeTab==="shipping"&&<ShippingTab T={T}/>}
           {activeTab==="products"&&<ProductsTab products={filteredProducts} setProducts={setCurrentProducts}
@@ -874,7 +889,7 @@ export default function SalesHub() {
 }
 
 // ─── Quotes Tab ────────────────────────────────────────────────────────────────
-function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUSD,createNewQuote,setActiveQuote,saveQuote,editQuote,openEmailModal,generatePDF,deleteConfirm,setDeleteConfirm,deleteQuote,T}) {
+function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUSD,createNewQuote,setActiveQuote,saveQuote,editQuote,openEmailModal,generatePDF,deleteConfirm,setDeleteConfirm,deleteQuote,duplicateQuote,T}) {
   return (
     <div style={{display:"flex",height:"100%",overflow:"hidden"}}>
       {/* Left panel */}
@@ -895,6 +910,13 @@ function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUS
                 <div style={{fontSize:11,fontWeight:600,color:"#bbb"}}>{q.quoteNum}</div>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
                   <span className={`pill ${q.saved?"pill-saved":"pill-open"}`}>{q.saved?"Saved":"Open"}</span>
+                  <button title="Duplicate quote"
+                    onClick={e=>{e.stopPropagation();duplicateQuote(q);}}
+                    style={{background:"transparent",border:`1px solid ${T.borderMid}`,color:T.muted,padding:"1px 6px",fontSize:10,cursor:"pointer",transition:"all .12s",fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif"}}
+                    onMouseOver={e=>e.currentTarget.style.color=T.accent}
+                    onMouseOut={e=>e.currentTarget.style.color=T.muted}>
+                    ⧉
+                  </button>
                   <button className="btn-del" style={{padding:"1px 6px",fontSize:10}} title="Delete quote"
                     onClick={e=>{e.stopPropagation();setDeleteConfirm(q);}}>✕</button>
                 </div>

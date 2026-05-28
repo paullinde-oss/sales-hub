@@ -1,4 +1,18 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { initializeApp } from "firebase/app";
+import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "firebase/firestore";
+
+// ─── Firebase config ────────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyC3hkMEFm9fbJTjRF_btbPwnBEP5aTT_iY",
+  authDomain: "bmp-sales-hub.firebaseapp.com",
+  projectId: "bmp-sales-hub",
+  storageBucket: "bmp-sales-hub.firebasestorage.app",
+  messagingSenderId: "209813734426",
+  appId: "1:209813734426:web:9acf48246c5427c53b3da3"
+};
+const fbApp = initializeApp(firebaseConfig);
+const db   = getFirestore(fbApp);
 
 // ─── Themes ───────────────────────────────────────────────────────────────────
 const DARK = {
@@ -485,9 +499,27 @@ let qCounter = 44003;
 function nextQNum() { return `BMP${qCounter++}`; }
 
 // ─── Main App ──────────────────────────────────────────────────────────────────
+// ─── Persistent storage hook ───────────────────────────────────────────────────
+function useLocalStorage(key, initial) {
+  const [val, setVal] = useState(() => {
+    try {
+      const stored = localStorage.getItem(key);
+      return stored !== null ? JSON.parse(stored) : initial;
+    } catch { return initial; }
+  });
+  const setAndStore = useCallback((update) => {
+    setVal(prev => {
+      const next = typeof update === 'function' ? update(prev) : update;
+      try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, [key]);
+  return [val, setAndStore];
+}
+
 export default function SalesHub() {
-  const [authed, setAuthed] = useState(false);
-  const [loginName, setLoginName] = useState("");
+  const [authed, setAuthed] = useLocalStorage('bmp_authed', false);
+  const [loginName, setLoginName] = useLocalStorage('bmp_user', '');
   const [loginError, setLoginError] = useState("");
 
   const VALID_NAMES = ["Paul", "Mark", "Grant", "Jeff"];
@@ -507,12 +539,12 @@ export default function SalesHub() {
 
 
   const [activeTab, setActiveTab] = useState("quotes");
-  const [productsCAD, setProductsCAD] = useState(INITIAL_PRODUCTS_CAD);
-  const [productsUSD, setProductsUSD] = useState(
+  const [productsCAD, setProductsCAD] = useLocalStorage('bmp_products_cad', INITIAL_PRODUCTS_CAD);
+  const [productsUSD, setProductsUSD] = useLocalStorage('bmp_products_usd',
     INITIAL_PRODUCTS_CAD.map(p=>({...p,price:"",palletPrice:"",prepaid:"",prepaidPallet:"",truckPrice:""}))
   );
-  const [dims, setDims] = useState(INITIAL_DIMS);
-  const [quotes, setQuotes] = useState([]);
+  const [dims, setDims] = useLocalStorage('bmp_dims', INITIAL_DIMS);
+  const [quotes, setQuotes] = useState([]);  // synced from Firebase
   const [activeQuote, setActiveQuote] = useState(null);
   const [searchQ, setSearchQ] = useState({name:"",company:"",date:"",madeBy:"",quoteNum:""});
   const [productCurrency, setProductCurrency] = useState("CAD");
@@ -520,10 +552,22 @@ export default function SalesHub() {
   const [emailModal, setEmailModal] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [pdfQuote, setPdfQuote] = useState(null);
-  const [categories, setCategories] = useState(INITIAL_CATEGORIES);  // { sku: "Category Name" }
-  const [theme, setTheme] = useState("light");
+  const [categories, setCategories] = useLocalStorage('bmp_categories', INITIAL_CATEGORIES);
+  const [theme, setTheme] = useLocalStorage('bmp_theme', 'light');
   const T = theme === "dark" ? DARK : LIGHT;
   const LOGO_B64 = ""; // logo injected at print time
+
+  // ── Firebase: listen for quotes in real time ──────────────────────────────
+  useEffect(() => {
+    const q = query(collection(db, "quotes"), orderBy("savedDate", "desc"));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const loaded = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
+      setQuotes(loaded);
+    }, (err) => {
+      console.warn("Firebase read error:", err);
+    });
+    return () => unsub();
+  }, []);
 
   const currentProducts = productCurrency==="CAD" ? productsCAD : productsUSD;
   const setCurrentProducts = productCurrency==="CAD" ? setProductsCAD : setProductsUSD;
@@ -551,11 +595,16 @@ export default function SalesHub() {
   }
   function saveQuote(q) {
     const saved={...q,saved:true,savedBy:loginName,savedDate:new Date().toLocaleDateString("en-CA",{month:"short",day:"numeric",year:"numeric"})};
-    setQuotes(prev=>{const i=prev.findIndex(x=>x.id===saved.id);if(i>=0){const n=[...prev];n[i]=saved;return n;}return[...prev,saved];});
+    // Save to Firebase — use quoteNum as doc ID so it's readable
+    const docId = String(saved.id);
+    setDoc(doc(db, "quotes", docId), saved)
+      .catch(err => console.error("Firebase save error:", err));
     setActiveQuote(saved);
   }
   function deleteQuote(id) {
-    setQuotes(prev=>prev.filter(q=>q.id!==id));
+    // Delete from Firebase
+    deleteDoc(doc(db, "quotes", String(id)))
+      .catch(err => console.error("Firebase delete error:", err));
     if(activeQuote?.id===id) setActiveQuote(null);
     setDeleteConfirm(null);
   }
@@ -2009,33 +2058,4 @@ function PDFModal({quote:q, onClose}) {
 
         {/* Items preview */}
         <div style={{background:"#0d0d0d",border:"1px solid #1e1e1e",marginBottom:18}}>
-          <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".1em",color:"#555",padding:"7px 12px",borderBottom:"1px solid #1a1a1a"}}>
-            {q.lineItems.length} line item{q.lineItems.length!==1?"s":""}{q.lineItems.length>9?" (first 9 will print)":""}
-          </div>
-          <div style={{overflowX:"auto",maxHeight:160,overflowY:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-              {q.lineItems.slice(0,9).map((li,i)=>{
-                const lt=(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0);
-                return <tr key={i} style={{borderBottom:"1px solid #141414"}}>
-                  <td style={{padding:"5px 12px",color:"#aaa",width:"38%"}}>{li.description||"—"}</td>
-                  <td style={{padding:"5px 12px",fontFamily:"monospace",fontSize:10,color:"#c8a96e",width:"18%"}}>{li.sku||""}</td>
-                  <td style={{padding:"5px 12px",textAlign:"right",color:"#888",width:"16%",fontFamily:"monospace"}}>{fmtCur(li.unitPrice)}</td>
-                  <td style={{padding:"5px 12px",textAlign:"center",color:"#888",width:"12%"}}>{li.qty}</td>
-                  <td style={{padding:"5px 12px",textAlign:"right",color:"#ccc",fontFamily:"monospace",fontWeight:600,width:"16%"}}>{fmtCur(lt)}</td>
-                </tr>;
-              })}
-            </table>
-          </div>
-        </div>
-
-        <div style={{display:"flex",justifyContent:"flex-end",gap:10}}>
-          <button onClick={onClose} style={{background:"transparent",border:"1px solid #2a2a2a",color:"#666",padding:"9px 18px",fontSize:11,cursor:"pointer",fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif"}}>Cancel</button>
-          <button onClick={()=>setShowPreview(true)}
-            style={{background:"#c8a96e",border:"none",color:"#0a0a0a",padding:"9px 26px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",letterSpacing:".06em"}}>
-            Preview &amp; Print →
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+          <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:"

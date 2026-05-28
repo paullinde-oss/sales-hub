@@ -561,7 +561,7 @@ export default function SalesHub() {
   const [dims, setDims] = useLocalStorage('bmp_dims', INITIAL_DIMS);
   const [quotes, setQuotes] = useState([]);  // synced from Firebase
   const [activeQuote, setActiveQuote] = useState(null);
-  const [searchQ, setSearchQ] = useState({name:"",company:"",date:"",madeBy:"",quoteNum:""});
+  const [searchQ, setSearchQ] = useState({name:"",company:"",date:"",madeBy:"",quoteNum:"",sku:"",description:""});
   const [productCurrency, setProductCurrency] = useState("CAD");
   const [productSearch, setProductSearch] = useState("");
   const [emailModal, setEmailModal] = useState(null);
@@ -589,11 +589,17 @@ export default function SalesHub() {
 
   const filteredQuotes = useMemo(()=>quotes.filter(q=>{
     const s=searchQ;
+    // Check if any line item matches SKU or description search
+    const skuMatch = !s.sku || q.lineItems?.some(li =>
+      li.sku?.toLowerCase().includes(s.sku.toLowerCase()));
+    const descMatch = !s.description || q.lineItems?.some(li =>
+      li.description?.toLowerCase().includes(s.description.toLowerCase()));
     return (!s.name||q.name.toLowerCase().includes(s.name.toLowerCase()))&&
       (!s.company||q.company.toLowerCase().includes(s.company.toLowerCase()))&&
       (!s.date||q.savedDate?.includes(s.date))&&
       (!s.madeBy||q.savedBy?.toLowerCase().includes(s.madeBy.toLowerCase()))&&
-      (!s.quoteNum||q.quoteNum?.toLowerCase().includes(s.quoteNum.toLowerCase()));
+      (!s.quoteNum||q.quoteNum?.toLowerCase().includes(s.quoteNum.toLowerCase()))&&
+      skuMatch && descMatch;
   }),[quotes,searchQ]);
 
   const filteredProducts = useMemo(()=>{
@@ -915,6 +921,17 @@ function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUS
             <input key={f.k} value={searchQ[f.k]} onChange={e=>setSearchQ(p=>({...p,[f.k]:e.target.value}))}
               placeholder={f.p} style={{width:"100%",marginBottom:4,fontSize:11,height:26}}/>
           ))}
+          <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".12em",color:"#444",margin:"8px 0 6px"}}>Search by Product</div>
+          {[{k:"sku",p:"SKU"},{k:"description",p:"Description"}].map(f=>(
+            <input key={f.k} value={searchQ[f.k]} onChange={e=>setSearchQ(p=>({...p,[f.k]:e.target.value}))}
+              placeholder={f.p} style={{width:"100%",marginBottom:4,fontSize:11,height:26}}/>
+          ))}
+          {(searchQ.sku||searchQ.description||searchQ.name||searchQ.company||searchQ.date||searchQ.madeBy||searchQ.quoteNum)&&(
+            <button onClick={()=>setSearchQ({name:"",company:"",date:"",madeBy:"",quoteNum:"",sku:"",description:""})}
+              style={{width:"100%",marginTop:4,fontSize:10,padding:"4px",background:"transparent",border:`1px solid ${T.borderMid}`,color:T.muted,cursor:"pointer",letterSpacing:".04em"}}>
+              Clear filters ✕
+            </button>
+          )}
         </div>
         <div style={{flex:1,overflowY:"auto"}}>
           {quotes.length===0&&<div style={{padding:16,color:"#333",fontSize:11,textAlign:"center"}}>No quotes</div>}

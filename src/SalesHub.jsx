@@ -495,8 +495,23 @@ function parsePrice(str) {
   if (!str && str !== 0) return 0;
   return parseFloat(String(str).replace(/[$,]/g,"")) || 0;
 }
-let qCounter = 44003;
-function nextQNum() { return `BMP${qCounter++}`; }
+function nextQNum(existingQuotes) {
+  // Find highest existing quote number and go one higher
+  let max = 44002;
+  (existingQuotes || []).forEach(q => {
+    const match = String(q.quoteNum || "").match(/BMP(\d+)/);
+    if (match) max = Math.max(max, parseInt(match[1]));
+  });
+  // Also check localStorage in case quotes haven't loaded from Firebase yet
+  try {
+    const stored = JSON.parse(localStorage.getItem('bmp_quotes') || '[]');
+    stored.forEach(q => {
+      const match = String(q.quoteNum || "").match(/BMP(\d+)/);
+      if (match) max = Math.max(max, parseInt(match[1]));
+    });
+  } catch {}
+  return `BMP${max + 1}`;
+}
 
 // ─── Main App ──────────────────────────────────────────────────────────────────
 // ─── Persistent storage hook ───────────────────────────────────────────────────
@@ -588,7 +603,7 @@ export default function SalesHub() {
   },[currentProducts,productSearch]);
 
   function createNewQuote() {
-    const q={id:Date.now(),quoteNum:nextQNum(),name:"",company:"",prepaid:false,currency:"CAD",
+    const q={id:Date.now(),quoteNum:nextQNum(quotes),name:"",company:"",prepaid:false,currency:"CAD",
       lineItems:[{id:Date.now(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}],
       notes:"",saved:false,savedBy:"",savedDate:""};
     setActiveQuote(q);
@@ -611,7 +626,7 @@ export default function SalesHub() {
 
   function duplicateQuote(q) {
     const newId = Date.now();
-    const newNum = nextQNum();
+    const newNum = nextQNum(quotes);
     const duped = {
       ...q,
       id: newId,

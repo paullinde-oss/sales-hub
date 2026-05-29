@@ -42,6 +42,7 @@ const LIGHT = {
 const Icon = ({ name, size=18, color="currentColor" }) => {
   const paths = {
     quote: <><rect x="3" y="3" width="18" height="18" rx="2" stroke={color} strokeWidth="1.5" fill="none"/><line x1="7" y1="8" x2="17" y2="8" stroke={color} strokeWidth="1.5"/><line x1="7" y1="12" x2="14" y2="12" stroke={color} strokeWidth="1.5"/><line x1="7" y1="16" x2="11" y2="16" stroke={color} strokeWidth="1.5"/></>,
+    truck: <><rect x="1" y="6" width="14" height="12" rx="1" stroke={color} strokeWidth="1.5" fill="none"/><path d="M15 9h4l3 4v5h-7V9z" stroke={color} strokeWidth="1.5" fill="none"/><circle cx="5" cy="19" r="2" stroke={color} strokeWidth="1.5" fill="none"/><circle cx="18" cy="19" r="2" stroke={color} strokeWidth="1.5" fill="none"/></>,
     dims: <><rect x="3" y="3" width="7" height="7" stroke={color} strokeWidth="1.5" fill="none"/><rect x="14" y="3" width="7" height="7" stroke={color} strokeWidth="1.5" fill="none"/><rect x="3" y="14" width="7" height="7" stroke={color} strokeWidth="1.5" fill="none"/><rect x="14" y="14" width="7" height="7" stroke={color} strokeWidth="1.5" fill="none"/></>,
     ship: <><path d="M3 17l2-8h14l2 8H3z" stroke={color} strokeWidth="1.5" fill="none"/><path d="M8 9V5h8v4" stroke={color} strokeWidth="1.5" fill="none"/><line x1="12" y1="5" x2="12" y2="3" stroke={color} strokeWidth="1.5"/><path d="M3 17c0 1.1.9 2 2 2s2-.9 2-2 .9-2 2-2 2 .9 2 2 .9 2 2 2 2-.9 2-2 .9-2 2-2 2 .9 2 2" stroke={color} strokeWidth="1.5" fill="none"/></>,
     products: <><line x1="8" y1="6" x2="21" y2="6" stroke={color} strokeWidth="1.5"/><line x1="8" y1="12" x2="21" y2="12" stroke={color} strokeWidth="1.5"/><line x1="8" y1="18" x2="21" y2="18" stroke={color} strokeWidth="1.5"/><line x1="3" y1="6" x2="3.01" y2="6" stroke={color} strokeWidth="2"/><line x1="3" y1="12" x2="3.01" y2="12" stroke={color} strokeWidth="2"/><line x1="3" y1="18" x2="3.01" y2="18" stroke={color} strokeWidth="2"/></>,
@@ -700,10 +701,11 @@ export default function SalesHub() {
 
 
   const TABS = [
-    {id:"quotes", label:"Quote Maker", icon:"quote"},
-    {id:"dims",   label:"DIMS",        icon:"dims"},
-    {id:"shipping",label:"Shipping",   icon:"ship"},
-    {id:"products",label:"Products",   icon:"products"},
+    {id:"quotes",   label:"Quote Maker",     icon:"quote"},
+    {id:"dims",     label:"DIMS",            icon:"dims"},
+    {id:"shipping", label:"Shipping",        icon:"ship"},
+    {id:"products", label:"Products",        icon:"products"},
+    {id:"loadcalc", label:"Load Calculator", icon:"truck"},
   ];
 
   return authed ? (
@@ -790,6 +792,7 @@ export default function SalesHub() {
           {activeTab==="products"&&<ProductsTab products={filteredProducts} setProducts={setCurrentProducts}
             currency={productCurrency} setCurrency={setProductCurrency} search={productSearch} setSearch={setProductSearch}
             categories={categories} setCategories={setCategories} T={T}/>}
+          {activeTab==="loadcalc"&&<LoadCalcTab T={T}/>}
         </div>
       </div>
 
@@ -1913,6 +1916,7 @@ function PDFModal({quote:q, onClose}) {
     const DISCLAIMER = "The Information provided by BMP Supplies Inc. has shown to be correct and is generally based on information supplied by the manufacturers of the product offered. Any recommendations made by BMP Supplies Inc. concerning uses or applications of our products are also believed to be reliable; however, as BMP Supplies Inc. has no control over design, execution, and field conditions of the project which incorporate the product, BMP Supplies Inc. disclaims all warranties, expressed or implied, including, without limitation, the warranties of merchantability and/ or fitness for a particular purpose.";
 
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<title>Quote ${q.quoteNum} - ${q.company||q.name||'BMP Supplies'} - ${todayStr}</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;500;600;700&display=swap');
   *{margin:0;padding:0;box-sizing:border-box;}
@@ -2138,6 +2142,571 @@ function PDFModal({quote:q, onClose}) {
             Preview &amp; Print →
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Load Calculator Tab ───────────────────────────────────────────────────────
+function LoadCalcTab({T}) {
+  const [truck, setTruck]   = useState('flatbed');
+  const [qb8,  setQb8]      = useState('');
+  const [pb8,  setPb8]      = useState('');
+  const [qb16, setQb16]     = useState('');
+  const [pb16, setPb16]     = useState('');
+  const [qw9,  setQw9]      = useState('');
+  const [pw9,  setPw9]      = useState('');
+  const [qw12, setQw12]     = useState('');
+  const [pw12, setPw12]     = useState('');
+  const deckRef = useRef(null);
+
+  const C = { b8:'#4a90d9', b16:'#7b5ea7', w9:'#f5a623', w12:'#e8472c' };
+
+  const MIXED_VAN = [
+    [24,0,24],[22,2,24],[20,4,24],[18,6,24],[16,8,24],[14,10,24],[12,12,24],
+    [10,16,26],[8,18,26],[6,20,26],[4,22,26],[2,24,26],[0,26,26]
+  ];
+  function buildFlatTable() {
+    const rows = [];
+    for (let b=26; b>=0; b-=2) rows.push([b, 26-b, 26]);
+    return rows;
+  }
+  const MIXED_FLAT = buildFlatTable();
+
+  const ROW = {
+    b8:  {ft:8,  palsPerRow:4, qtyPerPal:25, wt:55 },
+    b16: {ft:16, palsPerRow:4, qtyPerPal:20, wt:110},
+    w9:  {ft:4,  palsPerRow:2, qtyPerPal:14, wt:40 },
+    w12: {ft:4,  palsPerRow:2, qtyPerPal:12, wt:40 }
+  };
+
+  function rowCalc(pals, key) {
+    if (!pals) return {rows:0, deckFt:0, openTopSlots:0};
+    const r = ROW[key];
+    const fullRows = Math.floor(pals/r.palsPerRow);
+    const rem = pals % r.palsPerRow;
+    const openSlots = rem > 0 ? r.palsPerRow - rem : 0;
+    return {rows: fullRows+(rem>0?1:0), deckFt:(fullRows+(rem>0?1:0))*r.ft, openTopSlots:openSlots};
+  }
+
+  function hexA(h, a) {
+    const r=parseInt(h.slice(1,3),16), g=parseInt(h.slice(3,5),16), b=parseInt(h.slice(5,7),16);
+    return `rgba(${r},${g},${b},${a})`;
+  }
+
+  // Compute all derived values
+  const calc = useMemo(() => {
+    const vqb8  = Math.max(0, parseInt(qb8)  || 0);
+    const vqb16 = Math.max(0, parseInt(qb16) || 0);
+    const vqw9  = Math.max(0, parseInt(qw9)  || 0);
+    const vqw12 = Math.max(0, parseInt(qw12) || 0);
+
+    const vpb8  = Math.ceil(vqb8  / 25);
+    const vpb16 = truck==='dryvan' ? 0 : Math.ceil(vqb16 / 20);
+    const vpw9  = Math.ceil(vqw9  / 14);
+    const vpw12 = Math.ceil(vqw12 / 12);
+
+    const rb8  = rowCalc(vpb8,  'b8');
+    const rb16 = rowCalc(vpb16, 'b16');
+    const rw9  = rowCalc(vpw9,  'w9');
+    const rw12 = rowCalc(vpw12, 'w12');
+
+    const totalDeckFt = rb8.deckFt + rb16.deckFt + rw9.deckFt + rw12.deckFt;
+    const totalPals   = vpb8 + vpb16 + vpw9 + vpw12;
+
+    const palEqB8  = vpb8;
+    const palEqB16 = vpb16 * 2;
+    const palEqW9  = vpw9;
+    const palEqW12 = vpw12;
+    const totalPalEq = palEqB8 + palEqB16 + palEqW9 + palEqW12;
+
+    const wb8  = vqb8  * 55;
+    const wb16 = vqb16 * 110;
+    const ww9  = vqw9  * 40;
+    const ww12 = vqw12 * 40;
+    const totalWt = wb8 + wb16 + ww9 + ww12;
+
+    const maxPalEq = truck==='flatbed' ? 26 : null;
+    const remPalEq = maxPalEq !== null ? maxPalEq - totalPalEq : null;
+
+    const isMixedVan = truck==='dryvan' && vpb8>0 && vpw9+vpw12>0;
+    const blanketPals = vpb8;
+    const wattlePals  = vpw9 + vpw12;
+    let matchRow = null;
+    if (isMixedVan) {
+      for (let i=0; i<MIXED_VAN.length; i++) {
+        if (MIXED_VAN[i][0]===blanketPals && MIXED_VAN[i][1]===wattlePals) { matchRow=MIXED_VAN[i]; break; }
+      }
+    }
+
+    // Suppress open slots if at/over capacity
+    const denom = truck==='flatbed' ? 26 : (vpb8>0 && vpw9+vpw12===0) ? 24 : 26;
+    if (totalPalEq >= denom) { rb8.openTopSlots=0; rb16.openTopSlots=0; }
+
+    let displayMax;
+    if (truck==='flatbed') displayMax=26;
+    else if (isMixedVan) displayMax = matchRow ? matchRow[2] : '?';
+    else displayMax = (vpw9+vpw12>0 && vpb8===0) ? 26 : (vpb8>0 && vpw9+vpw12===0) ? 24 : 26;
+
+    // Status
+    let statusCls, statusTxt;
+    if (truck==='dryvan' && vqb16>0) {
+      statusCls='over'; statusTxt='16ft ROLLS NOT PERMITTED IN DRY VAN';
+    } else if (truck==='flatbed') {
+      if (totalPalEq>26) { statusCls='over'; statusTxt=`OVER BY ${totalPalEq-26} PALLET${totalPalEq-26!==1?'S':''}`; }
+      else if (totalPalEq===26) { statusCls='warn'; statusTxt='TRUCK FULLY LOADED — 26 / 26 PALLETS'; }
+      else { statusCls='ok'; statusTxt=`${26-totalPalEq} PALLET${26-totalPalEq!==1?'S':''} REMAINING`; }
+    } else if (isMixedVan) {
+      if (matchRow) { statusCls='ok'; statusTxt=`VALID MIXED LOAD — ${matchRow[2]} TOTAL PALLETS`; }
+      else { statusCls='over'; statusTxt='INVALID MIX — CHECK MIXED LOAD TABLE BELOW'; }
+    } else {
+      const vanMax = vpw9+vpw12>0 && vpb8===0 ? 26 : 24;
+      if (totalPals>vanMax) { statusCls='over'; statusTxt=`OVER BY ${totalPals-vanMax} PALLETS`; }
+      else if (totalPals===vanMax) { statusCls='warn'; statusTxt=`TRUCK FULLY LOADED — ${vanMax}/${vanMax} PALLETS`; }
+      else { statusCls='ok'; statusTxt=`${vanMax-totalPals} PALLETS REMAINING`; }
+    }
+
+    // Recommendations
+    const recs = [];
+    if (truck==='dryvan' && vqb16>0) {
+      recs.push({cls:'warn', icon:'!', title:'16ft rolls cannot be loaded in a Dry Van', body:'16ft rolls are flatbed only. Switch to a flatbed or remove the 16ft rolls.'});
+    }
+    if (truck==='flatbed' && vpb16>0 && vpb8===0 && vpw9+vpw12===0) {
+      recs.push({cls:'fill', icon:'~', title:'Tip: add 2 pallets of 8ft rolls at the end', body:'A full 16ft load leaves ~5ft of deck at the rear. You can fit 2 pallets of 8ft blankets crossways — add 50 more 8ft rolls to maximize the load.'});
+    }
+    if (isMixedVan) {
+      if (matchRow) {
+        recs.push({cls:'good', icon:'OK', title:`Valid mixed load — ${matchRow[2]} total pallets`, body:`Confirmed on the dry van mixed load chart: ${blanketPals} blanket pallets + ${wattlePals} wattle pallets = ${matchRow[2]} pallets.`});
+      } else {
+        const vB=MIXED_VAN.filter(r=>r[0]===blanketPals);
+        const vW=MIXED_VAN.filter(r=>r[1]===wattlePals);
+        let body='This combination is not on the dry van mixed load chart. ';
+        if(vB.length) body+=`For ${blanketPals} blanket pallets, valid wattle counts: ${vB.map(r=>r[1]).join(' or ')}. `;
+        if(vW.length) body+=`For ${wattlePals} wattle pallets, valid blanket counts: ${vW.map(r=>r[0]).join(' or ')}.`;
+        recs.push({cls:'warn', icon:'!', title:'Invalid mixed load combination', body});
+      }
+    }
+    if (remPalEq!==null && remPalEq>0) {
+      const lines = [];
+      if (rb8.openTopSlots>0) lines.push(`${rb8.openTopSlots} open top pallet${rb8.openTopSlots>1?'s':''} on 8ft stacks — add ${rb8.openTopSlots*25} rolls, no extra deck space needed`);
+      if (truck==='flatbed' && rb16.openTopSlots>0) lines.push(`${rb16.openTopSlots} open top pallet${rb16.openTopSlots>1?'s':''} on 16ft stacks — add ${rb16.openTopSlots*20} rolls, no extra deck space`);
+      if (remPalEq>=2) {
+        const add8 = remPalEq%2===0 ? remPalEq : remPalEq-1;
+        lines.push(`${add8} more pallets of 8ft Blankets — ${add8*25} rolls`);
+      }
+      if (remPalEq>=2) lines.push(`${remPalEq} more pallets of Wattles — 9in: ${remPalEq*14} units or 12in: ${remPalEq*12} units`);
+      if (lines.length>0) recs.push({cls:'fill', icon:'+', title:`${remPalEq} pallets remaining — fill options`, body:lines.join('\n')});
+    }
+    if (recs.length===0 && remPalEq!==null && remPalEq<=0) {
+      recs.push({cls:'good', icon:'OK', title:'Truck fully loaded', body:'All pallet positions used.'});
+    } else if (recs.length===0) {
+      recs.push({cls:'good', icon:'OK', title:'Ready to load', body:'Enter product quantities above.'});
+    }
+
+    // Mixed table
+    const mixedTable = truck==='flatbed' ? MIXED_FLAT : MIXED_VAN;
+    const mixedTitle = truck==='flatbed'
+      ? 'MIXED LOAD REFERENCE — FLAT-BED (always 26 pallet equivalents)'
+      : 'MIXED LOAD REFERENCE — DRY VAN (24 or 26 pallets)';
+
+    return {
+      vqb8,vqb16,vqw9,vqw12, vpb8,vpb16,vpw9,vpw12,
+      rb8,rb16,rw9,rw12, totalDeckFt,totalPals,totalPalEq,totalWt,
+      palEqB8,palEqB16,palEqW9,palEqW12, remPalEq,maxPalEq,
+      isMixedVan,blanketPals,wattlePals,matchRow,
+      statusCls,statusTxt,displayMax,recs,
+      wb8,wb16,ww9,ww12, denom,
+      mixedTable,mixedTitle,
+    };
+  }, [truck, qb8, qb16, qw9, qw12]);
+
+  // Deck canvas drawing
+  useEffect(() => {
+    const dc = deckRef.current;
+    if (!dc) return;
+    dc.innerHTML = '';
+    const {vpb8,vpb16,vpw9,vpw12} = calc;
+    const W = dc.offsetWidth || 600;
+    const totalVisualFt = 52;
+    const ppf = W / totalVisualFt;
+
+    // Crossways 8ft
+    let crossways8 = 0, normal8 = vpb8;
+    if (truck==='flatbed') {
+      const fullRows = Math.floor(vpb8/4);
+      const rem = vpb8%4;
+      if (fullRows>0 && rem>0 && rem<=2) { crossways8=rem; normal8=fullRows*4; }
+    }
+
+    // Build rows
+    const rows = [];
+    let rem16=vpb16, rem8n=normal8;
+    for (let i=0; i<3; i++) {
+      let left={type:'empty',count:0}, right={type:'empty',count:0};
+      if (rem16>=2)      {left={type:'b16',count:2};rem16-=2;}
+      else if (rem16===1){left={type:'b16',count:1};rem16-=1;}
+      else if (rem8n>=2) {left={type:'b8',count:2};rem8n-=2;}
+      else if (rem8n===1){left={type:'b8',count:1};rem8n-=1;}
+      if (rem16>=2)      {right={type:'b16',count:2};rem16-=2;}
+      else if (rem16===1){right={type:'b16',count:1};rem16-=1;}
+      else if (rem8n>=2) {right={type:'b8',count:2};rem8n-=2;}
+      else if (rem8n===1){right={type:'b8',count:1};rem8n-=1;}
+      if (left.type==='empty'&&right.type==='empty') break;
+      rows.push({left,right});
+    }
+
+    let lpx=0;
+    const colors={b8:C.b8, b16:C.b16, empty:'transparent'};
+
+    rows.forEach(row=>{
+      const wpx=16*ppf;
+      const rowDiv=document.createElement('div');
+      rowDiv.style.cssText=`position:absolute;left:${lpx}px;width:${wpx}px;top:4px;bottom:4px;border-left:2px solid rgba(255,255,255,0.15);border-right:1px solid rgba(0,0,0,0.3);border-radius:2px;overflow:hidden;`;
+      dc.appendChild(rowDiv);
+
+      function makeCell(topPct,hPct,cell){
+        const color=colors[cell.type];
+        if(cell.type==='empty'){
+          const ec=document.createElement('div');
+          ec.style.cssText=`position:absolute;left:0;right:0;top:${topPct}%;height:${hPct}%;background:#13161f;`;
+          rowDiv.appendChild(ec); return;
+        }
+        const c=document.createElement('div');
+        c.style.position='absolute'; c.style.left='1px'; c.style.right='1px';
+        c.style.top=topPct+'%'; c.style.height=hPct+'%';
+        if(cell.count===2){c.style.background=hexA(color,0.55);c.style.border='1px solid '+hexA(color,0.7);}
+        else{c.style.background=`repeating-linear-gradient(45deg,${hexA(color,0.12)},${hexA(color,0.12)} 5px,${hexA(color,0.35)} 5px,${hexA(color,0.35)} 10px)`;c.style.border='1px dashed '+hexA(color,0.5);}
+        rowDiv.appendChild(c);
+        if(wpx>30){
+          const lbl=document.createElement('div');
+          lbl.style.cssText=`position:absolute;left:0;right:0;top:${topPct}%;height:${hPct}%;display:flex;align-items:center;justify-content:center;z-index:3;pointer-events:none;`;
+          const span=document.createElement('span');
+          span.style.cssText=`background:${hexA(color,0.9)};color:#0d1210;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;font-size:9px;font-weight:800;padding:1px 4px;border-radius:2px;`;
+          span.textContent=cell.count+' '+(cell.type==='b16'?"16'":"8'")+" pals";
+          lbl.appendChild(span); rowDiv.appendChild(lbl);
+        }
+      }
+      makeCell(0,50,row.left); makeCell(50,50,row.right);
+      const div2=document.createElement('div');
+      div2.style.cssText='position:absolute;left:0;right:0;top:50%;height:1px;background:rgba(255,255,255,0.08);z-index:2;';
+      rowDiv.appendChild(div2);
+      lpx+=wpx;
+    });
+
+    // Wattles
+    function drawWat(pals,color){
+      let rw=pals;
+      while(rw>0){
+        const inW=Math.min(rw,2), wpx=4*ppf;
+        const ws=document.createElement('div');
+        ws.style.cssText=`position:absolute;left:${lpx}px;width:${wpx}px;top:4px;bottom:4px;border-left:2px solid ${color};border-right:1px solid rgba(0,0,0,0.3);border-radius:2px;overflow:hidden;`;
+        ws.style.background=inW>=2?hexA(color,0.5):`repeating-linear-gradient(45deg,${hexA(color,0.1)},${hexA(color,0.1)} 5px,${hexA(color,0.3)} 5px,${hexA(color,0.3)} 10px)`;
+        if(wpx>20){
+          const b=document.createElement('div');
+          b.style.cssText='position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;z-index:3;';
+          const sp=document.createElement('span');
+          sp.style.cssText=`background:${hexA(color,0.9)};color:#0d1210;font-size:9px;font-weight:800;padding:1px 4px;border-radius:2px;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;`;
+          sp.textContent=inW+' pals'; b.appendChild(sp); ws.appendChild(b);
+        }
+        dc.appendChild(ws); lpx+=wpx; rw-=inW;
+      }
+    }
+    if(vpw9>0)  drawWat(vpw9, C.w9);
+    if(vpw12>0) drawWat(vpw12, C.w12);
+
+    // Crossways
+    if(crossways8>0){
+      const cwpx=4*ppf;
+      const cw=document.createElement('div');
+      cw.style.cssText=`position:absolute;left:${lpx}px;width:${cwpx}px;top:4px;bottom:4px;border-left:2px solid ${C.b8};border-radius:2px;overflow:hidden;`;
+      cw.style.background=crossways8>=2?hexA(C.b8,0.5):`repeating-linear-gradient(45deg,${hexA(C.b8,0.1)},${hexA(C.b8,0.1)} 5px,${hexA(C.b8,0.3)} 5px,${hexA(C.b8,0.3)} 10px)`;
+      if(cwpx>20){
+        const b=document.createElement('div');
+        b.style.cssText='position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;z-index:3;';
+        const sp=document.createElement('span');
+        sp.style.cssText=`background:${hexA(C.b8,0.9)};color:#0d1210;font-size:9px;font-weight:800;padding:1px 4px;border-radius:2px;`;
+        sp.textContent=crossways8+" 8' pals"; b.appendChild(sp); cw.appendChild(b);
+      }
+      dc.appendChild(cw); lpx+=cwpx;
+    }
+
+    // Empty space
+    const empPx=W-lpx;
+    if(empPx>2){
+      const e=document.createElement('div');
+      e.style.cssText=`position:absolute;left:${lpx}px;width:${empPx}px;top:4px;bottom:4px;background:repeating-linear-gradient(45deg,transparent,transparent 5px,rgba(255,255,255,0.02) 5px,rgba(255,255,255,0.02) 10px);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:rgba(255,255,255,0.15);letter-spacing:1px;`;
+      if(empPx>50) e.textContent=(empPx/ppf).toFixed(1)+'ft FREE';
+      dc.appendChild(e);
+    }
+  }, [calc, truck]);
+
+  function fromQty(key, perPal, setQ, setP) {
+    return (e) => {
+      const qty = Math.max(0, parseInt(e.target.value)||0);
+      setQ(e.target.value);
+      setP(qty>0 ? String(Math.ceil(qty/perPal)) : '');
+    };
+  }
+  function fromPals(key, perPal, setQ, setP) {
+    return (e) => {
+      const pals = Math.max(0, parseInt(e.target.value)||0);
+      setP(e.target.value);
+      setQ(pals>0 ? String(pals*perPal) : '');
+    };
+  }
+  function reset() {
+    setQb8(''); setPb8(''); setQb16(''); setPb16('');
+    setQw9(''); setPw9(''); setQw12(''); setPw12('');
+  }
+
+  const {statusCls,statusTxt,totalPals,totalPalEq,totalWt,remPalEq,
+        palEqB8,palEqB16,palEqW9,palEqW12,denom,displayMax,
+        rb8,rb16,rw9,rw12, vqb8,vqb16,vqw9,vqw12,vpb8,vpb16,vpw9,vpw12,
+        totalDeckFt,wb8,wb16,ww9,ww12,recs,mixedTable,mixedTitle,isMixedVan,blanketPals,wattlePals,matchRow} = calc;
+
+  const statusColors = {ok:'#34c77b', warn:'#f5a623', over:'#e8472c'};
+  const sc = statusColors[statusCls];
+
+  // Panel style
+  const panel = {background:T.cardBg, border:`1.5px solid ${T.border}`, borderRadius:6, padding:'16px 20px', marginBottom:16};
+  const secLabel = {fontSize:10, fontWeight:700, letterSpacing:'2px', textTransform:'uppercase', color:T.muted, marginBottom:10, paddingBottom:7, borderBottom:`1px solid ${T.border}`};
+
+  function ProdBlock({label, dims, dotColor, qVal, pVal, onQ, onP, disabled}) {
+    return (
+      <div style={{background:T.panelBg, border:`1.5px solid ${T.border}`, borderRadius:5, padding:'12px 14px', marginBottom:10, opacity:disabled?0.35:1, pointerEvents:disabled?'none':'auto'}}>
+        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8}}>
+          <div style={{display:'flex', alignItems:'center', gap:7, fontSize:13, fontWeight:700}}>
+            <span style={{display:'inline-block', width:10, height:10, borderRadius:'50%', background:dotColor, flexShrink:0}}/>
+            {label}
+          </div>
+          <div style={{fontSize:10, color:T.muted}}>{dims}</div>
+        </div>
+        <div style={{display:'grid', gridTemplateColumns:'1fr auto 1fr', gap:8, alignItems:'end'}}>
+          <div>
+            <div style={{fontSize:9, fontWeight:700, letterSpacing:'1.5px', color:T.muted, marginBottom:3}}>ROLLS / UNITS</div>
+            <input type="number" min="0" value={qVal} onChange={onQ}
+              style={{width:'100%', textAlign:'center', fontSize:16, fontWeight:600, padding:'6px 4px', borderRadius:4, background:'#0d1210', border:`1.5px solid ${T.borderMid}`, color:'#e8eaf0'}}/>
+          </div>
+          <div style={{fontSize:11, color:T.muted, textAlign:'center', paddingBottom:8}}>or</div>
+          <div>
+            <div style={{fontSize:9, fontWeight:700, letterSpacing:'1.5px', color:T.muted, marginBottom:3}}>PALLETS</div>
+            <input type="number" min="0" value={pVal} onChange={onP}
+              style={{width:'100%', textAlign:'center', fontSize:16, fontWeight:600, padding:'6px 4px', borderRadius:4, background:'#0d1210', border:`1.5px solid ${T.borderMid}`, color:'#e8eaf0'}}/>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{display:'flex', height:'100%', overflow:'hidden', background:'#0d1210', color:'#e8eaf0', fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif"}}>
+      {/* LEFT PANEL */}
+      <div style={{width:340, borderRight:`2px solid #2a3d32`, overflowY:'auto', padding:16, flexShrink:0, background:'#141c18'}}>
+
+        {/* Truck type */}
+        <div style={{marginBottom:16}}>
+          <div style={secLabel}>Truck Type</div>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8}}>
+            {[['flatbed','FLAT-BED','53ft deck · max 26 pallets'],['dryvan','DRY VAN','53ft floor · mixed load table']].map(([id,lbl,sub])=>(
+              <button key={id} onClick={()=>setTruck(id)}
+                style={{background: truck===id?'rgba(245,166,35,.1)':'#1e2b24', border:`2px solid ${truck===id?'#f5a623':'#2a3d32'}`,
+                  color:truck===id?'#f5a623':'#7a9088', padding:'12px 8px', borderRadius:4, cursor:'pointer', textAlign:'center',
+                  fontSize:14, fontWeight:700, letterSpacing:1}}>
+                {lbl}
+                <div style={{fontSize:10, color: truck===id?'rgba(245,166,35,0.5)':'#7a9088', marginTop:3, fontWeight:400}}>{sub}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <ProdBlock label="8′ Blankets" dims="48×96×52in · 25 rolls/pal" dotColor={C.b8}
+          qVal={qb8} pVal={pb8}
+          onQ={fromQty('b8',25,setQb8,setPb8)} onP={fromPals('b8',25,setQb8,setPb8)}/>
+        <ProdBlock label="16′ Blankets" dims="49×192×55in · 20 rolls/pal · flatbed only" dotColor={C.b16}
+          qVal={qb16} pVal={pb16} disabled={truck==='dryvan'}
+          onQ={fromQty('b16',20,setQb16,setPb16)} onP={fromPals('b16',20,setQb16,setPb16)}/>
+        <ProdBlock label='Wattles 9"' dims="48×40×108in · 14/pal" dotColor={C.w9}
+          qVal={qw9} pVal={pw9}
+          onQ={fromQty('w9',14,setQw9,setPw9)} onP={fromPals('w9',14,setQw9,setPw9)}/>
+        <ProdBlock label='Wattles 12"' dims="48×40×108in · 12/pal" dotColor={C.w12}
+          qVal={qw12} pVal={pw12}
+          onQ={fromQty('w12',12,setQw12,setPw12)} onP={fromPals('w12',12,setQw12,setPw12)}/>
+
+        {/* Summary cards */}
+        <div style={{marginBottom:12}}>
+          <div style={secLabel}>Summary</div>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:10}}>
+            {[
+              {v:totalPals,         l:'Pallets Loaded'},
+              {v:displayMax,        l:'Truck Capacity'},
+              {v:remPalEq!==null?(remPalEq>0?remPalEq:remPalEq===0?'FULL':Math.abs(remPalEq)+' over'):'-', l:'Spots Left',
+               c:remPalEq===null?'#7a9088':remPalEq<0?'#e8472c':remPalEq===0?'#f5a623':'#34c77b'},
+              {v:totalWt.toLocaleString(), l:'Est. lbs'},
+            ].map(({v,l,c})=>(
+              <div key={l} style={{background:'#1e2b24', border:'1.5px solid #2a3d32', borderRadius:4, padding:10, textAlign:'center'}}>
+                <div style={{fontSize:22, fontWeight:700, color:c||'#e8eaf0', lineHeight:1}}>{v}</div>
+                <div style={{fontSize:10, color:'#7a9088', textTransform:'uppercase', letterSpacing:1, marginTop:3}}>{l}</div>
+              </div>
+            ))}
+          </div>
+          {/* Status bar */}
+          <div style={{padding:'11px 14px', borderRadius:4, fontWeight:700, letterSpacing:'.5px', textAlign:'center',
+            background:`${sc}18`, border:`2px solid ${sc}`, color:sc, fontSize:13, marginBottom:10}}>
+            {statusTxt}
+          </div>
+          <button onClick={reset}
+            style={{width:'100%', background:'transparent', border:'1.5px solid #2a3d32', color:'#7a9088', padding:9, borderRadius:4,
+              fontSize:13, fontWeight:600, letterSpacing:1, textTransform:'uppercase', cursor:'pointer'}}>
+            ↺ Reset All
+          </button>
+        </div>
+      </div>
+
+      {/* RIGHT PANEL */}
+      <div style={{flex:1, overflowY:'auto', padding:20}}>
+
+        {/* Deck title */}
+        <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:14, flexWrap:'wrap'}}>
+          <span style={{fontSize:17, fontWeight:700, letterSpacing:1}}>DECK LAYOUT — TOP DOWN</span>
+          <span style={{background:'#1e2b24', border:'1px solid #2a3d32', borderRadius:3, fontSize:11, padding:'3px 9px', color:'#7a9088', letterSpacing:1}}>
+            {truck==='flatbed'?'FLAT-BED · 53FT':'DRY VAN · 53FT'}
+          </span>
+          <span style={{background:'#1e2b24', border:'1px solid #2a3d32', borderRadius:3, fontSize:11, padding:'3px 9px', color:'#7a9088', marginLeft:'auto'}}>
+            {totalPals} pallets loaded
+          </span>
+        </div>
+
+        {/* Deck canvas */}
+        <div style={panel}>
+          <div style={secLabel}>PROPORTIONAL DECK VIEW</div>
+          <div style={{display:'flex', justifyContent:'space-between', fontSize:10, color:'#7a9088', marginBottom:6, letterSpacing:1}}>
+            <span>← FRONT</span><span>REAR →</span>
+          </div>
+          <div ref={deckRef} style={{background:'#13161f', border:'2px solid #2a3d32', borderRadius:3, width:'100%', height:130, position:'relative', overflow:'hidden'}}/>
+          {/* Ruler */}
+          <div style={{display:'flex', marginTop:5, fontSize:10, color:'#7a9088', position:'relative', height:13}}>
+            {[0,4,8,12,16,20,24,28,32,36,40,44,48,52].map(f=>(
+              <span key={f} style={{position:'absolute', left:`${f/52*100}%`, transform:'translateX(-50%)' }}>{f}ft</span>
+            ))}
+          </div>
+          {/* Legend */}
+          <div style={{display:'flex', gap:14, flexWrap:'wrap', marginTop:14}}>
+            {[['#4a90d9',"8' Blanket (8ft/row, 4 pals)"],['#7b5ea7',"16' Blanket (16ft/row, 4 pals)"],['#f5a623','Wattle 9" (4ft/row, 2 pals)'],['#e8472c','Wattle 12" (4ft/row, 2 pals)']].map(([c,l])=>(
+              <div key={l} style={{display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#7a9088'}}>
+                <div style={{width:11, height:11, borderRadius:2, background:c, flexShrink:0}}/>
+                {l}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Utilization bar */}
+        <div style={{...panel, border:`1.5px solid ${statusCls==='over'?'#e8472c':statusCls==='warn'?'#f5a623':'#2a3d32'}`,
+          background:statusCls==='over'?'rgba(232,71,44,0.06)':T.cardBg}}>
+          <div style={secLabel}>DECK UTILIZATION</div>
+          <div style={{background:'#13161f', borderRadius:3, height:24, overflow:'hidden', display:'flex', position:'relative', marginBottom:8}}>
+            {[{pe:palEqB8,c:C.b8},{pe:palEqB16,c:C.b16},{pe:palEqW9,c:C.w9},{pe:palEqW12,c:C.w12}].map(({pe,c},i)=>(
+              <div key={i} style={{height:'100%', width:`${(pe/denom*100).toFixed(2)}%`, background:c, transition:'width .4s',
+                display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, overflow:'hidden', whiteSpace:'nowrap'}}/>
+            ))}
+          </div>
+          <div style={{display:'flex', justifyContent:'space-between', fontSize:12, color:statusCls==='over'?'#e8472c':'#7a9088'}}>
+            <span>{Math.round(totalPalEq/denom*100)}% ({totalPals} pallets loaded){totalPalEq>denom?` — ${totalPalEq-denom} over`:''}</span>
+            <span>{remPalEq!==null?(remPalEq>=0?`${remPalEq} pallets remaining`:`${Math.abs(remPalEq)} pallets over capacity`):''}</span>
+          </div>
+        </div>
+
+        {/* Recommendations */}
+        <div style={panel}>
+          <div style={secLabel}>LOAD RECOMMENDATIONS</div>
+          <div style={{display:'flex', flexDirection:'column', gap:8}}>
+            {recs.map((r,i)=>{
+              const rc={warn:'#e8472c',fill:'#f5a623',good:'#34c77b'}[r.cls]||'#4a9e6b';
+              return (
+                <div key={i} style={{display:'flex', alignItems:'flex-start', gap:10, background:'#1e2b24', borderRadius:4, padding:'10px 12px', borderLeft:`3px solid ${rc}`}}>
+                  <div style={{fontSize:13, fontWeight:800, flexShrink:0, marginTop:2, color:rc}}>{r.icon}</div>
+                  <div style={{fontSize:13, lineHeight:1.5}}>
+                    <div style={{fontSize:14, fontWeight:700, marginBottom:2}}>{r.title}</div>
+                    {r.body.split('\n').map((line,j)=><div key={j}>{line}</div>)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Breakdown table */}
+        <div style={panel}>
+          <div style={secLabel}>LOAD BREAKDOWN</div>
+          <table style={{width:'100%', borderCollapse:'collapse', fontSize:13}}>
+            <thead>
+              <tr>{['Product','Qty','Pallets','Pal. Equiv.','Deck ft','Est. Weight'].map(h=>(
+                <th key={h} style={{fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:'#7a9088', textAlign:h==='Product'?'left':'right', padding:'0 8px 9px', borderBottom:'1px solid #2a3d32'}}>{h}</th>
+              ))}</tr>
+            </thead>
+            <tbody>
+              {[
+                {c:C.b8,  l:"8' Blanket",  q:vqb8,  p:vpb8,  pe:palEqB8,  ft:rb8.deckFt,  w:wb8},
+                {c:C.b16, l:"16' Blanket", q:vqb16, p:vpb16, pe:palEqB16, ft:rb16.deckFt, w:wb16},
+                {c:C.w9,  l:'Wattle 9"',   q:vqw9,  p:vpw9,  pe:palEqW9,  ft:rw9.deckFt,  w:ww9},
+                {c:C.w12, l:'Wattle 12"',  q:vqw12, p:vpw12, pe:palEqW12, ft:rw12.deckFt, w:ww12},
+              ].map(({c,l,q,p,pe,ft,w})=>(
+                <tr key={l} style={{borderBottom:'1px solid #2a3d32'}}>
+                  <td style={{padding:'8px 8px'}}><span style={{display:'inline-flex', alignItems:'center', gap:7, fontWeight:600}}>
+                    <span style={{width:9, height:20, borderRadius:2, background:c, flexShrink:0}}/>
+                    {l}
+                  </span></td>
+                  <td style={{textAlign:'right', padding:'8px 8px', fontFamily:'monospace', fontSize:14, fontWeight:600}}>{q}</td>
+                  <td style={{textAlign:'right', padding:'8px 8px', fontFamily:'monospace', fontSize:14, fontWeight:600}}>{p}</td>
+                  <td style={{textAlign:'right', padding:'8px 8px', fontFamily:'monospace', fontSize:14, fontWeight:600}}>{pe}</td>
+                  <td style={{textAlign:'right', padding:'8px 8px', fontFamily:'monospace', fontSize:14, fontWeight:600}}>{ft>0?ft.toFixed(1)+'ft':'0ft'}</td>
+                  <td style={{textAlign:'right', padding:'8px 8px', fontFamily:'monospace', fontSize:14, fontWeight:600}}>{w.toLocaleString()} lbs</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td style={{padding:'10px 8px', fontWeight:700, borderTop:'2px solid #2a3d32'}}>TOTAL</td>
+                {[vqb8+vqb16+vqw9+vqw12, totalPals, totalPalEq, totalDeckFt.toFixed(1)+'ft', totalWt.toLocaleString()+' lbs'].map((v,i)=>(
+                  <td key={i} style={{textAlign:'right', padding:'10px 8px', fontWeight:700, borderTop:'2px solid #2a3d32', fontFamily:'monospace'}}>{v}</td>
+                ))}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        {/* Mixed load table */}
+        <div style={panel}>
+          <div style={{...secLabel, marginBottom:12}}>{mixedTitle}</div>
+          <table style={{width:'100%', borderCollapse:'collapse', fontSize:13}}>
+            <thead>
+              <tr>{["8′ Blanket Pallets", truck==='flatbed'?"Wattle / 8′ Pallets":"Wattle Pallets", "Total"].map(h=>(
+                <th key={h} style={{fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:'#7a9088', textAlign:'right', padding:'0 8px 9px', borderBottom:'1px solid #2a3d32'}}>{h}</th>
+              ))}</tr>
+            </thead>
+            <tbody>
+              {(()=>{
+                let bi=-1, bd=Infinity;
+                mixedTable.forEach((row,i)=>{
+                  const d=Math.abs(row[0]-blanketPals)+Math.abs(row[1]-wattlePals);
+                  if(d<bd){bd=d;bi=i;}
+                });
+                return mixedTable.map((row,i)=>{
+                  const isExact=row[0]===blanketPals&&row[1]===wattlePals&&(blanketPals>0||wattlePals>0);
+                  const isClose=i===bi&&(blanketPals>0||wattlePals>0)&&!isExact;
+                  return (
+                    <tr key={i} style={{background:isExact?'rgba(52,199,123,0.12)':isClose?'rgba(245,166,35,0.09)':'transparent',
+                      borderBottom:'1px solid #1e2b24', fontWeight:isExact||isClose?700:400,
+                      color:isExact?'#34c77b':isClose?'#f5a623':'inherit'}}>
+                      {row.map((v,j)=><td key={j} style={{padding:'7px 8px', textAlign:'right', fontFamily:'monospace', fontSize:14}}>{v}</td>)}
+                    </tr>
+                  );
+                });
+              })()}
+            </tbody>
+          </table>
+        </div>
+
       </div>
     </div>
   );

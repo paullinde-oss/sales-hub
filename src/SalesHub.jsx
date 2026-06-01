@@ -612,7 +612,7 @@ export default function SalesHub() {
   function createNewQuote() {
     const q={id:Date.now(),quoteNum:nextQNum(quotes),name:"",company:"",prepaid:false,currency:"CAD",
       lineItems:[{id:Date.now(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}],
-      notes:"",saved:false,savedBy:"",savedDate:""};
+      notes:"",internalNotes:"",saved:false,savedBy:"",savedDate:""};
     setActiveQuote(q);
   }
   function saveQuote(q) {
@@ -957,7 +957,7 @@ function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUS
                 </div>
               </div>
               <div style={{fontSize:11,color:"#777",marginTop:2}}>{q.name||"—"}</div>
-              <div style={{fontSize:10,color:"#444"}}>{q.company||"—"} · {q.currency}</div>
+              <div style={{fontSize:10,color:"#444"}}>{q.company||"—"} · <span style={{color:"var(--accent)",fontWeight:600}}>{q.lineItems?.reduce((a,li)=>a+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0)>0?fmtCur(q.lineItems.reduce((a,li)=>a+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0)):""}</span>{q.lineItems?.reduce((a,li)=>a+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0)>0?" "+q.currency:q.currency}</div>
             </div>
           ))}
         </div>
@@ -1005,7 +1005,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
           u.basePrice=base; u.unitPrice=base*(1+(u.increase||0)/100);
         }
       }
-      if(field==="increase"){const p=parseFloat(val)||0;u.unitPrice=u.basePrice*(1+p/100);}
+      if(field==="increase"){const p=parseFloat(val)||0;u.unitPrice=Math.round(u.basePrice*(1+p/100)*100)/100;}
       if(field==="qty"){
         const prod=products.find(p=>p.sku===u.sku);
         if(prod&&prod.pkg&&prod.pkg!==""){
@@ -1109,13 +1109,16 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
               <td style={{position:"relative"}}>
                 {ro?<span>{li.qty}</span>
                   :<div style={{position:"relative"}}>
-                    <input type="number" min="1" value={li.qty} onChange={e=>updLI(li.id,"qty",parseInt(e.target.value)||1)}
-                      style={{width:"100%",fontSize:11,height:25,borderColor:qtyWarnings[li.id]?"#5a3a00":"#2e2e2e"}}/>
+                    <input type="number" min="1" value={li.qty}
+                      onChange={e=>updLI(li.id,"qty",parseInt(e.target.value)||1)}
+                      style={{width:"100%",fontSize:12,height:28,borderColor:qtyWarnings[li.id]?"#5a3a00":"#2e2e2e",minWidth:72}}/>
                     {qtyWarnings[li.id]&&<div className="warn-toast" onClick={()=>setQtyWarnings(w=>{const n={...w};delete n[li.id];return n;})}>⚠ {qtyWarnings[li.id]} &nbsp;✕</div>}
                   </div>}
               </td>
               <td>{ro?<span>{fmtCur(li.unitPrice)}</span>
-                :<input type="number" step="0.01" value={li.unitPrice} onChange={e=>updLI(li.id,"unitPrice",e.target.value)}
+                :<input type="number" step="0.01" value={li.unitPrice===0?"":li.unitPrice}
+                    onChange={e=>updLI(li.id,"unitPrice",e.target.value)}
+                    onBlur={e=>{if(e.target.value==="")updLI(li.id,"unitPrice",0);}}
                     style={{width:"100%",fontSize:11,height:25}}/>}
               </td>
               <td style={{fontWeight:500,fontFamily:"monospace"}}>{fmtCur(lineTotal)}</td>
@@ -1138,9 +1141,12 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
       {/* Notes + Total */}
       <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:12,border:"1px solid #1e1e1e",padding:12}}>
         <div>
-          <div style={{fontSize:9,color:"#444",letterSpacing:".1em",textTransform:"uppercase",marginBottom:4}}>Notes</div>
+          <div style={{fontSize:9,color:"#444",letterSpacing:".1em",textTransform:"uppercase",marginBottom:4}}>Quote Notes <span style={{color:"var(--muted)",fontWeight:300,textTransform:"none"}}>(printed on quote)</span></div>
           <textarea disabled={ro} value={quote.notes} onChange={e=>upd("notes",e.target.value)}
-            style={{width:"100%",height:64,resize:"vertical",fontSize:11,background:"var(--input-bg)",border:"1px solid var(--border)",color:"var(--text)"}} placeholder="Add notes…"/>
+            style={{width:"100%",height:48,resize:"vertical",fontSize:11,background:"var(--input-bg)",border:"1px solid var(--border)",color:"var(--text)"}} placeholder="Notes for the customer…"/>
+          <div style={{fontSize:9,color:"var(--accent)",letterSpacing:".1em",textTransform:"uppercase",marginTop:8,marginBottom:4}}>Internal Notes <span style={{color:"var(--muted)",fontWeight:300,textTransform:"none"}}>(not on quote)</span></div>
+          <textarea disabled={ro} value={quote.internalNotes||""} onChange={e=>upd("internalNotes",e.target.value)}
+            style={{width:"100%",height:48,resize:"vertical",fontSize:11,background:"var(--input-bg)",border:`1px solid ${quote.internalNotes?"var(--accent)":"var(--border)"}`,color:"var(--text)"}} placeholder={`Internal notes by ${quote.savedBy||"you"}…`}/>
         </div>
         <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",justifyContent:"space-between",minWidth:190}}>
           <div style={{textAlign:"right"}}>
@@ -1843,12 +1849,13 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
 }
 
 function ProductEditRow({row,setRow,onSave,onCancel}) {
-  const f=(k,type="text")=>({type,value:row[k]??"",onChange:e=>setRow(r=>({...r,[k]:e.target.value})),style:{width:"100%",fontSize:11,height:24}});
+  const f=(k,type="text")=>({type,value:row[k]??"",onChange:e=>setRow(r=>({...r,[k]:e.target.value})),style:{width:"100%",fontSize:11,height:26,fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif"}});
   return (
-    <tr style={{background:"#14140e"}}>
-      <td><span style={{fontSize:11,color:"#c8a96e"}}>{row.sku}</span></td>
+    <tr style={{background:"#14140e",verticalAlign:"top"}}>
+      <td style={{paddingTop:6}}><span style={{fontSize:11,color:"#c8a96e"}}>{row.sku}</span></td>
       <td><input {...f("product")}/></td>
-      <td><input {...f("description")}/></td>
+      <td><textarea value={row.description??""} onChange={e=>setRow(r=>({...r,description:e.target.value}))}
+        style={{width:"100%",fontSize:11,height:52,resize:"vertical",fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",background:"var(--input-bg)",border:"1px solid var(--border-light)",color:"var(--text)",padding:"4px 6px",lineHeight:1.4}}/></td>
       <td><input {...f("pkg")}/></td>
       <td><input {...f("pallet")}/></td>
       <td><input {...f("price","number")} step="0.01"/></td>
@@ -1856,7 +1863,7 @@ function ProductEditRow({row,setRow,onSave,onCancel}) {
       <td><input {...f("prepaid","number")} step="0.01"/></td>
       <td><input {...f("prepaidPallet","number")} step="0.01"/></td>
       <td><input {...f("truckPrice","number")} step="0.01"/></td>
-      <td style={{display:"flex",gap:4}}>
+      <td style={{display:"flex",gap:4,paddingTop:6}}>
         <button className="btn-gold" style={{padding:"3px 8px",fontSize:10}} onClick={onSave}>✓</button>
         <button className="btn" style={{fontSize:10}} onClick={onCancel}>✕</button>
       </td>
@@ -1893,8 +1900,8 @@ function PDFModal({quote:q, onClose}) {
       const lt=(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0);
       const bg = i%2===0?"#ffffff":"#f7f7f7";
       return `<tr style="background:${bg};">
-        <td style="padding:7px 10px;border-bottom:1px solid #e8e8e4;font-size:11px;color:#222;">${li.description||"—"}</td>
-        <td style="padding:7px 10px;border-bottom:1px solid #e8e8e4;font-size:10.5px;font-family:'Courier New',monospace;color:#444;white-space:nowrap;">${li.sku||""}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e8e8e4;font-size:10px;color:#222;line-height:1.3;">${li.description||"—"}</td>
+        <td style="padding:6px 6px;border-bottom:1px solid #e8e8e4;font-size:9px;font-family:'Courier New',monospace;color:#555;white-space:nowrap;">${li.sku||""}</td>
         <td style="padding:7px 10px;border-bottom:1px solid #e8e8e4;font-size:11px;text-align:right;color:#333;">${li.unitPrice?fmt(li.unitPrice):"$ —"}</td>
         <td style="padding:7px 10px;border-bottom:1px solid #e8e8e4;font-size:11px;text-align:center;color:#333;">${li.qty||""}</td>
         <td style="padding:7px 10px;border-bottom:1px solid #e8e8e4;font-size:11px;text-align:right;font-weight:600;color:#111;">${lt?fmt(lt):"$ —"}</td>
@@ -1977,8 +1984,8 @@ function PDFModal({quote:q, onClose}) {
   <table style="width:100%;border-collapse:collapse;margin-bottom:0;flex:1;">
     <thead>
       <tr style="background:#1a1a1a;">
-        <th style="padding:8px 10px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#fff;font-weight:600;width:38%;">Description</th>
-        <th style="padding:8px 10px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#fff;font-weight:600;width:18%;">SKU</th>
+        <th style="padding:8px 8px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#fff;font-weight:600;width:42%;">Description</th>
+        <th style="padding:8px 8px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#fff;font-weight:600;width:14%;">SKU</th>
         <th style="padding:8px 10px;text-align:right;font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#fff;font-weight:600;width:16%;">Price/per</th>
         <th style="padding:8px 10px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#fff;font-weight:600;width:12%;">Qty</th>
         <th style="padding:8px 10px;text-align:right;font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#fff;font-weight:600;width:16%;">Total Price</th>

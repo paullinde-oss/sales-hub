@@ -129,11 +129,11 @@ const INITIAL_PRODUCTS_CAD = [
   { sku:"BAK40LBS", product:"Turbidity Curtain", description:"40 lbs Anchor Kit", truck:"", pkg:1, pallet:1, price:423.0, palletPrice:"", prepaid:"", prepaidPallet:"", truckPrice:"" },
   { sku:"TOWBRI12", product:"Turbidity Curtain", description:"12 Tow Bridle Pair", truck:"", pkg:1, pallet:1, price:88.0, palletPrice:"", prepaid:"", prepaidPallet:"", truckPrice:"" },
   { sku:"TOWBRI24", product:"Turbidity Curtain", description:"24 Tow Bridle Pair", truck:"", pkg:1, pallet:1, price:105.0, palletPrice:"", prepaid:"", prepaidPallet:"", truckPrice:"" },
-  { sku:"BMP-SSNS08", product:"Standard (Plastic) - Single Net - 100% Straw", description:"Std-Single Net Straw Blanket - 8' x 112.5' (100sy / 83m²)", truck:600, pkg:"", pallet:25, price:"", palletPrice:34.5, prepaid:"", prepaidPallet:"", truckPrice:30.0 },
-  { sku:"BMP-SSNS16", product:"Standard (Plastic) - Single Net - 100% Straw", description:"Std-Single Net Straw Blanket - 16' x 112.5' (200sy / 167m²)", truck:"", pkg:"", pallet:20, price:"", palletPrice:69.0, prepaid:"", prepaidPallet:"", truckPrice:60.0 },
+  { sku:"BMP-SSNS08", product:"Standard (Plastic) - Single Net - 100% Straw", description:"Std-Single Net Straw Blanket - 8' x 112.5' (100sy / 83m²)", truck:600, truckQty:600, pkg:"", pallet:25, price:"", palletPrice:34.5, prepaid:"", prepaidPallet:"", truckPrice:30.0 },
+  { sku:"BMP-SSNS16", product:"Standard (Plastic) - Single Net - 100% Straw", description:"Std-Single Net Straw Blanket - 16' x 112.5' (200sy / 167m²)", truck:"", truckQty:600, pkg:"", pallet:20, price:"", palletPrice:69.0, prepaid:"", prepaidPallet:"", truckPrice:60.0 },
   { sku:"BMP-SSNS08JR", product:"Standard (Plastic) - Single Net - 100% Straw", description:"Std-Single Net Straw Blanket Jumbo Roll - 8' x 562.5' (500sy / 418m²)", truck:"", pkg:"", pallet:4, price:"", palletPrice:173.0, prepaid:"", prepaidPallet:"", truckPrice:150.5 },
   { sku:"BMP-SSNS16JR", product:"Standard (Plastic) - Single Net - 100% Straw", description:"Std-Single Net Straw Blanket Jumbo Roll - 16' x 562.5' (1000sy / 836m²)", truck:"", pkg:"", pallet:4, price:"", palletPrice:346.5, prepaid:"", prepaidPallet:"", truckPrice:301.0 },
-  { sku:"BMP-SDNS08", product:"Standard (Plastic) - Double Net - 100% Straw", description:"Std-Double Net Straw Blanket - 8' x 112.5' (100sy / 83m²)", truck:600, pkg:"", pallet:25, price:"", palletPrice:38.0, prepaid:"", prepaidPallet:"", truckPrice:33.0 },
+  { sku:"BMP-SDNS08", product:"Standard (Plastic) - Double Net - 100% Straw", description:"Std-Double Net Straw Blanket - 8' x 112.5' (100sy / 83m²)", truck:600, truckQty:600, pkg:"", pallet:25, price:"", palletPrice:38.0, prepaid:"", prepaidPallet:"", truckPrice:33.0 },
   { sku:"BMP-SDNS16", product:"Standard (Plastic) - Double Net - 100% Straw", description:"Std-Double Net Straw Blanket - 16' x 112.5' (200sy / 167m²)", truck:"", pkg:"", pallet:20, price:"", palletPrice:76.5, prepaid:"", prepaidPallet:"", truckPrice:66.5 },
   { sku:"BMP-SDNS08JR", product:"Standard (Plastic) - Double Net - 100% Straw", description:"Std-Double Net Straw Blanket Jumbo Roll - 8' x 562.5' (500sy / 418m²)", truck:"", pkg:"", pallet:4, price:"", palletPrice:192.0, prepaid:"", prepaidPallet:"", truckPrice:167.0 },
   { sku:"BMP-SDNS16JR", product:"Standard (Plastic) - Double Net - 100% Straw", description:"Std-Double Net Straw Blanket Jumbo Roll - 16' x 562.5' (1000sy / 836m²)", truck:"", pkg:"", pallet:4, price:"", palletPrice:385.0, prepaid:"", prepaidPallet:"", truckPrice:334.0 },
@@ -141,11 +141,11 @@ const INITIAL_PRODUCTS_CAD = [
   { sku:"BMP-SDNSC16", product:"Standard (Plastic) - Double Net - 70% Straw 30% Coconut", description:"Std-Double Net Straw Coconut Blanket - 16' x 112.5' (200sy / 167m²)", truck:"", pkg:"", pallet:20, price:"", palletPrice:76.5, prepaid:"", prepaidPallet:"", truckPrice:117.0 },
   { sku:"BMP-SDNSC08JR", product:"Standard (Plastic) - Double Net - 70% Straw 30% Coconut", description:"Std-Double Net Straw Coconut Blanket Jumbo Roll - 8' x 562.5' (500sy / 418m²)", truck:"", pkg:"", pallet:4, price:"", palletPrice:192.0, prepaid:"", prepaidPallet:"", truckPrice:299.0 },
   { sku:"BMP-SDNSC16JR", product:"Standard (Plastic) - Double Net - 70% Straw 30% Coconut", description:"Std-Double Net Straw Coconut Blanket Jumbo Roll - 16' x 562.5' (1000sy / 836m²)", truck:"", pkg:"", pallet:4, price:"", palletPrice:385.0, prepaid:"", prepaidPallet:"", truckPrice:598.5 },
-  { sku:"BMP-SDNC08", product:"Standard (Plastic) - Double Net - 100% Coconut", description:"Std-Double Net Coconut Blanket - 8' x 112.5' (100sy / 83m²)", truck:600, pkg:"", pallet:25, price:"", palletPrice:98.0, prepaid:"", prepaidPallet:"", truckPrice:85.0 },
+  { sku:"BMP-SDNC08", product:"Standard (Plastic) - Double Net - 100% Coconut", description:"Std-Double Net Coconut Blanket - 8' x 112.5' (100sy / 83m²)", truck:600, truckQty:600, pkg:"", pallet:25, price:"", palletPrice:98.0, prepaid:"", prepaidPallet:"", truckPrice:85.0 },
   { sku:"BMP-SDNC16", product:"Standard (Plastic) - Double Net - 100% Coconut", description:"Std-Double Net Coconut Blanket - 16' x 112.5' (200sy / 167m²)", truck:"", pkg:"", pallet:20, price:"", palletPrice:196.0, prepaid:"", prepaidPallet:"", truckPrice:170.5 },
   { sku:"BMP-SDNC08JR", product:"Standard (Plastic) - Double Net - 100% Coconut", description:"Std-Double Net Coconut Blanket Jumbo Roll - 8' x 562.5' (500sy / 418m²)", truck:"", pkg:"", pallet:4, price:"", palletPrice:498.0, prepaid:"", prepaidPallet:"", truckPrice:426.0 },
   { sku:"BMP-SDNC16JR", product:"Standard (Plastic) - Double Net - 100% Coconut", description:"Std-Double Net Coconut Blanket Jumbo Roll - 16' x 562.5' (1000sy / 836m²)", truck:"", pkg:"", pallet:4, price:"", palletPrice:997.5, prepaid:"", prepaidPallet:"", truckPrice:852.5 },
-  { sku:"BMP-BDNS08", product:"Biodegradable (Jute) - Double Net - 100% Straw", description:"Bio-Double Net Straw Blanket - 8' x 112.5' (100sy / 83m²)", truck:600, pkg:"", pallet:25, price:"", palletPrice:94.5, prepaid:"", prepaidPallet:"", truckPrice:82.5 },
+  { sku:"BMP-BDNS08", product:"Biodegradable (Jute) - Double Net - 100% Straw", description:"Bio-Double Net Straw Blanket - 8' x 112.5' (100sy / 83m²)", truck:600, truckQty:600, pkg:"", pallet:25, price:"", palletPrice:94.5, prepaid:"", prepaidPallet:"", truckPrice:82.5 },
   { sku:"BMP-BDNS16", product:"Biodegradable (Jute) - Double Net - 100% Straw", description:"Bio-Double Net Straw Blanket - 16' x 112.5' (200sy / 167m²)", truck:"", pkg:"", pallet:20, price:"", palletPrice:189.75, prepaid:"", prepaidPallet:"", truckPrice:165.0 },
   { sku:"BMP- BDNS08JR", product:"Biodegradable (Jute) - Double Net - 100% Straw", description:"Bio-Double Net Straw Blanket Jumbo Roll - 8' x 562.5' (500sy / 418m²)", truck:"", pkg:"", pallet:4, price:"", palletPrice:472.0, prepaid:"", prepaidPallet:"", truckPrice:412.0 },
   { sku:"BMP-BDNS16JR", product:"Biodegradable (Jute) - Double Net - 100% Straw", description:"Bio-Double Net Straw Blanket Jumbo Roll - 16' x 562.5' (1000sy / 836m²)", truck:"", pkg:"", pallet:4, price:"", palletPrice:945.0, prepaid:"", prepaidPallet:"", truckPrice:824.0 },
@@ -153,7 +153,7 @@ const INITIAL_PRODUCTS_CAD = [
   { sku:"BMP-BDNSC16", product:"Biodegradable (Jute) - Double Net - 70% Straw 30% Coconut", description:"Bio-Double Net Straw Coconut Blanket - 16' x 112.5' (1000sy / 167m²)", truck:"", pkg:"", pallet:20, price:"", palletPrice:190.0, prepaid:"", prepaidPallet:"", truckPrice:166.5 },
   { sku:"BMP-BDNSC08JR", product:"Biodegradable (Jute) - Double Net - 70% Straw 30% Coconut", description:"Bio-Double Net Straw Coconut Blanket Jumbo Roll - 8' x 562.5' (500sy / 418m²)", truck:"", pkg:"", pallet:4, price:"", palletPrice:478.0, prepaid:"", prepaidPallet:"", truckPrice:416.25 },
   { sku:"BMP-BDNSC16JR", product:"Biodegradable (Jute) - Double Net - 70% Straw 30% Coconut", description:"Bio-Double Net Straw Coconut Blanket Jumbo Roll - 16' x 562.5' (1000sy / 836m²)", truck:"", pkg:"", pallet:4, price:"", palletPrice:956.0, prepaid:"", prepaidPallet:"", truckPrice:832.0 },
-  { sku:"BMP-BDNC08", product:"Biodegradable (Jute) - Double Net - 100% Coconut", description:"Bio-Double Net Coconut Blanket - 8' x 112.5' (100sy / 83m²)", truck:600, pkg:"", pallet:25, price:"", palletPrice:133.5, prepaid:"", prepaidPallet:"", truckPrice:116.5 },
+  { sku:"BMP-BDNC08", product:"Biodegradable (Jute) - Double Net - 100% Coconut", description:"Bio-Double Net Coconut Blanket - 8' x 112.5' (100sy / 83m²)", truck:600, truckQty:600, pkg:"", pallet:25, price:"", palletPrice:133.5, prepaid:"", prepaidPallet:"", truckPrice:116.5 },
   { sku:"BMP-BDNC16", product:"Biodegradable (Jute) - Double Net - 100% Coconut", description:"Bio-Double Net Coconut Blanket - 16' x 112.5' (200sy / 167m²)", truck:"", pkg:"", pallet:20, price:"", palletPrice:267.75, prepaid:"", prepaidPallet:"", truckPrice:233.0 },
   { sku:"BMP-BDNC08JR", product:"Biodegradable (Jute) - Double Net - 100% Coconut", description:"Bio-Double Net Coconut Blanket Jumbo Roll - 8' x 562.5' (500sy / 418m²)", truck:"", pkg:"", pallet:4, price:"", palletPrice:669.0, prepaid:"", prepaidPallet:"", truckPrice:582.5 },
   { sku:"BMP-BDNC16JR", product:"Biodegradable (Jute) - Double Net - 100% Coconut", description:"Bio-Double Net Coconut Blanket Jumbo Roll - 16' x 562.5' (1000sy / 836m²)", truck:"", pkg:"", pallet:4, price:"", palletPrice:1339.0, prepaid:"", prepaidPallet:"", truckPrice:1165.0 },
@@ -176,8 +176,8 @@ const INITIAL_PRODUCTS_CAD = [
   { sku:"BMP-TRMPC16", product:"Turf Reinforcement Mats", description:"67% Polypropylene Fiber and 33% Coconut TRM - 16' x 112.5' (200sy/167m²)", truck:"", pkg:"", pallet:20, price:532.0, palletPrice:532.0, prepaid:"", prepaidPallet:"", truckPrice:532.0 },
   { sku:"BMP-TRMPS08", product:"Turf Reinforcement Mats", description:"67% Polypropylene Fiber and 33% Straw TRM - 8' x 112.5' (100sy/83m²)", truck:"", pkg:"", pallet:20, price:253.0, palletPrice:253.0, prepaid:"", prepaidPallet:"", truckPrice:253.0 },
   { sku:"BMP-TRMPS16", product:"Turf Reinforcement Mats", description:"67% Polypropylene Fiber and 33% Straw TRM - 16' x 112.5' (200sy/167m²)", truck:"", pkg:"", pallet:20, price:507.0, palletPrice:507.0, prepaid:"", prepaidPallet:"", truckPrice:507.0 },
-  { sku:"STW0925", product:"Straw Wattle", description:"Standard Straw Wattle - 9 x 25'", truck:364, pkg:"", pallet:14, price:"", palletPrice:27.0, prepaid:"", prepaidPallet:"", truckPrice:25.0 },
-  { sku:"STW1220", product:"Straw Wattle", description:"Standard Straw Wattle - 12 x 20'", truck:312, pkg:"", pallet:12, price:"", palletPrice:27.0, prepaid:"", prepaidPallet:"", truckPrice:25.0 },
+  { sku:"STW0925", product:"Straw Wattle", description:"Standard Straw Wattle - 9 x 25'", truck:364, truckQty:364, pkg:"", pallet:14, price:"", palletPrice:27.0, prepaid:"", prepaidPallet:"", truckPrice:25.0 },
+  { sku:"STW1220", product:"Straw Wattle", description:"Standard Straw Wattle - 12 x 20'", truck:312, truckQty:312, pkg:"", pallet:12, price:"", palletPrice:27.0, prepaid:"", prepaidPallet:"", truckPrice:25.0 },
   { sku:"RDSTW0925", product:"Straw Wattle", description:"Rapid Degradable Straw Wattle - 9 x 25'", truck:364, pkg:"", pallet:14, price:"", palletPrice:29.0, prepaid:"", prepaidPallet:"", truckPrice:27.0 },
   { sku:"RDSTW1220", product:"Straw Wattle", description:"Rapid Degradable Straw Wattle - 12 x 20'", truck:312, pkg:"", pallet:12, price:"", palletPrice:29.0, prepaid:"", prepaidPallet:"", truckPrice:27.0 },
   { sku:"BSTW0925", product:"Straw Wattle", description:"Biodegradable (Burlap) Straw Wattle  - 9 x 25'", truck:364, pkg:"", pallet:14, price:"", palletPrice:31.5, prepaid:"", prepaidPallet:"", truckPrice:29.0 },
@@ -485,13 +485,39 @@ const SHIPPING_DATA = {
   }
 };
 
-const PRICE_INCREASE_OPTIONS = [0,5,10,15,20,25,30,35,40,50,55,60];
+const PRICE_INCREASE_OPTIONS = [0,2,5,10,15,20,25,30,35,40,50,55,60];
 function fmtCur(val) {
   if (val === "" || val === null || val === undefined) return "—";
   const n = parseFloat(String(val).replace(/[$,]/g,""));
   if (isNaN(n) || n === 0) return "—";
   return `$${n.toLocaleString("en-CA",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 }
+// Determine price tier based on qty and product thresholds
+function getPriceTier(prod, qty, prepaid) {
+  if (!prod) return {price:0, tier:"unit"};
+  const q = parseInt(qty)||0;
+  const truckQty  = parseInt(prod.truckQty)||0;
+  const palletQty = parseInt(prod.pallet)||0;
+  const pkgQty    = parseInt(prod.pkg)||0;
+
+  // Truck price: needs truckQty set AND truckPrice AND qty >= truckQty
+  if (truckQty>0 && parsePrice(prod.truckPrice)>0 && q>=truckQty) {
+    return {price:parsePrice(prod.truckPrice), tier:"truck"};
+  }
+  // Pallet price: qty >= pallet qty (full pallet)
+  if (palletQty>0 && parsePrice(prod.palletPrice)>0 && q>=palletQty) {
+    if (prepaid && parsePrice(prod.prepaidPallet)>0) return {price:parsePrice(prod.prepaidPallet), tier:"prepaid pallet"};
+    return {price:parsePrice(prod.palletPrice), tier:"pallet"};
+  }
+  // Prepaid unit price
+  if (prepaid && parsePrice(prod.prepaid)>0) return {price:parsePrice(prod.prepaid), tier:"prepaid"};
+  // Standard unit price
+  if (parsePrice(prod.price)>0) return {price:parsePrice(prod.price), tier:"unit"};
+  // Fallback to pallet price
+  if (parsePrice(prod.palletPrice)>0) return {price:parsePrice(prod.palletPrice), tier:"pallet"};
+  return {price:0, tier:"unit"};
+}
+
 function parsePrice(str) {
   if (!str && str !== 0) return 0;
   return parseFloat(String(str).replace(/[$,]/g,"")) || 0;
@@ -1001,21 +1027,30 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
         const prod=field==="sku"?products.find(p=>p.sku===val):products.find(p=>p.description===val);
         if(prod){
           if(field==="sku")u.description=prod.description;else u.sku=prod.sku;
-          const base=q.prepaid&&prod.prepaid?parsePrice(prod.prepaid):parsePrice(prod.price||prod.palletPrice);
-          u.basePrice=base; u.unitPrice=base*(1+(u.increase||0)/100);
+          const tier=getPriceTier(prod,u.qty,q.prepaid);
+          u.basePrice=tier.price; u.priceTier=tier.tier;
+          u.unitPrice=Math.round(tier.price*(1+(u.increase||0)/100)*100)/100;
         }
       }
       if(field==="increase"){const p=parseFloat(val)||0;u.unitPrice=Math.round(u.basePrice*(1+p/100)*100)/100;}
       if(field==="qty"){
         const prod=products.find(p=>p.sku===u.sku);
-        if(prod&&prod.pkg&&prod.pkg!==""){
-          const pkg=parseInt(prod.pkg);
-          if(!isNaN(pkg)&&parseInt(val)%pkg!==0){
-            setQtyWarnings(w=>({...w,[id]:`Not a multiple of package qty (${pkg})`}));
-          } else {
-            setQtyWarnings(w=>{const n={...w};delete n[id];return n;});
+        if(prod){
+          // Recalc price tier when qty changes
+          const tier=getPriceTier(prod,val,q.prepaid);
+          if(tier.price>0){
+            u.basePrice=tier.price; u.priceTier=tier.tier;
+            u.unitPrice=Math.round(tier.price*(1+(u.increase||0)/100)*100)/100;
           }
-        }
+          if(prod.pkg&&prod.pkg!==""){
+            const pkg=parseInt(prod.pkg);
+            if(!isNaN(pkg)&&parseInt(val)%pkg!==0){
+              setQtyWarnings(w=>({...w,[id]:`Not a multiple of package qty (${pkg})`}));
+            } else {
+              setQtyWarnings(w=>{const n={...w};delete n[id];return n;});
+            }
+          } // end pkg check
+        } // end prod check
       }
       return u;
     })}));
@@ -1115,11 +1150,20 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
                     {qtyWarnings[li.id]&&<div className="warn-toast" onClick={()=>setQtyWarnings(w=>{const n={...w};delete n[li.id];return n;})}>⚠ {qtyWarnings[li.id]} &nbsp;✕</div>}
                   </div>}
               </td>
-              <td>{ro?<span>{fmtCur(li.unitPrice)}</span>
-                :<input type="number" step="0.01" value={li.unitPrice===0?"":li.unitPrice}
-                    onChange={e=>updLI(li.id,"unitPrice",e.target.value)}
-                    onBlur={e=>{if(e.target.value==="")updLI(li.id,"unitPrice",0);}}
-                    style={{width:"100%",fontSize:11,height:25}}/>}
+              <td>
+                {ro
+                  ? <div>
+                      <div>{fmtCur(li.unitPrice)}</div>
+                      {li.priceTier&&li.priceTier!=="unit"&&<div style={{fontSize:8,color:"#c8a96e",textTransform:"uppercase",letterSpacing:".06em",marginTop:1}}>{li.priceTier}</div>}
+                    </div>
+                  : <div>
+                      <input type="number" step="0.01" value={li.unitPrice===0?"":li.unitPrice}
+                        onChange={e=>updLI(li.id,"unitPrice",e.target.value)}
+                        onBlur={e=>{if(e.target.value==="")updLI(li.id,"unitPrice",0);}}
+                        style={{width:"100%",fontSize:11,height:25}}/>
+                      {li.priceTier&&li.priceTier!=="unit"&&<div style={{fontSize:8,color:"#c8a96e",textTransform:"uppercase",letterSpacing:".06em",marginTop:1}}>{li.priceTier} price</div>}
+                    </div>
+                }
               </td>
               <td style={{fontWeight:500,fontFamily:"monospace"}}>{fmtCur(lineTotal)}</td>
               <td>
@@ -1628,7 +1672,8 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
           <td style={{fontSize:11,fontFamily:"monospace",textAlign:"right",color:parsePrice(p.palletPrice)>0?T.subtext:T.muted}}>{fmtCur(p.palletPrice)}</td>
           <td style={{fontSize:11,fontFamily:"monospace",textAlign:"right",color:parsePrice(p.prepaid)>0?"#9ec89e":T.muted}}>{fmtCur(p.prepaid)}</td>
           <td style={{fontSize:11,fontFamily:"monospace",textAlign:"right",color:parsePrice(p.prepaidPallet)>0?"#9ec89e":T.muted}}>{fmtCur(p.prepaidPallet)}</td>
-          <td style={{fontSize:11,fontFamily:"monospace",textAlign:"right",color:parsePrice(p.truckPrice)>0?T.subtext:T.muted}}>{fmtCur(p.truckPrice)}</td>
+          <td style={{fontSize:11,fontFamily:"monospace",textAlign:"right",color:T.tableHeadText}}>{p.truckQty||"—"}</td>
+                  <td style={{fontSize:11,fontFamily:"monospace",textAlign:"right",color:parsePrice(p.truckPrice)>0?T.subtext:T.muted}}>{fmtCur(p.truckPrice)}</td>
           <td>
             <div style={{display:"flex",gap:4}}>
               <button className="btn" style={{fontSize:10,padding:"2px 8px"}} onClick={()=>setEditing({...p})}>Edit</button>
@@ -1653,7 +1698,8 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
       <Th l="Pallet Price" f="palletPrice" style={{textAlign:"right"}}/>
       <Th l="Prepaid" f="prepaid" style={{textAlign:"right"}}/>
       <Th l="Prepaid Pallet" f="prepaidPallet" style={{textAlign:"right"}}/>
-      <Th l="Truck Price" f="truckPrice" style={{textAlign:"right"}}/>
+      <Th l="Truck Qty" f="truckQty" style={{textAlign:"right"}}/>
+              <Th l="Truck Price" f="truckPrice" style={{textAlign:"right"}}/>
       <th>Actions</th>
     </tr>
   );
@@ -1862,6 +1908,7 @@ function ProductEditRow({row,setRow,onSave,onCancel}) {
       <td><input {...f("palletPrice","number")} step="0.01"/></td>
       <td><input {...f("prepaid","number")} step="0.01"/></td>
       <td><input {...f("prepaidPallet","number")} step="0.01"/></td>
+      <td><input {...f("truckQty")}/></td>
       <td><input {...f("truckPrice","number")} step="0.01"/></td>
       <td style={{display:"flex",gap:4,paddingTop:6}}>
         <button className="btn-gold" style={{padding:"3px 8px",fontSize:10}} onClick={onSave}>✓</button>
@@ -2060,10 +2107,13 @@ function PDFModal({quote:q, onClose}) {
   );
 
   // ── Details form ─────────────────────────────────────────────────────────
-  const F = ({label,value,onChange,placeholder=""}) => (
+  const F = ({label,value,onChange,placeholder="",type="text"}) => (
     <div style={{marginBottom:8}}>
       <div style={{fontSize:9,color:"#666",letterSpacing:".08em",textTransform:"uppercase",marginBottom:3}}>{label}</div>
-      <input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+      <input type={type} value={value}
+        onChange={e=>onChange(e.target.value)}
+        onFocus={e=>{if(type==="number"&&e.target.value==="0")e.target.select();}}
+        placeholder={placeholder}
         style={{width:"100%",fontSize:11,height:26,background:"#1a1a1a",border:"1px solid #2a2a2a",color:"#ccc",padding:"0 8px"}}/>
     </div>
   );
@@ -2092,8 +2142,8 @@ function PDFModal({quote:q, onClose}) {
                 {[14,21,30,45,60,90].map(d=><option key={d} value={d}>{d} days</option>)}
               </select>
             </div>
-            <F label="Freight / Shipping ($)" value={freight} onChange={setFreight} placeholder="0.00"/>
-            <F label="Discount ($)" value={discount} onChange={setDiscount} placeholder="0.00"/>
+            <F label="Freight / Shipping ($)" value={freight} onChange={setFreight} placeholder="0.00" type="number"/>
+            <F label="Discount ($)" value={discount} onChange={setDiscount} placeholder="0.00" type="number"/>
             <F label="Payment Terms" value={payTerms} onChange={setPayTerms} placeholder="Net 30 days..."/>
           </div>
 

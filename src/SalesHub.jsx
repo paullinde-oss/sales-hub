@@ -564,7 +564,7 @@ export default function SalesHub() {
   const [loginName, setLoginName] = useLocalStorage('bmp_user', '');
   const [loginError, setLoginError] = useState("");
 
-  const VALID_NAMES = ["Paul", "Mark", "Grant", "Jeff"];
+  const VALID_NAMES = ["Paul", "Mark", "Grant", "Jeff", "John"];
 
   function handleLogin() {
     const name = loginName.trim();
@@ -589,7 +589,8 @@ export default function SalesHub() {
   const [quotes, setQuotes] = useState([]);  // synced from Firebase
   const [activeQuote, setActiveQuote] = useState(null);
   const [searchQ, setSearchQ] = useState({name:"",company:"",date:"",madeBy:"",quoteNum:"",sku:"",description:""});
-  const [quoteSort, setQuoteSort] = useLocalStorage('bmp_quote_sort', 'asc'); // asc = oldest first (BMP44004 top)
+  const [quoteSort, setQuoteSort] = useLocalStorage('bmp_quote_sort', 'asc');
+  const [exchangeRate, setExchangeRate] = useLocalStorage('bmp_exchange_rate', 0.73); // asc = oldest first (BMP44004 top)
   const [productCurrency, setProductCurrency] = useState("CAD");
   const [productSearch, setProductSearch] = useState("");
   const [emailModal, setEmailModal] = useState(null);
@@ -614,6 +615,28 @@ export default function SalesHub() {
 
   const currentProducts = productCurrency==="CAD" ? productsCAD : productsUSD;
   const setCurrentProducts = productCurrency==="CAD" ? setProductsCAD : setProductsUSD;
+
+  // Effective USD products — if a USD price field is blank, auto-convert from CAD using exchange rate
+  const effectiveProductsUSD = useMemo(() => {
+    return productsUSD.map((usdP, i) => {
+      const cadP = productsCAD[i] || productsCAD.find(p => p.sku === usdP.sku);
+      if (!cadP) return usdP;
+      function conv(usdVal, cadVal) {
+        if (usdVal !== "" && usdVal !== null && usdVal !== undefined && parseFloat(usdVal) > 0) return usdVal;
+        if (cadVal !== "" && cadVal !== null && cadVal !== undefined && parseFloat(cadVal) > 0)
+          return Math.round(parseFloat(cadVal) * exchangeRate * 100) / 100;
+        return "";
+      }
+      return {
+        ...usdP,
+        price:       conv(usdP.price,       cadP.price),
+        palletPrice: conv(usdP.palletPrice, cadP.palletPrice),
+        prepaid:     conv(usdP.prepaid,     cadP.prepaid),
+        prepaidPallet: conv(usdP.prepaidPallet, cadP.prepaidPallet),
+        truckPrice:  conv(usdP.truckPrice,  cadP.truckPrice),
+      };
+    });
+  }, [productsUSD, productsCAD, exchangeRate]);
 
   const filteredQuotes = useMemo(()=>quotes.filter(q=>{
     const s=searchQ;
@@ -811,14 +834,15 @@ export default function SalesHub() {
         {/* Content */}
         <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
           {activeTab==="quotes"&&<QuotesTab quotes={filteredQuotes} activeQuote={activeQuote} searchQ={searchQ} setSearchQ={setSearchQ}
-            productsCAD={productsCAD} productsUSD={productsUSD} createNewQuote={createNewQuote}
+            productsCAD={productsCAD} productsUSD={effectiveProductsUSD} createNewQuote={createNewQuote}
             setActiveQuote={setActiveQuote} saveQuote={saveQuote} editQuote={q=>setActiveQuote({...q,saved:false})}
             openEmailModal={openEmailModal} generatePDF={generatePDF} deleteConfirm={deleteConfirm} setDeleteConfirm={setDeleteConfirm} deleteQuote={deleteQuote} duplicateQuote={duplicateQuote} quoteSort={quoteSort} setQuoteSort={setQuoteSort} T={T}/>}
           {activeTab==="dims"&&<DimsTab dims={dims} setDims={setDims} T={T}/>}
           {activeTab==="shipping"&&<ShippingTab T={T}/>}
           {activeTab==="products"&&<ProductsTab products={filteredProducts} setProducts={setCurrentProducts}
             currency={productCurrency} setCurrency={setProductCurrency} search={productSearch} setSearch={setProductSearch}
-            categories={categories} setCategories={setCategories} T={T}/>}
+            categories={categories} setCategories={setCategories}
+            exchangeRate={exchangeRate} setExchangeRate={setExchangeRate} T={T}/>}
           {activeTab==="loadcalc"&&<LoadCalcTab T={T}/>}
         </div>
       </div>
@@ -1015,7 +1039,7 @@ function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUS
               </div>
               <button className="btn-gold" style={{fontSize:12,padding:"9px 24px"}} onClick={createNewQuote}>+ Create New Quote</button>
             </div>
-          : <QuoteForm quote={activeQuote} setQuote={setActiveQuote} productsCAD={productsCAD} productsUSD={productsUSD}
+          : <QuoteForm quote={activeQuote} setQuote={setActiveQuote} productsCAD={productsCAD} productsUSD={effectiveProductsUSD}
               onSave={saveQuote} onEdit={editQuote} onEmail={openEmailModal} onPDF={generatePDF}
               onClose={()=>setActiveQuote(null)} onNewQuote={()=>{setActiveQuote(null);setTimeout(createNewQuote,50);}} T={T}/>
         }
@@ -1026,6 +1050,8 @@ function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUS
 
 // ─── Quote Form ────────────────────────────────────────────────────────────────
 function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail,onPDF,onClose,onNewQuote,T}) {
+  // Compute load warnings live from line items
+  const loadWarnings = useMemo(() => validateQuoteLoad(quote.lineItems), [quote.lineItems]);
   const products = quote.currency==="CAD"?productsCAD:productsUSD;
   const [qtyWarnings,setQtyWarnings] = useState({});
 
@@ -1192,6 +1218,28 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
           <button className="btn" style={{fontSize:10,padding:"4px 12px"}} onClick={addLI}>+ Add Line Item</button>
         </div>}
       </div>
+
+      {/* Load Validation Warnings */}
+      {loadWarnings.length > 0 && (
+        <div style={{border:`1px solid ${T.border}`,marginBottom:8,overflow:"hidden"}}>
+          <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".12em",color:T.muted,padding:"5px 10px",background:T.tableHead,borderBottom:`1px solid ${T.border}`}}>
+            Load & Packing Check
+          </div>
+          {loadWarnings.map((w,i)=>{
+            const colors = {ok:"#34c77b", warn:"#f5a623", over:"#e8472c", info:"#4a90d9"};
+            const col = colors[w.type]||colors.info;
+            return (
+              <div key={i} style={{display:"flex",gap:10,padding:"7px 10px",borderBottom:i<loadWarnings.length-1?`1px solid ${T.border}`:"none",background:T.cardBg}}>
+                <div style={{flexShrink:0,width:6,background:col,borderRadius:1,alignSelf:"stretch"}}/>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:10,fontWeight:600,color:col,marginBottom:1}}>{w.product}</div>
+                  <div style={{fontSize:11,color:T.subtext,lineHeight:1.5}}>{w.msg}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Notes + Total */}
       <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:12,border:"1px solid #1e1e1e",padding:12}}>
@@ -1507,7 +1555,7 @@ function ShippingTab({T}) {
 }
 
 // ─── Products Tab ──────────────────────────────────────────────────────────────
-function ProductsTab({products,setProducts,currency,setCurrency,search,setSearch,categories,setCategories,T}) {
+function ProductsTab({products,setProducts,currency,setCurrency,search,setSearch,categories,setCategories,exchangeRate,setExchangeRate,T}) {
   const [editing,      setEditing]      = useState(null);
   const [sortF,        setSortF]        = useState("sku");
   const [sortD,        setSortD]        = useState(1);
@@ -1845,7 +1893,17 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
             </button>
           ))}
         </div>
-        {currency==="USD"&&<span style={{fontSize:9,color:"#554",background:"#111108",border:"1px solid #2a2808",padding:"3px 8px"}}>USD prices not set — import or edit</span>}
+        {currency==="USD"&&(
+          <div style={{display:"flex",alignItems:"center",gap:6,background:T.tableHead,border:`1px solid ${T.border}`,padding:"3px 10px",borderRadius:2}}>
+            <span style={{fontSize:9,color:T.muted}}>Auto-convert rate: $1 CAD =</span>
+            <input type="number" step="0.001" min="0.1" max="2"
+              value={exchangeRate}
+              onChange={e=>setExchangeRate(parseFloat(e.target.value)||0.73)}
+              style={{width:64,fontSize:11,height:22,textAlign:"center",padding:"0 4px"}}/>
+            <span style={{fontSize:9,color:T.muted}}>USD</span>
+            <span style={{fontSize:9,color:T.accent,marginLeft:4}}>Blank USD prices auto-convert from CAD</span>
+          </div>
+        )}
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search SKU, product, description…"
           style={{flex:1,maxWidth:260,height:26,fontSize:11}}/>
         {/* Selected actions */}
@@ -1926,6 +1984,20 @@ function ProductEditRow({row,setRow,onSave,onCancel}) {
         <button className="btn" style={{fontSize:10}} onClick={onCancel}>✕</button>
       </td>
     </tr>
+  );
+}
+
+// ─── PDF Field Component (outside PDFModal to prevent focus loss on re-render) ──
+function PDFField({label, value, onChange, placeholder="", type="text"}) {
+  return (
+    <div style={{marginBottom:8}}>
+      <div style={{fontSize:9,color:"#666",letterSpacing:".08em",textTransform:"uppercase",marginBottom:3}}>{label}</div>
+      <input type={type} value={value}
+        onChange={e=>onChange(e.target.value)}
+        onFocus={e=>{ if(type==="number" && (e.target.value==="0"||e.target.value==="0.00")) e.target.select(); }}
+        placeholder={placeholder}
+        style={{width:"100%",fontSize:13,height:36,background:"#1e1e1e",border:"1px solid #333",color:"#e8e8e8",padding:"0 10px",borderRadius:2,fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif"}}/>
+    </div>
   );
 }
 
@@ -2136,16 +2208,7 @@ function PDFModal({quote:q, onClose}) {
   );
 
   // ── Details form ─────────────────────────────────────────────────────────
-  const F = ({label,value,onChange,placeholder="",type="text"}) => (
-    <div style={{marginBottom:8}}>
-      <div style={{fontSize:9,color:"#666",letterSpacing:".08em",textTransform:"uppercase",marginBottom:3}}>{label}</div>
-      <input type={type} value={value}
-        onChange={e=>onChange(e.target.value)}
-        onFocus={e=>{if(type==="number"&&e.target.value==="0")e.target.select();}}
-        placeholder={placeholder}
-        style={{width:"100%",fontSize:11,height:26,background:"#1a1a1a",border:"1px solid #2a2a2a",color:"#ccc",padding:"0 8px"}}/>
-    </div>
-  );
+  // F component defined outside PDFModal for stable reference
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.92)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16,overflowY:"auto"}}>
@@ -2163,24 +2226,24 @@ function PDFModal({quote:q, onClose}) {
           {/* Left col */}
           <div style={{background:"#0d0d0d",border:"1px solid #1e1e1e",padding:"14px 16px"}}>
             <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".14em",color:"#888",marginBottom:12,fontWeight:600}}>Quote Details</div>
-            <F label="Contact Name" value={contact} onChange={setContact} placeholder={q.name||"Contact person"}/>
+            <PDFField label="Contact Name" value={contact} onChange={setContact} placeholder={q.name||"Contact person"}/>
             <div style={{marginBottom:8}}>
               <div style={{fontSize:9,color:"#666",letterSpacing:".08em",textTransform:"uppercase",marginBottom:3}}>Valid For</div>
               <select value={validDays} onChange={e=>setValidDays(parseInt(e.target.value))}
-                style={{width:"100%",fontSize:11,height:26,background:"#1a1a1a",border:"1px solid #2a2a2a",color:"#ccc"}}>
+                style={{width:"100%",fontSize:13,height:36,background:"#1e1e1e",border:"1px solid #333",color:"#e8e8e8",borderRadius:2,padding:"0 10px"}}>
                 {[14,21,30,45,60,90].map(d=><option key={d} value={d}>{d} days</option>)}
               </select>
             </div>
-            <F label="Freight / Shipping ($)" value={freight} onChange={setFreight} placeholder="0.00" type="number"/>
-            <F label="Discount ($)" value={discount} onChange={setDiscount} placeholder="0.00" type="number"/>
-            <F label="Payment Terms" value={payTerms} onChange={setPayTerms} placeholder="Net 30 days..."/>
+            <PDFField label="Freight / Shipping ($)" value={freight} onChange={setFreight} placeholder="0.00" type="number"/>
+            <PDFField label="Discount ($)" value={discount} onChange={setDiscount} placeholder="0.00" type="number"/>
+            <PDFField label="Payment Terms" value={payTerms} onChange={setPayTerms} placeholder="Net 30 days..."/>
           </div>
 
           {/* Right col: summary */}
           <div style={{background:"#0d0d0d",border:"1px solid #1e1e1e",padding:"14px 16px",display:"flex",flexDirection:"column",gap:6}}>
             <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".14em",color:"#888",marginBottom:6,fontWeight:600}}>BMP Notes (appears on quote)</div>
             <textarea value={bmpNotes} onChange={e=>setBmpNotes(e.target.value)} placeholder="Internal notes or special instructions..."
-              style={{width:"100%",height:72,background:"#1a1a1a",border:"1px solid #2a2a2a",color:"#ccc",fontSize:11,padding:"6px 8px",resize:"vertical",fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif"}}/>
+              style={{width:"100%",height:80,background:"#1e1e1e",border:"1px solid #333",color:"#e8e8e8",fontSize:13,padding:"8px 10px",resize:"vertical",fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",borderRadius:2,lineHeight:1.5}}/>
             <div style={{marginTop:8,background:"#0a0a0a",border:"1px solid #1a1a1a",padding:"10px 12px"}}>
               {[
                 ["Subtotal", fmtCur(subtotal)],
@@ -2233,6 +2296,153 @@ function PDFModal({quote:q, onClose}) {
   );
 }
 
+// ─── Shared Load Validation Rules ─────────────────────────────────────────────
+const MIXED_VAN_TABLE = [
+  [24,0,24],[22,2,24],[20,4,24],[18,6,24],[16,8,24],[14,10,24],[12,12,24],
+  [10,16,26],[8,18,26],[6,20,26],[4,22,26],[2,24,26],[0,26,26]
+];
+const MIXED_FLAT_TABLE = (()=>{ const r=[]; for(let b=26;b>=0;b-=2) r.push([b,26-b,26]); return r; })();
+
+// SKU classifiers
+function isECB8(sku)  { return /BMP-.*08/.test(sku||''); }
+function isECB16(sku) { return /BMP-.*16/.test(sku||''); }
+function isECB(sku)   { return isECB8(sku)||isECB16(sku); }
+function isWattle(sku){ return /^(STW|BSTW|AESTW)/i.test(sku||''); }
+function isW9(sku)    { return isWattle(sku) && /09|0925|9x|9"/i.test(sku||''); }
+function isW12(sku)   { return isWattle(sku) && /12|1220|12x/i.test(sku||''); }
+
+// Main quote load validator — returns array of warning objects
+function validateQuoteLoad(lineItems) {
+  const warnings = [];
+  if (!lineItems || lineItems.length === 0) return warnings;
+
+  // Gather totals
+  const qty = (sku_test) => lineItems
+    .filter(li => sku_test(li.sku))
+    .reduce((sum, li) => sum + (parseInt(li.qty)||0), 0);
+
+  const totalB8  = qty(isECB8);
+  const totalB16 = qty(isECB16);
+  const totalW9  = qty(isW9);
+  const totalW12 = qty(isW12);
+  const hasECB   = totalB8 > 0 || totalB16 > 0;
+  const hasWat   = totalW9 > 0 || totalW12 > 0;
+
+  if (!hasECB && !hasWat) return warnings;
+
+  // ── ECB Blanket checks ─────────────────────────────────────────────────
+  if (hasECB) {
+    // 16ft rolls: only flatbed, truck = 600 rolls (20/pal × 30 pals → but actually truck load for 16ft is 20 pals × 2 per row = different)
+    // Per load calc: b16 palsPerRow=4, truck load is 26 pal equiv = but 16ft each = 2 pal equiv
+    // Simplest rule: 16ft truck qty = 20 pallets × 20 rolls = 400 rolls per truck (but mixed with 8ft possible)
+    // 8ft: truck = 600 rolls (24 pallets × 25 rolls)
+    // Mixed: use MIXED_FLAT_TABLE by pallet count
+    const palB8  = Math.ceil(totalB8  / 25);
+    const palB16 = Math.ceil(totalB16 / 20);
+    const palEqB8  = palB8;
+    const palEqB16 = palB16 * 2;
+    const totalPalEq = palEqB8 + palEqB16;
+
+    // Pallet multiple check
+    if (totalB8 > 0 && totalB8 % 25 !== 0) {
+      const nextPal = Math.ceil(totalB8/25)*25;
+      const prevPal = Math.floor(totalB8/25)*25;
+      warnings.push({
+        type:'warn', product:'ECB 8ft Blankets',
+        msg:`Qty ${totalB8} is not a full pallet (25 rolls/pallet). Next pallet: ${nextPal} rolls, previous: ${prevPal} rolls.`
+      });
+    }
+    if (totalB16 > 0 && totalB16 % 20 !== 0) {
+      const nextPal = Math.ceil(totalB16/20)*20;
+      warnings.push({
+        type:'warn', product:'ECB 16ft Blankets',
+        msg:`Qty ${totalB16} is not a full pallet (20 rolls/pallet). Next pallet: ${nextPal} rolls.`
+      });
+    }
+
+    // Truck load check
+    if (totalPalEq > 0 && totalPalEq < 26) {
+      const remPals = 26 - totalPalEq;
+      const fillB8  = remPals * 25;
+      const fillB16 = Math.floor(remPals/2) * 20;
+      warnings.push({
+        type:'info', product:'ECB Load',
+        msg:`${totalPalEq}/26 pallet equivalents — ${remPals} spots remaining. Could add ${fillB8} more 8ft rolls or ${fillB16} more 16ft rolls to fill a truck.`
+      });
+    } else if (totalPalEq === 26) {
+      warnings.push({ type:'ok', product:'ECB Load', msg:'Full truck load — 26/26 pallet equivalents. ✓' });
+    } else if (totalPalEq > 26) {
+      warnings.push({
+        type:'over', product:'ECB Load',
+        msg:`Over by ${totalPalEq - 26} pallet equivalents (${totalPalEq}/26). Needs ${Math.ceil(totalPalEq/26)} trucks.`
+      });
+    }
+  }
+
+  // ── Wattle checks ──────────────────────────────────────────────────────
+  if (hasWat) {
+    const palW9  = Math.ceil(totalW9  / 14);
+    const palW12 = Math.ceil(totalW12 / 12);
+    const totalWatPals = palW9 + palW12;
+
+    if (totalW9 > 0 && totalW9 % 14 !== 0) {
+      warnings.push({
+        type:'warn', product:'Wattles 9"',
+        msg:`Qty ${totalW9} is not a full pallet (14/pallet). Next pallet: ${Math.ceil(totalW9/14)*14}.`
+      });
+    }
+    if (totalW12 > 0 && totalW12 % 12 !== 0) {
+      warnings.push({
+        type:'warn', product:'Wattles 12"',
+        msg:`Qty ${totalW12} is not a full pallet (12/pallet). Next pallet: ${Math.ceil(totalW12/12)*12}.`
+      });
+    }
+
+    // Mixed load table check — only if also has blankets
+    const hasECBAlso = totalB8 > 0;
+    const palB8 = Math.ceil(totalB8/25);
+    if (hasECBAlso) {
+      const match = MIXED_VAN_TABLE.find(r => r[0]===palB8 && r[1]===totalWatPals);
+      if (match) {
+        warnings.push({ type:'ok', product:'Mixed Load', msg:`Valid mixed load: ${palB8} blanket pals + ${totalWatPals} wattle pals = ${match[2]} total pallets. ✓` });
+      } else {
+        // Find closest valid combos
+        const validForBlankets = MIXED_VAN_TABLE.filter(r=>r[0]===palB8);
+        const validForWattles  = MIXED_VAN_TABLE.filter(r=>r[1]===totalWatPals);
+        let hint = '';
+        if (validForBlankets.length) hint += ` For ${palB8} blanket pals, valid wattle pals: ${validForBlankets.map(r=>r[1]).join(' or ')}.`;
+        if (validForWattles.length)  hint += ` For ${totalWatPals} wattle pals, valid blanket pals: ${validForWattles.map(r=>r[0]).join(' or ')}.`;
+        warnings.push({
+          type:'over', product:'Mixed Load',
+          msg:`Invalid mix: ${palB8} blanket pals + ${totalWatPals} wattle pals is not on the mixed load chart.${hint}`
+        });
+      }
+    } else {
+      // Wattles only — max 26 pallets on flatbed
+      if (totalWatPals > 26) {
+        warnings.push({ type:'over', product:'Wattles', msg:`${totalWatPals} wattle pallets exceeds truck max of 26.` });
+      } else if (totalWatPals === 26) {
+        warnings.push({ type:'ok', product:'Wattles', msg:`Full truck: 26/26 wattle pallets. ✓` });
+      } else {
+        warnings.push({ type:'info', product:'Wattles', msg:`${totalWatPals}/26 wattle pallets — ${26-totalWatPals} spots remaining.` });
+      }
+    }
+  }
+
+  // ── Mixed ECB + Wattle ─────────────────────────────────────────────────
+  if (hasECB && hasWat) {
+    const palB8  = Math.ceil(totalB8/25);
+    const palW   = Math.ceil(totalW9/14) + Math.ceil(totalW12/12);
+    // Check flat table (flatbed) — all combos = 26 pals
+    const flatMatch = MIXED_FLAT_TABLE.find(r=>r[0]===palB8 && r[1]===palW);
+    if (flatMatch) {
+      warnings.push({ type:'ok', product:'Flatbed Mixed', msg:`Valid flatbed mix: ${palB8} blanket pals + ${palW} wattle pals = 26. ✓` });
+    }
+  }
+
+  return warnings;
+}
+
 // ─── Load Calculator Tab ───────────────────────────────────────────────────────
 function LoadCalcTab({T}) {
   const [truck, setTruck]   = useState('flatbed');
@@ -2248,16 +2458,8 @@ function LoadCalcTab({T}) {
 
   const C = { b8:'#4a90d9', b16:'#7b5ea7', w9:'#f5a623', w12:'#e8472c' };
 
-  const MIXED_VAN = [
-    [24,0,24],[22,2,24],[20,4,24],[18,6,24],[16,8,24],[14,10,24],[12,12,24],
-    [10,16,26],[8,18,26],[6,20,26],[4,22,26],[2,24,26],[0,26,26]
-  ];
-  function buildFlatTable() {
-    const rows = [];
-    for (let b=26; b>=0; b-=2) rows.push([b, 26-b, 26]);
-    return rows;
-  }
-  const MIXED_FLAT = buildFlatTable();
+  const MIXED_VAN  = MIXED_VAN_TABLE;
+  const MIXED_FLAT = MIXED_FLAT_TABLE;
 
   const ROW = {
     b8:  {ft:8,  palsPerRow:4, qtyPerPal:25, wt:55 },
@@ -2631,7 +2833,7 @@ function LoadCalcTab({T}) {
             ].map(({v,l,c})=>(
               <div key={l} style={{background:'#1e2b24', border:'1.5px solid #2a3d32', borderRadius:4, padding:10, textAlign:'center'}}>
                 <div style={{fontSize:22, fontWeight:700, color:c||'#e8eaf0', lineHeight:1}}>{v}</div>
-                <div style={{fontSize:10, color:'#7a9088', textTransform:'uppercase', letterSpacing:1, marginTop:3}}>{l}</div>
+                <div style={{fontSize:10, color:'#b0c8b8', textTransform:'uppercase', letterSpacing:1, marginTop:3}}>{l}</div>
               </div>
             ))}
           </div>
@@ -2641,7 +2843,7 @@ function LoadCalcTab({T}) {
             {statusTxt}
           </div>
           <button onClick={reset}
-            style={{width:'100%', background:'transparent', border:'1.5px solid #2a3d32', color:'#7a9088', padding:9, borderRadius:4,
+            style={{width:'100%', background:'transparent', border:'1.5px solid #2a3d32', color:'#b0c8b8', padding:9, borderRadius:4,
               fontSize:13, fontWeight:600, letterSpacing:1, textTransform:'uppercase', cursor:'pointer'}}>
             ↺ Reset All
           </button>
@@ -2654,10 +2856,10 @@ function LoadCalcTab({T}) {
         {/* Deck title */}
         <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:14, flexWrap:'wrap'}}>
           <span style={{fontSize:17, fontWeight:700, letterSpacing:1}}>DECK LAYOUT — TOP DOWN</span>
-          <span style={{background:'#1e2b24', border:'1px solid #2a3d32', borderRadius:3, fontSize:11, padding:'3px 9px', color:'#7a9088', letterSpacing:1}}>
+          <span style={{background:'#1e2b24', border:'1px solid #2a3d32', borderRadius:3, fontSize:11, padding:'3px 9px', color:'#b0c8b8', letterSpacing:1}}>
             {truck==='flatbed'?'FLAT-BED · 53FT':'DRY VAN · 53FT'}
           </span>
-          <span style={{background:'#1e2b24', border:'1px solid #2a3d32', borderRadius:3, fontSize:11, padding:'3px 9px', color:'#7a9088', marginLeft:'auto'}}>
+          <span style={{background:'#1e2b24', border:'1px solid #2a3d32', borderRadius:3, fontSize:11, padding:'3px 9px', color:'#b0c8b8', marginLeft:'auto'}}>
             {totalPals} pallets loaded
           </span>
         </div>
@@ -2665,12 +2867,12 @@ function LoadCalcTab({T}) {
         {/* Deck canvas */}
         <div style={panel}>
           <div style={secLabel}>PROPORTIONAL DECK VIEW</div>
-          <div style={{display:'flex', justifyContent:'space-between', fontSize:10, color:'#7a9088', marginBottom:6, letterSpacing:1}}>
+          <div style={{display:'flex', justifyContent:'space-between', fontSize:10, color:'#b0c8b8', marginBottom:6, letterSpacing:1}}>
             <span>← FRONT</span><span>REAR →</span>
           </div>
           <div ref={deckRef} style={{background:'#13161f', border:'2px solid #2a3d32', borderRadius:3, width:'100%', height:130, position:'relative', overflow:'hidden'}}/>
           {/* Ruler */}
-          <div style={{display:'flex', marginTop:5, fontSize:10, color:'#7a9088', position:'relative', height:13}}>
+          <div style={{display:'flex', marginTop:5, fontSize:10, color:'#b0c8b8', position:'relative', height:13}}>
             {[0,4,8,12,16,20,24,28,32,36,40,44,48,52].map(f=>(
               <span key={f} style={{position:'absolute', left:`${f/52*100}%`, transform:'translateX(-50%)' }}>{f}ft</span>
             ))}
@@ -2678,7 +2880,7 @@ function LoadCalcTab({T}) {
           {/* Legend */}
           <div style={{display:'flex', gap:14, flexWrap:'wrap', marginTop:14}}>
             {[['#4a90d9',"8' Blanket (8ft/row, 4 pals)"],['#7b5ea7',"16' Blanket (16ft/row, 4 pals)"],['#f5a623','Wattle 9" (4ft/row, 2 pals)'],['#e8472c','Wattle 12" (4ft/row, 2 pals)']].map(([c,l])=>(
-              <div key={l} style={{display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#7a9088'}}>
+              <div key={l} style={{display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#b0c8b8'}}>
                 <div style={{width:11, height:11, borderRadius:2, background:c, flexShrink:0}}/>
                 {l}
               </div>
@@ -2711,7 +2913,7 @@ function LoadCalcTab({T}) {
               return (
                 <div key={i} style={{display:'flex', alignItems:'flex-start', gap:10, background:'#1e2b24', borderRadius:4, padding:'10px 12px', borderLeft:`3px solid ${rc}`}}>
                   <div style={{fontSize:13, fontWeight:800, flexShrink:0, marginTop:2, color:rc}}>{r.icon}</div>
-                  <div style={{fontSize:13, lineHeight:1.5}}>
+                  <div style={{fontSize:13, lineHeight:1.5, color:'#ddeedd'}}>
                     <div style={{fontSize:14, fontWeight:700, marginBottom:2}}>{r.title}</div>
                     {r.body.split('\n').map((line,j)=><div key={j}>{line}</div>)}
                   </div>
@@ -2727,7 +2929,7 @@ function LoadCalcTab({T}) {
           <table style={{width:'100%', borderCollapse:'collapse', fontSize:13}}>
             <thead>
               <tr>{['Product','Qty','Pallets','Pal. Equiv.','Deck ft','Est. Weight'].map(h=>(
-                <th key={h} style={{fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:'#7a9088', textAlign:h==='Product'?'left':'right', padding:'0 8px 9px', borderBottom:'1px solid #2a3d32'}}>{h}</th>
+                <th key={h} style={{fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:'#b0c8b8', textAlign:h==='Product'?'left':'right', padding:'0 8px 9px', borderBottom:'1px solid #2a3d32'}}>{h}</th>
               ))}</tr>
             </thead>
             <tbody>
@@ -2767,7 +2969,7 @@ function LoadCalcTab({T}) {
           <table style={{width:'100%', borderCollapse:'collapse', fontSize:13}}>
             <thead>
               <tr>{["8′ Blanket Pallets", truck==='flatbed'?"Wattle / 8′ Pallets":"Wattle Pallets", "Total"].map(h=>(
-                <th key={h} style={{fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:'#7a9088', textAlign:'right', padding:'0 8px 9px', borderBottom:'1px solid #2a3d32'}}>{h}</th>
+                <th key={h} style={{fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:'#b0c8b8', textAlign:'right', padding:'0 8px 9px', borderBottom:'1px solid #2a3d32'}}>{h}</th>
               ))}</tr>
             </thead>
             <tbody>

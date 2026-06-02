@@ -2079,7 +2079,15 @@ function PDFModal({quote:q, onClose}) {
   },[showPreview]);
 
   function doPrint(){
-    if(iframeRef.current) iframeRef.current.contentWindow.print();
+    if(iframeRef.current){
+      const iwin = iframeRef.current.contentWindow;
+      const idoc = iframeRef.current.contentDocument || iwin.document;
+      // Set the document title so browser uses it as the PDF filename
+      const company = q.company || q.name || "BMP Supplies";
+      const filename = `Quote ${q.quoteNum} - ${company} - ${q.savedDate||todayStr}`;
+      idoc.title = filename;
+      iwin.print();
+    }
   }
 
   // ── Preview screen ───────────────────────────────────────────────────────

@@ -2090,15 +2090,24 @@ function PDFModal({quote:q, onClose}) {
   },[showPreview]);
 
   function doPrint(){
+    const company = (q.company || q.name || "BMP Supplies").trim();
+    const date = q.savedDate || todayStr;
+    const filename = `Quote ${q.quoteNum} - ${company} - ${date}`;
+    // Get the HTML from the iframe and open a new named window
+    // Chrome uses the window name / title for the PDF filename
     if(iframeRef.current){
-      const company = (q.company || q.name || "BMP Supplies").trim();
-      const date = q.savedDate || todayStr;
-      const filename = `Quote ${q.quoteNum} - ${company} - ${date}`;
-      const iwin = iframeRef.current.contentWindow;
-      const idoc = iframeRef.current.contentDocument || iwin.document;
-      idoc.title = filename;
-      // Small delay to ensure title is set before print dialog opens
-      setTimeout(() => { iwin.focus(); iwin.print(); }, 100);
+      const idoc = iframeRef.current.contentDocument || iframeRef.current.contentWindow.document;
+      const html = idoc.documentElement.outerHTML;
+      // Inject the correct title into the HTML string before opening
+      const titledHTML = html.replace(/<title>[^<]*<\/title>/, `<title>${filename}</title>`);
+      const printWin = window.open('', filename, 'width=900,height=700');
+      if(printWin){
+        printWin.document.open();
+        printWin.document.write(titledHTML);
+        printWin.document.close();
+        printWin.document.title = filename;
+        setTimeout(()=>{ printWin.focus(); printWin.print(); printWin.close(); }, 500);
+      }
     }
   }
 

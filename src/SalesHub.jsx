@@ -589,6 +589,7 @@ export default function SalesHub() {
   const [quotes, setQuotes] = useState([]);  // synced from Firebase
   const [activeQuote, setActiveQuote] = useState(null);
   const [searchQ, setSearchQ] = useState({name:"",company:"",date:"",madeBy:"",quoteNum:"",sku:"",description:""});
+  const [quoteSort, setQuoteSort] = useLocalStorage('bmp_quote_sort', 'asc'); // asc = oldest first (BMP44004 top)
   const [productCurrency, setProductCurrency] = useState("CAD");
   const [productSearch, setProductSearch] = useState("");
   const [emailModal, setEmailModal] = useState(null);
@@ -812,7 +813,7 @@ export default function SalesHub() {
           {activeTab==="quotes"&&<QuotesTab quotes={filteredQuotes} activeQuote={activeQuote} searchQ={searchQ} setSearchQ={setSearchQ}
             productsCAD={productsCAD} productsUSD={productsUSD} createNewQuote={createNewQuote}
             setActiveQuote={setActiveQuote} saveQuote={saveQuote} editQuote={q=>setActiveQuote({...q,saved:false})}
-            openEmailModal={openEmailModal} generatePDF={generatePDF} deleteConfirm={deleteConfirm} setDeleteConfirm={setDeleteConfirm} deleteQuote={deleteQuote} duplicateQuote={duplicateQuote} T={T}/>}
+            openEmailModal={openEmailModal} generatePDF={generatePDF} deleteConfirm={deleteConfirm} setDeleteConfirm={setDeleteConfirm} deleteQuote={deleteQuote} duplicateQuote={duplicateQuote} quoteSort={quoteSort} setQuoteSort={setQuoteSort} T={T}/>}
           {activeTab==="dims"&&<DimsTab dims={dims} setDims={setDims} T={T}/>}
           {activeTab==="shipping"&&<ShippingTab T={T}/>}
           {activeTab==="products"&&<ProductsTab products={filteredProducts} setProducts={setCurrentProducts}
@@ -939,13 +940,19 @@ export default function SalesHub() {
 }
 
 // ─── Quotes Tab ────────────────────────────────────────────────────────────────
-function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUSD,createNewQuote,setActiveQuote,saveQuote,editQuote,openEmailModal,generatePDF,deleteConfirm,setDeleteConfirm,deleteQuote,duplicateQuote,T}) {
+function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUSD,createNewQuote,setActiveQuote,saveQuote,editQuote,openEmailModal,generatePDF,deleteConfirm,setDeleteConfirm,deleteQuote,duplicateQuote,quoteSort,setQuoteSort,T}) {
   return (
     <div style={{display:"flex",height:"100%",overflow:"hidden"}}>
       {/* Left panel */}
       <div style={{width:252,borderRight:"1px solid #181818",display:"flex",flexDirection:"column",background:"#0a0a0a"}}>
         <div style={{padding:"12px 12px 8px",borderBottom:"1px solid #181818"}}>
-          <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".12em",color:"#444",marginBottom:6}}>Search Quotes</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".12em",color:"#444"}}>Search Quotes</div>
+            <button onClick={()=>setQuoteSort(s=>s==="asc"?"desc":"asc")}
+              style={{background:"transparent",border:`1px solid ${T.border}`,color:T.muted,padding:"2px 8px",fontSize:9,cursor:"pointer",letterSpacing:".04em",borderRadius:2,fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif"}}>
+              {quoteSort==="asc"?"↑ Oldest first":"↓ Newest first"}
+            </button>
+          </div>
           {[{k:"name",p:"Name"},{k:"company",p:"Company"},{k:"date",p:"Date"},{k:"madeBy",p:"Made By"},{k:"quoteNum",p:"Quote #"}].map(f=>(
             <input key={f.k} value={searchQ[f.k]} onChange={e=>setSearchQ(p=>({...p,[f.k]:e.target.value}))}
               placeholder={f.p} style={{width:"100%",marginBottom:4,fontSize:11,height:26}}/>
@@ -964,7 +971,11 @@ function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUS
         </div>
         <div style={{flex:1,overflowY:"auto"}}>
           {quotes.length===0&&<div style={{padding:16,color:"#333",fontSize:11,textAlign:"center"}}>No quotes</div>}
-          {quotes.map(q=>(
+          {[...quotes].sort((a,b)=>{
+            const na=parseInt((a.quoteNum||"").replace(/\D/g,""))||0;
+            const nb=parseInt((b.quoteNum||"").replace(/\D/g,""))||0;
+            return quoteSort==="asc" ? na-nb : nb-na;
+          }).map(q=>(
             <div key={q.id} style={{padding:"9px 12px",borderBottom:"1px solid #131313",cursor:"pointer",background:activeQuote?.id===q.id?"#161616":"transparent",position:"relative"}}
               onClick={()=>setActiveQuote(q)}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -2080,13 +2091,14 @@ function PDFModal({quote:q, onClose}) {
 
   function doPrint(){
     if(iframeRef.current){
+      const company = (q.company || q.name || "BMP Supplies").trim();
+      const date = q.savedDate || todayStr;
+      const filename = `Quote ${q.quoteNum} - ${company} - ${date}`;
       const iwin = iframeRef.current.contentWindow;
       const idoc = iframeRef.current.contentDocument || iwin.document;
-      // Set the document title so browser uses it as the PDF filename
-      const company = q.company || q.name || "BMP Supplies";
-      const filename = `Quote ${q.quoteNum} - ${company} - ${q.savedDate||todayStr}`;
       idoc.title = filename;
-      iwin.print();
+      // Small delay to ensure title is set before print dialog opens
+      setTimeout(() => { iwin.focus(); iwin.print(); }, 100);
     }
   }
 

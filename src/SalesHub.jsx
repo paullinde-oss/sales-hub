@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { initializeApp } from "firebase/app";
 
-const APP_VERSION = "v2.0 — Jun 2025";
+const APP_VERSION = "v2.1 — Jun 2025";
 import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "firebase/firestore";
 
 // ─── Firebase config ────────────────────────────────────────────────────────
@@ -896,7 +896,7 @@ export default function SalesHub() {
           {activeTab==="quotes"&&<QuotesTab quotes={filteredQuotes} activeQuote={activeQuote} searchQ={searchQ} setSearchQ={setSearchQ}
             productsCAD={productsCAD} productsUSD={effectiveProductsUSD} createNewQuote={createNewQuote}
             setActiveQuote={setActiveQuote} saveQuote={saveQuote} editQuote={q=>setActiveQuote({...q,saved:false})}
-            openEmailModal={openEmailModal} generatePDF={generatePDF} deleteConfirm={deleteConfirm} setDeleteConfirm={setDeleteConfirm} deleteQuote={deleteQuote} duplicateQuote={duplicateQuote} quoteSort={quoteSort} setQuoteSort={setQuoteSort} T={T}/>}
+            openEmailModal={openEmailModal} generatePDF={generatePDF} deleteConfirm={deleteConfirm} setDeleteConfirm={setDeleteConfirm} deleteQuote={deleteQuote} duplicateQuote={duplicateQuote} quoteSort={quoteSort} setQuoteSort={setQuoteSort} closeConfirm={closeConfirm} setCloseConfirm={setCloseConfirm} T={T}/>}
           {activeTab==="dims"&&<DimsTab dims={dims} setDims={setDims} T={T}/>}
           {activeTab==="shipping"&&<ShippingTab T={T}/>}
           {activeTab==="products"&&<ProductsTab products={filteredProducts} setProducts={setCurrentProducts}
@@ -1065,7 +1065,7 @@ export default function SalesHub() {
 }
 
 // ─── Quotes Tab ────────────────────────────────────────────────────────────────
-function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUSD,effectiveProductsUSD,createNewQuote,setActiveQuote,saveQuote,editQuote,openEmailModal,generatePDF,deleteConfirm,setDeleteConfirm,deleteQuote,duplicateQuote,quoteSort,setQuoteSort,T}) {
+function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUSD,effectiveProductsUSD,createNewQuote,setActiveQuote,saveQuote,editQuote,openEmailModal,generatePDF,deleteConfirm,setDeleteConfirm,deleteQuote,duplicateQuote,quoteSort,setQuoteSort,closeConfirm,setCloseConfirm,T}) {
   return (
     <div style={{display:"flex",height:"100%",overflow:"hidden"}}>
       {/* Left panel */}
@@ -1150,7 +1150,7 @@ function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUS
 }
 
 // ─── Quote Form ────────────────────────────────────────────────────────────────
-function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail,onPDF,onClose,onNewQuote,T}) {
+function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail,onPDF,onClose,onNewQuote,isMobile,T}) {
   // Compute load warnings live from line items
   const loadWarnings = useMemo(() => {
     try {
@@ -1261,8 +1261,87 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
       </div>
 
       {/* Line items */}
-      <div style={{border:"1px solid #1e1e1e",marginBottom:8,overflowX:"auto"}}>
-        <table className="data-table">
+      {isMobile ? (
+        /* ── Mobile: vertical cards for each line item ── */
+        <div style={{marginBottom:8}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+            <div style={{fontSize:9,color:T.tableHeadText,letterSpacing:".1em",textTransform:"uppercase"}}>Line Items ({(quote.lineItems||[]).length})</div>
+            {!ro&&<button className="btn" style={{fontSize:11,padding:"4px 12px"}} onClick={addLI}>+ Add Item</button>}
+          </div>
+          {((quote.lineItems||[])).map((li,idx)=>{
+            const lineTotal=(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0);
+            return (
+              <div key={li.id} style={{background:T.cardBg,border:`1px solid ${T.border}`,borderRadius:4,padding:12,marginBottom:8}}>
+                {/* Row 1: Description - full width */}
+                <div style={{marginBottom:10}}>
+                  <div style={{fontSize:9,color:T.tableHeadText,letterSpacing:".08em",marginBottom:4}}>DESCRIPTION</div>
+                  {ro
+                    ? <div style={{fontSize:13,color:T.text,lineHeight:1.4}}>{li.description||"—"}</div>
+                    : <><input list={`dl-m-${li.id}`} value={li.description}
+                        onChange={e=>updLI(li.id,"description",e.target.value)}
+                        placeholder="Product description…"
+                        style={{width:"100%",fontSize:15,height:44,padding:"0 10px",borderRadius:3}}/> 
+                      <datalist id={`dl-m-${li.id}`}>{(products||[]).map(p=><option key={p.sku} value={p.description}/>)}</datalist>
+                    </>
+                  }
+                </div>
+                {/* Row 2: SKU */}
+                <div style={{marginBottom:10}}>
+                  <div style={{fontSize:9,color:T.tableHeadText,letterSpacing:".08em",marginBottom:4}}>SKU</div>
+                  {ro
+                    ? <div style={{fontSize:12,color:T.accent,fontFamily:"monospace"}}>{li.sku||"—"}</div>
+                    : <><input list={`sl-m-${li.id}`} value={li.sku}
+                        onChange={e=>updLI(li.id,"sku",e.target.value)}
+                        placeholder="SKU…"
+                        style={{width:"100%",fontSize:14,height:40,padding:"0 10px",borderRadius:3,fontFamily:"monospace"}}/>
+                      <datalist id={`sl-m-${li.id}`}>{(products||[]).map(p=><option key={p.sku} value={p.sku}/>)}</datalist>
+                    </>
+                  }
+                </div>
+                {/* Row 3: Qty | Unit Price | Total */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
+                  <div>
+                    <div style={{fontSize:9,color:T.tableHeadText,letterSpacing:".08em",marginBottom:4}}>QTY</div>
+                    {ro ? <div style={{fontSize:14,fontWeight:600}}>{li.qty}</div>
+                      : <input type="number" min="1" value={li.qty}
+                          onChange={e=>updLI(li.id,"qty",parseInt(e.target.value)||1)}
+                          style={{width:"100%",fontSize:16,height:44,textAlign:"center"}}/>}
+                  </div>
+                  <div>
+                    <div style={{fontSize:9,color:T.tableHeadText,letterSpacing:".08em",marginBottom:4}}>UNIT PRICE</div>
+                    {ro ? <div style={{fontSize:14,fontWeight:600}}>{fmtCur(li.unitPrice)}</div>
+                      : <input type="number" step="0.01" value={li.unitPrice===0?"":li.unitPrice}
+                          onChange={e=>updLI(li.id,"unitPrice",e.target.value)}
+                          style={{width:"100%",fontSize:16,height:44,textAlign:"center"}}/>}
+                    {li.priceTier&&li.priceTier!=="unit"&&<div style={{fontSize:9,color:T.accent,marginTop:2}}>{li.priceTier}</div>}
+                  </div>
+                  <div>
+                    <div style={{fontSize:9,color:T.tableHeadText,letterSpacing:".08em",marginBottom:4}}>TOTAL</div>
+                    <div style={{fontSize:14,fontWeight:600,color:T.accent,paddingTop:ro?0:12}}>{fmtCur(lineTotal)}</div>
+                  </div>
+                </div>
+                {/* Row 4: Increase % | Remove */}
+                {!ro&&<div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:9,color:T.tableHeadText,letterSpacing:".08em",marginBottom:4}}>MARKUP %</div>
+                    <select value={li.increase||0} onChange={e=>updLI(li.id,"increase",parseInt(e.target.value))}
+                      style={{width:"100%",height:40,fontSize:14,color:li.increase>0?"#c8a96e":"var(--subtext)",background:"var(--input-bg)"}}>
+                      {PRICE_INCREASE_OPTIONS.map(o=><option key={o} value={o}>{o===0?"No markup":`+${o}%`}</option>)}
+                    </select>
+                  </div>
+                  <button onClick={()=>removeLI(li.id)}
+                    style={{background:"transparent",border:"1px solid #553",color:"#c84",width:40,height:40,borderRadius:3,cursor:"pointer",fontSize:18,flexShrink:0,marginTop:18}}>
+                    ✕
+                  </button>
+                </div>}
+              </div>
+            );
+          })}
+          {!ro&&<button className="btn" style={{width:"100%",padding:"10px",fontSize:13}} onClick={addLI}>+ Add Line Item</button>}
+        </div>
+      ) : (
+      /* ── Desktop: horizontal table ── */
+      <div style={{border:"1px solid #1e1e1e",marginBottom:8,overflowX:"auto"}}><table className="data-table">
           <thead><tr>
             <th style={{width:140}}>SKU</th>
             <th>Description</th>
@@ -1327,6 +1406,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
           <button className="btn" style={{fontSize:10,padding:"4px 12px"}} onClick={addLI}>+ Add Line Item</button>
         </div>}
       </div>
+      )} {/* end ternary */}
 
       {/* Load Validation Warnings */}
       {Array.isArray(loadWarnings) && loadWarnings.length > 0 && (
@@ -1464,6 +1544,7 @@ function DimsTab({dims,setDims}) {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }
@@ -2900,13 +2981,13 @@ function LoadCalcTab({T}) {
           <div>
             <div style={{fontSize:9, fontWeight:700, letterSpacing:'1.5px', color:T.muted, marginBottom:3}}>ROLLS / UNITS</div>
             <input type="number" min="0" value={qVal} onChange={onQ}
-              style={{width:'100%', textAlign:'center', fontSize:16, fontWeight:600, padding:'6px 4px', borderRadius:4, background:'#0d1210', border:`1.5px solid ${T.borderMid}`, color:'#e8eaf0'}}/>
+              style={{width:'100%', textAlign:'center', fontSize:16, fontWeight:600, padding:'6px 4px', borderRadius:4, background:T.inputBg, border:`1.5px solid ${T.borderMid}`, color:T.text}}/>
           </div>
           <div style={{fontSize:11, color:T.muted, textAlign:'center', paddingBottom:8}}>or</div>
           <div>
             <div style={{fontSize:9, fontWeight:700, letterSpacing:'1.5px', color:T.muted, marginBottom:3}}>PALLETS</div>
             <input type="number" min="0" value={pVal} onChange={onP}
-              style={{width:'100%', textAlign:'center', fontSize:16, fontWeight:600, padding:'6px 4px', borderRadius:4, background:'#0d1210', border:`1.5px solid ${T.borderMid}`, color:'#e8eaf0'}}/>
+              style={{width:'100%', textAlign:'center', fontSize:16, fontWeight:600, padding:'6px 4px', borderRadius:4, background:T.inputBg, border:`1.5px solid ${T.borderMid}`, color:T.text}}/>
           </div>
         </div>
       </div>
@@ -2914,9 +2995,9 @@ function LoadCalcTab({T}) {
   }
 
   return (
-    <div style={{display:'flex', height:'100%', overflow:'hidden', background:'#0d1210', color:'#e8eaf0', fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif"}}>
+    <div style={{display:'flex', height:'100%', overflow:'hidden', background:T.bg, color:T.text, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif"}}>
       {/* LEFT PANEL */}
-      <div style={{width:340, borderRight:`2px solid #2a3d32`, overflowY:'auto', padding:16, flexShrink:0, background:'#141c18'}}>
+      <div style={{width:340, borderRight:`2px solid ${T.border}`, overflowY:'auto', padding:16, flexShrink:0, background:T.panelBg}}>
 
         {/* Truck type */}
         <div style={{marginBottom:16}}>
@@ -2958,19 +3039,19 @@ function LoadCalcTab({T}) {
                c:remPalEq===null?'#7a9088':remPalEq<0?'#e8472c':remPalEq===0?'#f5a623':'#34c77b'},
               {v:totalWt.toLocaleString(), l:'Est. lbs'},
             ].map(({v,l,c})=>(
-              <div key={l} style={{background:'#1e2b24', border:'1.5px solid #2a3d32', borderRadius:4, padding:10, textAlign:'center'}}>
+              <div key={l} style={{background:T.tableHead, border:`1.5px solid ${T.border}`, borderRadius:4, padding:10, textAlign:'center'}}>
                 <div style={{fontSize:22, fontWeight:700, color:c||'#e8eaf0', lineHeight:1}}>{v}</div>
-                <div style={{fontSize:10, color:'#b0c8b8', textTransform:'uppercase', letterSpacing:1, marginTop:3}}>{l}</div>
+                <div style={{fontSize:10, color:T.subtext, textTransform:'uppercase', letterSpacing:1, marginTop:3}}>{l}</div>
               </div>
             ))}
           </div>
           {/* Status bar */}
           <div style={{padding:'11px 14px', borderRadius:4, fontWeight:700, letterSpacing:'.5px', textAlign:'center',
-            background:`${sc}18`, border:`2px solid ${sc}`, color:sc, fontSize:13, marginBottom:10}}>
+            background:`${sc}18`, border:`2px solid ${sc}`, color:sc, fontSize:13, marginBottom:10, borderRadius:4}}>
             {statusTxt}
           </div>
           <button onClick={reset}
-            style={{width:'100%', background:'transparent', border:'1.5px solid #2a3d32', color:'#b0c8b8', padding:9, borderRadius:4,
+            style={{width:'100%', background:'transparent', border:`1.5px solid ${T.border}`, color:T.subtext, padding:9, borderRadius:4,
               fontSize:13, fontWeight:600, letterSpacing:1, textTransform:'uppercase', cursor:'pointer'}}>
             ↺ Reset All
           </button>
@@ -2978,15 +3059,15 @@ function LoadCalcTab({T}) {
       </div>
 
       {/* RIGHT PANEL */}
-      <div style={{flex:1, overflowY:'auto', padding:20}}>
+      <div style={{flex:1, overflowY:'auto', padding:20, background:T.bg}}>
 
         {/* Deck title */}
         <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:14, flexWrap:'wrap'}}>
           <span style={{fontSize:17, fontWeight:700, letterSpacing:1}}>DECK LAYOUT — TOP DOWN</span>
-          <span style={{background:'#1e2b24', border:'1px solid #2a3d32', borderRadius:3, fontSize:11, padding:'3px 9px', color:'#b0c8b8', letterSpacing:1}}>
+          <span style={{background:T.tableHead, border:`1px solid ${T.border}`, borderRadius:3, fontSize:11, padding:'3px 9px', color:T.subtext, letterSpacing:1}}>
             {truck==='flatbed'?'FLAT-BED · 53FT':'DRY VAN · 53FT'}
           </span>
-          <span style={{background:'#1e2b24', border:'1px solid #2a3d32', borderRadius:3, fontSize:11, padding:'3px 9px', color:'#b0c8b8', marginLeft:'auto'}}>
+          <span style={{background:T.tableHead, border:`1px solid ${T.border}`, borderRadius:3, fontSize:11, padding:'3px 9px', color:T.subtext, marginLeft:'auto'}}>
             {totalPals} pallets loaded
           </span>
         </div>
@@ -2994,12 +3075,12 @@ function LoadCalcTab({T}) {
         {/* Deck canvas */}
         <div style={panel}>
           <div style={secLabel}>PROPORTIONAL DECK VIEW</div>
-          <div style={{display:'flex', justifyContent:'space-between', fontSize:10, color:'#b0c8b8', marginBottom:6, letterSpacing:1}}>
+          <div style={{display:'flex', justifyContent:'space-between', fontSize:10, color:T.subtext, marginBottom:6, letterSpacing:1}}>
             <span>← FRONT</span><span>REAR →</span>
           </div>
-          <div ref={deckRef} style={{background:'#13161f', border:'2px solid #2a3d32', borderRadius:3, width:'100%', height:130, position:'relative', overflow:'hidden'}}/>
+          <div ref={deckRef} style={{background:T.tableHead, border:`2px solid ${T.border}`, borderRadius:3, width:'100%', height:130, position:'relative', overflow:'hidden'}}/>
           {/* Ruler */}
-          <div style={{display:'flex', marginTop:5, fontSize:10, color:'#b0c8b8', position:'relative', height:13}}>
+          <div style={{display:'flex', marginTop:5, fontSize:10, color:T.subtext, position:'relative', height:13}}>
             {[0,4,8,12,16,20,24,28,32,36,40,44,48,52].map(f=>(
               <span key={f} style={{position:'absolute', left:`${f/52*100}%`, transform:'translateX(-50%)' }}>{f}ft</span>
             ))}
@@ -3007,7 +3088,7 @@ function LoadCalcTab({T}) {
           {/* Legend */}
           <div style={{display:'flex', gap:14, flexWrap:'wrap', marginTop:14}}>
             {[['#4a90d9',"8' Blanket (8ft/row, 4 pals)"],['#7b5ea7',"16' Blanket (16ft/row, 4 pals)"],['#f5a623','Wattle 9" (4ft/row, 2 pals)'],['#e8472c','Wattle 12" (4ft/row, 2 pals)']].map(([c,l])=>(
-              <div key={l} style={{display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#b0c8b8'}}>
+              <div key={l} style={{display:'flex', alignItems:'center', gap:5, fontSize:11, color:T.subtext}}>
                 <div style={{width:11, height:11, borderRadius:2, background:c, flexShrink:0}}/>
                 {l}
               </div>
@@ -3019,7 +3100,7 @@ function LoadCalcTab({T}) {
         <div style={{...panel, border:`1.5px solid ${statusCls==='over'?'#e8472c':statusCls==='warn'?'#f5a623':'#2a3d32'}`,
           background:statusCls==='over'?'rgba(232,71,44,0.06)':T.cardBg}}>
           <div style={secLabel}>DECK UTILIZATION</div>
-          <div style={{background:'#13161f', borderRadius:3, height:24, overflow:'hidden', display:'flex', position:'relative', marginBottom:8}}>
+          <div style={{background:T.tableHead, borderRadius:3, height:24, overflow:'hidden', display:'flex', position:'relative', marginBottom:8}}>
             {[{pe:palEqB8,c:C.b8},{pe:palEqB16,c:C.b16},{pe:palEqW9,c:C.w9},{pe:palEqW12,c:C.w12}].map(({pe,c},i)=>(
               <div key={i} style={{height:'100%', width:`${(pe/denom*100).toFixed(2)}%`, background:c, transition:'width .4s',
                 display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, overflow:'hidden', whiteSpace:'nowrap'}}/>
@@ -3038,9 +3119,9 @@ function LoadCalcTab({T}) {
             {recs.map((r,i)=>{
               const rc={warn:'#e8472c',fill:'#f5a623',good:'#34c77b'}[r.cls]||'#4a9e6b';
               return (
-                <div key={i} style={{display:'flex', alignItems:'flex-start', gap:10, background:'#1e2b24', borderRadius:4, padding:'10px 12px', borderLeft:`3px solid ${rc}`}}>
+                <div key={i} style={{display:'flex', alignItems:'flex-start', gap:10, background:T.tableHead, borderRadius:4, padding:'10px 12px', borderLeft:`3px solid ${rc}`}}>
                   <div style={{fontSize:13, fontWeight:800, flexShrink:0, marginTop:2, color:rc}}>{r.icon}</div>
-                  <div style={{fontSize:13, lineHeight:1.5, color:'#ddeedd'}}>
+                  <div style={{fontSize:13, lineHeight:1.5, color:T.text}}>
                     <div style={{fontSize:14, fontWeight:700, marginBottom:2}}>{r.title}</div>
                     {r.body.split('\n').map((line,j)=><div key={j}>{line}</div>)}
                   </div>
@@ -3056,7 +3137,7 @@ function LoadCalcTab({T}) {
           <table style={{width:'100%', borderCollapse:'collapse', fontSize:13}}>
             <thead>
               <tr>{['Product','Qty','Pallets','Pal. Equiv.','Deck ft','Est. Weight'].map(h=>(
-                <th key={h} style={{fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:'#b0c8b8', textAlign:h==='Product'?'left':'right', padding:'0 8px 9px', borderBottom:'1px solid #2a3d32'}}>{h}</th>
+                <th key={h} style={{fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.subtext, textAlign:h==='Product'?'left':'right', padding:'0 8px 9px', borderBottom:`1px solid ${T.border}`}}>{h}</th>
               ))}</tr>
             </thead>
             <tbody>
@@ -3066,7 +3147,7 @@ function LoadCalcTab({T}) {
                 {c:C.w9,  l:'Wattle 9"',   q:vqw9,  p:vpw9,  pe:palEqW9,  ft:rw9.deckFt,  w:ww9},
                 {c:C.w12, l:'Wattle 12"',  q:vqw12, p:vpw12, pe:palEqW12, ft:rw12.deckFt, w:ww12},
               ].map(({c,l,q,p,pe,ft,w})=>(
-                <tr key={l} style={{borderBottom:'1px solid #2a3d32'}}>
+                <tr key={l} style={{borderBottom:`1px solid ${T.border}`}}>
                   <td style={{padding:'8px 8px'}}><span style={{display:'inline-flex', alignItems:'center', gap:7, fontWeight:600}}>
                     <span style={{width:9, height:20, borderRadius:2, background:c, flexShrink:0}}/>
                     {l}
@@ -3081,9 +3162,9 @@ function LoadCalcTab({T}) {
             </tbody>
             <tfoot>
               <tr>
-                <td style={{padding:'10px 8px', fontWeight:700, borderTop:'2px solid #2a3d32'}}>TOTAL</td>
+                <td style={{padding:'10px 8px', fontWeight:700, borderTop:`2px solid ${T.border}`}}>TOTAL</td>
                 {[vqb8+vqb16+vqw9+vqw12, totalPals, totalPalEq, totalDeckFt.toFixed(1)+'ft', totalWt.toLocaleString()+' lbs'].map((v,i)=>(
-                  <td key={i} style={{textAlign:'right', padding:'10px 8px', fontWeight:700, borderTop:'2px solid #2a3d32', fontFamily:'monospace'}}>{v}</td>
+                  <td key={i} style={{textAlign:'right', padding:'10px 8px', fontWeight:700, borderTop:`2px solid ${T.border}`, fontFamily:'monospace'}}>{v}</td>
                 ))}
               </tr>
             </tfoot>
@@ -3096,7 +3177,7 @@ function LoadCalcTab({T}) {
           <table style={{width:'100%', borderCollapse:'collapse', fontSize:13}}>
             <thead>
               <tr>{["8′ Blanket Pallets", truck==='flatbed'?"Wattle / 8′ Pallets":"Wattle Pallets", "Total"].map(h=>(
-                <th key={h} style={{fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:'#b0c8b8', textAlign:'right', padding:'0 8px 9px', borderBottom:'1px solid #2a3d32'}}>{h}</th>
+                <th key={h} style={{fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.subtext, textAlign:'right', padding:'0 8px 9px', borderBottom:`1px solid ${T.border}`}}>{h}</th>
               ))}</tr>
             </thead>
             <tbody>
@@ -3110,8 +3191,8 @@ function LoadCalcTab({T}) {
                   const isExact=row[0]===blanketPals&&row[1]===wattlePals&&(blanketPals>0||wattlePals>0);
                   const isClose=i===bi&&(blanketPals>0||wattlePals>0)&&!isExact;
                   return (
-                    <tr key={i} style={{background:isExact?'rgba(52,199,123,0.12)':isClose?'rgba(245,166,35,0.09)':'transparent',
-                      borderBottom:'1px solid #1e2b24', fontWeight:isExact||isClose?700:400,
+                    <tr key={i} style={{background:isExact?'rgba(52,199,123,0.12)':isClose?'rgba(245,166,35,0.09)':T.cardBg,
+                      borderBottom:`1px solid ${T.border}`, fontWeight:isExact||isClose?700:400,
                       color:isExact?'#34c77b':isClose?'#f5a623':'inherit'}}>
                       {row.map((v,j)=><td key={j} style={{padding:'7px 8px', textAlign:'right', fontFamily:'monospace', fontSize:14}}>{v}</td>)}
                     </tr>
@@ -3144,7 +3225,6 @@ function MobileLayout({
 
   const MOBILE_TABS = [
     {id:'quotes',   label:'Quotes',   icon:'quote'},
-    {id:'products', label:'Products', icon:'products'},
     {id:'dims',     label:'DIMS',     icon:'dims'},
     {id:'shipping', label:'Shipping', icon:'ship'},
     {id:'loadcalc', label:'Load',     icon:'truck'},
@@ -3182,7 +3262,7 @@ function MobileLayout({
             onEmail={openEmailModal} onPDF={generatePDF}
             onClose={()=>{ if(!activeQuote.saved){setCloseConfirm(activeQuote);}else{setActiveQuote(null);} }}
             onNewQuote={()=>{setActiveQuote(null); setTimeout(createNewQuote,50);}}
-            T={T}/>
+            isMobile={true} T={T}/>
         </div>
         {/* Confirm modals */}
         {closeConfirm && (
@@ -3284,8 +3364,8 @@ function MobileLayout({
     );
 
     if (activeTab === 'loadcalc') return (
-      <div style={{flex:1, overflow:'hidden', display:'flex', flexDirection:'column'}}>
-        <LoadCalcTab T={T}/>
+      <div style={{flex:1, overflow:'auto'}}>
+        <MobileLoadCalc T={T}/>
       </div>
     );
 
@@ -3375,6 +3455,126 @@ function MobileLayout({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Mobile Load Calculator (left panel only) ──────────────────────────────────
+function MobileLoadCalc({T}) {
+  const [truck, setTruck]   = useState('flatbed');
+  const [qb8,  setQb8]      = useState('');
+  const [pb8,  setPb8]      = useState('');
+  const [qb16, setQb16]     = useState('');
+  const [pb16, setPb16]     = useState('');
+  const [qw9,  setQw9]      = useState('');
+  const [pw9,  setPw9]      = useState('');
+  const [qw12, setQw12]     = useState('');
+  const [pw12, setPw12]     = useState('');
+
+  const C = { b8:'#4a90d9', b16:'#7b5ea7', w9:'#f5a623', w12:'#e8472c' };
+
+  const ROW = {
+    b8:  {palsPerRow:4, qtyPerPal:25, wt:55},
+    b16: {palsPerRow:4, qtyPerPal:20, wt:110},
+    w9:  {palsPerRow:2, qtyPerPal:14, wt:40},
+    w12: {palsPerRow:2, qtyPerPal:12, wt:40}
+  };
+
+  const calc = useMemo(()=>{
+    const vqb8=parseInt(qb8)||0, vqb16=parseInt(qb16)||0;
+    const vqw9=parseInt(qw9)||0, vqw12=parseInt(qw12)||0;
+    const vpb8=Math.ceil(vqb8/25), vpb16=truck==='dryvan'?0:Math.ceil(vqb16/20);
+    const vpw9=Math.ceil(vqw9/14), vpw12=Math.ceil(vqw12/12);
+    const palEq=vpb8+vpb16*2+vpw9+vpw12;
+    const totalWt=vqb8*55+vqb16*110+vqw9*40+vqw12*40;
+    const denom=truck==='flatbed'?26:26;
+    const rem=denom-palEq;
+    let statusCls='ok', statusTxt='';
+    if(truck==='dryvan'&&vqb16>0){statusCls='over';statusTxt='16ft ROLLS NOT PERMITTED IN DRY VAN';}
+    else if(palEq>denom){statusCls='over';statusTxt=`OVER BY ${palEq-denom} PALLETS`;}
+    else if(palEq===denom){statusCls='warn';statusTxt=`FULL — ${denom}/${denom} PALLETS`;}
+    else{statusCls='ok';statusTxt=rem>0?`${rem} PALLET${rem!==1?'S':''} REMAINING`:'Ready';}
+    return {vqb8,vqb16,vqw9,vqw12,vpb8,vpb16,vpw9,vpw12,palEq,totalWt,rem,denom,statusCls,statusTxt};
+  },[truck,qb8,qb16,qw9,qw12]);
+
+  const sc={ok:'#34c77b',warn:'#f5a623',over:'#e8472c'}[calc.statusCls];
+
+  function fromQty(perPal,setQ,setP){return e=>{const q=parseInt(e.target.value)||0;setQ(e.target.value);setP(q>0?String(Math.ceil(q/perPal)):'');}}
+  function fromPals(perPal,setQ,setP){return e=>{const p=parseInt(e.target.value)||0;setP(e.target.value);setQ(p>0?String(p*perPal):'');}}
+  function reset(){setQb8('');setPb8('');setQb16('');setPb16('');setQw9('');setPw9('');setQw12('');setPw12('');}
+
+  const PB = ({label,dims,dot,qv,pv,onQ,onP,disabled})=>(
+    <div style={{background:T.panelBg,border:`1.5px solid ${T.border}`,borderRadius:5,padding:'12px 14px',marginBottom:10,opacity:disabled?0.35:1,pointerEvents:disabled?'none':'auto'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+        <div style={{display:'flex',alignItems:'center',gap:7,fontSize:14,fontWeight:700,color:T.text}}>
+          <span style={{display:'inline-block',width:10,height:10,borderRadius:'50%',background:dot,flexShrink:0}}/>
+          {label}
+        </div>
+        <div style={{fontSize:10,color:T.muted}}>{dims}</div>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',gap:8,alignItems:'end'}}>
+        <div>
+          <div style={{fontSize:9,fontWeight:700,letterSpacing:'1.5px',color:T.muted,marginBottom:4}}>ROLLS / UNITS</div>
+          <input type="number" min="0" value={qv} onChange={onQ}
+            style={{width:'100%',textAlign:'center',fontSize:18,fontWeight:600,padding:'8px 4px',borderRadius:4,background:T.inputBg,border:`1.5px solid ${T.borderMid}`,color:T.text,height:48}}/>
+        </div>
+        <div style={{fontSize:12,color:T.muted,textAlign:'center',paddingBottom:10}}>or</div>
+        <div>
+          <div style={{fontSize:9,fontWeight:700,letterSpacing:'1.5px',color:T.muted,marginBottom:4}}>PALLETS</div>
+          <input type="number" min="0" value={pv} onChange={onP}
+            style={{width:'100%',textAlign:'center',fontSize:18,fontWeight:600,padding:'8px 4px',borderRadius:4,background:T.inputBg,border:`1.5px solid ${T.borderMid}`,color:T.text,height:48}}/>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{background:T.bg,color:T.text,padding:16,minHeight:'100%'}}>
+      {/* Truck type */}
+      <div style={{marginBottom:16}}>
+        <div style={{fontSize:9,fontWeight:700,letterSpacing:'2px',textTransform:'uppercase',color:T.muted,marginBottom:10}}>TRUCK TYPE</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          {[['flatbed','FLAT-BED','53ft · max 26 pallets'],['dryvan','DRY VAN','53ft · mixed load table']].map(([id,lbl,sub])=>(
+            <button key={id} onClick={()=>setTruck(id)}
+              style={{background:truck===id?'rgba(245,166,35,.12)':T.panelBg,border:`2px solid ${truck===id?'#f5a623':T.border}`,
+                color:truck===id?'#f5a623':T.muted,padding:'12px 8px',borderRadius:4,cursor:'pointer',textAlign:'center',fontSize:14,fontWeight:700}}>
+              {lbl}
+              <div style={{fontSize:10,color:truck===id?'rgba(245,166,35,0.6)':T.muted,marginTop:3,fontWeight:400}}>{sub}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <PB label="8′ Blankets"  dims="25 rolls/pal" dot={C.b8}  qv={qb8}  pv={pb8}  onQ={fromQty(25,setQb8,setPb8)}  onP={fromPals(25,setQb8,setPb8)}/>
+      <PB label="16′ Blankets" dims="20 rolls/pal · flatbed only" dot={C.b16} qv={qb16} pv={pb16} disabled={truck==='dryvan'} onQ={fromQty(20,setQb16,setPb16)} onP={fromPals(20,setQb16,setPb16)}/>
+      <PB label='Wattles 9"'   dims="14/pal"       dot={C.w9}  qv={qw9}  pv={pw9}  onQ={fromQty(14,setQw9,setPw9)}  onP={fromPals(14,setQw9,setPw9)}/>
+      <PB label='Wattles 12"'  dims="12/pal"       dot={C.w12} qv={qw12} pv={pw12} onQ={fromQty(12,setQw12,setPw12)} onP={fromPals(12,setQw12,setPw12)}/>
+
+      {/* Summary */}
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:9,fontWeight:700,letterSpacing:'2px',textTransform:'uppercase',color:T.muted,marginBottom:10}}>SUMMARY</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
+          {[
+            {v:calc.palEq,   l:'Pallets Loaded', c:T.text},
+            {v:calc.denom,   l:'Truck Capacity',  c:T.text},
+            {v:calc.rem>=0?calc.rem:'OVER', l:'Spots Left', c:calc.rem<0?'#e8472c':calc.rem===0?'#f5a623':'#34c77b'},
+            {v:calc.totalWt.toLocaleString(), l:'Est. lbs', c:T.text},
+          ].map(({v,l,c})=>(
+            <div key={l} style={{background:T.tableHead,border:`1.5px solid ${T.border}`,borderRadius:4,padding:10,textAlign:'center'}}>
+              <div style={{fontSize:22,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
+              <div style={{fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:1,marginTop:3}}>{l}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{padding:'12px 14px',borderRadius:4,fontWeight:700,letterSpacing:'.5px',textAlign:'center',
+          background:`${sc}18`,border:`2px solid ${sc}`,color:sc,fontSize:14,marginBottom:10}}>
+          {calc.statusTxt||'Enter quantities above'}
+        </div>
+        <button onClick={reset}
+          style={{width:'100%',background:'transparent',border:`1.5px solid ${T.border}`,color:T.muted,padding:10,borderRadius:4,fontSize:13,fontWeight:600,cursor:'pointer'}}>
+          ↺ Reset All
+        </button>
+      </div>
     </div>
   );
 }

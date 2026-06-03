@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { initializeApp } from "firebase/app";
 
-const APP_VERSION = "v1.5 — Jun 2025";
+const APP_VERSION = "v1.6 — Jun 2025";
 import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "firebase/firestore";
 
 // ─── Firebase config ────────────────────────────────────────────────────────
@@ -2005,7 +2005,14 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
 }
 
 function ProductEditRow({row,setRow,onSave,onCancel}) {
-  const f=(k,type="text")=>({type,value:row[k]??"",onChange:e=>setRow(r=>({...r,[k]:e.target.value})),style:{width:"100%",fontSize:11,height:26,fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif"}});
+  // For number fields: show empty string instead of 0 so user can type freely
+  const f=(k,type="text")=>({
+    type,
+    value: type==="number" ? (row[k]===0||row[k]===""||row[k]===null||row[k]===undefined ? "" : row[k]) : (row[k]??""),
+    onChange: e=>setRow(r=>({...r,[k]:e.target.value})),
+    onFocus: e=>{ if(type==="number" && (e.target.value==="0"||e.target.value==="0.00")) e.target.select(); },
+    style:{width:"100%",fontSize:11,height:26,fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif"}
+  });
   return (
     <tr style={{background:"#14140e",verticalAlign:"top"}}>
       <td style={{paddingTop:6}}><span style={{fontSize:11,color:"#c8a96e"}}>{row.sku}</span></td>

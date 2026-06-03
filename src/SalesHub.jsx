@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { initializeApp } from "firebase/app";
 
-const APP_VERSION = "v1.6 — Jun 2025";
+const APP_VERSION = "v1.7 — Jun 2025";
 import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "firebase/firestore";
 
 // ─── Firebase config ────────────────────────────────────────────────────────
@@ -1615,10 +1615,12 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
 
   // All unique category names — ordered by CATEGORY_ORDER, extras appended alphabetically
   const allCategories = useMemo(()=> {
-    const assigned = new Set(Object.values(categories).filter(Boolean));
-    const ordered = CATEGORY_ORDER.filter(c => assigned.has(c));
-    const extras = Array.from(assigned).filter(c => !CATEGORY_ORDER.includes(c)).sort();
-    return [...ordered, ...extras, "Uncategorized"];
+    try {
+      const assigned = new Set(Object.values(categories||{}).filter(Boolean));
+      const ordered = CATEGORY_ORDER.filter(cat => assigned.has(cat));
+      const extras = Array.from(assigned).filter(cat => !CATEGORY_ORDER.includes(cat)).sort();
+      return [...ordered, ...extras, "Uncategorized"];
+    } catch(e) { return ["Uncategorized"]; }
   }, [categories]);
 
   // Sort helper
@@ -1628,19 +1630,20 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
 
   // Group products by category
   const grouped = useMemo(()=>{
-    const map = {};
-    allCategories.forEach(cat => { map[cat] = []; });
-    products.forEach(p => {
-      const cat = categories[p.sku] || "Uncategorized";
-      if (!map[cat]) map[cat] = [];
-      map[cat].push(p);
-    });
-    // Sort within each group
-    Object.keys(map).forEach(k => { map[k] = sortProducts(map[k]); });
-    return map;
+    try {
+      const map = {};
+      (allCategories||[]).forEach(cat => { map[cat] = []; });
+      (products||[]).forEach(p => {
+        const cat = (categories||{})[p.sku] || "Uncategorized";
+        if (!map[cat]) map[cat] = [];
+        map[cat].push(p);
+      });
+      Object.keys(map).forEach(k => { map[k] = sortProducts(map[k]); });
+      return map;
+    } catch(e) { return {"Uncategorized": products||[]}; }
   }, [products, categories, sortF, sortD, allCategories]);
 
-  const flatSorted = useMemo(()=>sortProducts(products), [products, sortF, sortD]);
+  const flatSorted = useMemo(()=>{ try { return sortProducts(products||[]); } catch(e) { return products||[]; } }, [products, sortF, sortD]);
 
   function hs(f){if(sortF===f)setSortD(d=>-d);else{setSortF(f);setSortD(1);}}
   const Th=({l,f,style={}})=><th onClick={()=>hs(f)} style={{cursor:"pointer",userSelect:"none",...style}}>{l}{sortF===f?(sortD===1?" ↑":" ↓"):""}</th>;
@@ -1805,10 +1808,18 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
   );
 
   const filteredFlat = useMemo(()=>{
-    if (!search) return flatSorted;
-    const q=search.toLowerCase();
-    return flatSorted.filter(p=>p.sku.toLowerCase().includes(q)||p.product.toLowerCase().includes(q)||p.description.toLowerCase().includes(q));
+    try {
+      if (!search) return flatSorted||[];
+      const q=search.toLowerCase();
+      return (flatSorted||[]).filter(p=>
+        (p.sku||"").toLowerCase().includes(q)||
+        (p.product||"").toLowerCase().includes(q)||
+        (p.description||"").toLowerCase().includes(q));
+    } catch(e) { return flatSorted||[]; }
   },[flatSorted, search]);
+
+  // Safety guard
+  if (!T || !products) return null;
 
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100%",background:T.bg}}>

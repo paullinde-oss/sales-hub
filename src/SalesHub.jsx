@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { initializeApp } from "firebase/app";
+
+const APP_VERSION = "v1.4 — Jun 2025";
 import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "firebase/firestore";
 
 // ─── Firebase config ────────────────────────────────────────────────────────
@@ -694,7 +696,7 @@ export default function SalesHub() {
       saved: false,
       savedBy: "",
       savedDate: "",
-      lineItems: (q.lineItems||[]).map(li => ({ ...li, id: Date.now() + Math.random() })),
+      lineItems: Array.isArray(q.lineItems) && q.lineItems.length > 0 ? q.lineItems.map(li => ({ ...li, id: Date.now() + Math.random() })) : [{id:Date.now(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}],
     };
     setActiveQuote(duped);
   }
@@ -820,6 +822,7 @@ export default function SalesHub() {
           style={{background:T.btnBg,border:`1px solid ${T.border}`,color:T.subtext,padding:"4px 12px",fontSize:10,cursor:"pointer",fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",letterSpacing:".06em",borderRadius:2}}>
           {theme==="dark"?"☀ Light":"☾ Dark"}
         </button>
+        <div style={{fontSize:8,color:T.muted,opacity:.5,letterSpacing:".06em",userSelect:"none"}}>{APP_VERSION}</div>
       </div>
 
       <div style={{display:"flex",flex:1,overflow:"hidden",height:"calc(100vh - 52px)"}}>
@@ -1053,15 +1056,11 @@ function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUS
 
 // ─── Quote Form ────────────────────────────────────────────────────────────────
 function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail,onPDF,onClose,onNewQuote,T}) {
-  // Normalise lineItems — always an array
-  const safeItems = Array.isArray(safeItems) && safeItems.length > 0
-    ? safeItems
-    : [{id:Date.now(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}];
   // Compute load warnings live from line items
   const loadWarnings = useMemo(() => {
-    try { return validateQuoteLoad(safeItems); }
-    catch(e) { console.warn("Load validation error:", e); return []; }
-  }, [safeItems]);
+    try { return validateQuoteLoad(quote.lineItems); }
+    catch(e) { return []; }
+  }, [quote.lineItems]);
   const products = quote.currency==="CAD"?productsCAD:productsUSD; // productsUSD prop is already auto-converted
   const [qtyWarnings,setQtyWarnings] = useState({});
 
@@ -1105,8 +1104,10 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
   function addLI(){setQuote(q=>({...q,lineItems:[...(q.lineItems||[]),{id:Date.now(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}]}));}
   function removeLI(id){setQuote(q=>({...q,lineItems:(q.lineItems||[]).filter(li=>li.id!==id)}));setQtyWarnings(w=>{const n={...w};delete n[id];return n;});}
 
-  const total=(safeItems).reduce((s,li)=>s+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0);
+  const total=((quote.lineItems||[])).reduce((s,li)=>s+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0);
   const ro=quote.saved;
+  // Guard: if quote is somehow invalid, show nothing
+  if (!quote || typeof quote !== 'object') return null;
 
   return (
     <div>
@@ -1173,7 +1174,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
             <th style={{width:110}}>Increase (%)</th>
             {!ro&&<th style={{width:36}}/>}
           </tr></thead>
-          <tbody>{(safeItems).map((li,idx)=>{
+          <tbody>{((quote.lineItems||[])).map((li,idx)=>{
             const lineTotal=(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0);
             return <tr key={li.id}>
               <td>
@@ -1220,7 +1221,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
                       {PRICE_INCREASE_OPTIONS.map(o=><option key={o} value={o}>{o}%</option>)}
                     </select>}
               </td>
-              {!ro&&<td>{(safeItems).length>1&&<button className="btn-del" style={{padding:"1px 7px"}} onClick={()=>removeLI(li.id)}>✕</button>}</td>}
+              {!ro&&<td>{((quote.lineItems||[])).length>1&&<button className="btn-del" style={{padding:"1px 7px"}} onClick={()=>removeLI(li.id)}>✕</button>}</td>}
             </tr>;
           })}</tbody>
         </table>

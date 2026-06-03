@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { initializeApp } from "firebase/app";
 
-const APP_VERSION = "v1.4 — Jun 2025";
+const APP_VERSION = "v1.5 — Jun 2025";
 import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "firebase/firestore";
 
 // ─── Firebase config ────────────────────────────────────────────────────────
@@ -689,14 +689,32 @@ export default function SalesHub() {
   function duplicateQuote(q) {
     const newId = Date.now();
     const newNum = nextQNum(quotes);
+    // Normalize each line item to ensure all fields exist
+    const srcItems = Array.isArray(q.lineItems) && q.lineItems.length > 0 ? q.lineItems : [];
+    const newItems = srcItems.map((li, i) => ({
+      id: Date.now() + i + Math.random(),
+      sku:         li.sku         || "",
+      description: li.description || "",
+      qty:         parseInt(li.qty)         || 1,
+      unitPrice:   parseFloat(li.unitPrice) || 0,
+      increase:    parseFloat(li.increase)  || 0,
+      basePrice:   parseFloat(li.basePrice) || 0,
+      priceTier:   li.priceTier || "unit",
+    }));
+    if (newItems.length === 0) newItems.push({id:Date.now(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0,priceTier:"unit"});
     const duped = {
-      ...q,
-      id: newId,
-      quoteNum: newNum,
-      saved: false,
-      savedBy: "",
-      savedDate: "",
-      lineItems: Array.isArray(q.lineItems) && q.lineItems.length > 0 ? q.lineItems.map(li => ({ ...li, id: Date.now() + Math.random() })) : [{id:Date.now(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}],
+      id:            newId,
+      quoteNum:      newNum,
+      name:          q.name          || "",
+      company:       q.company       || "",
+      prepaid:       q.prepaid       || false,
+      currency:      q.currency      || "CAD",
+      notes:         q.notes         || "",
+      internalNotes: q.internalNotes || "",
+      saved:         false,
+      savedBy:       "",
+      savedDate:     "",
+      lineItems:     newItems,
     };
     setActiveQuote(duped);
   }
@@ -912,11 +930,23 @@ export default function SalesHub() {
       {/* Delete Confirm */}
       {deleteConfirm&&(
         <div className="modal-overlay" onClick={()=>setDeleteConfirm(null)}>
-          <div className="modal" style={{maxWidth:340}} onClick={e=>e.stopPropagation()}>
-            <div style={{fontSize:11,color:"#aaa",marginBottom:16}}>Delete quote <span style={{color:"#c8a96e"}}>{deleteConfirm.quoteNum}</span>?<br/><span style={{fontSize:10,color:"#666"}}>This cannot be undone.</span></div>
-            <div style={{display:"flex",gap:8}}>
-              <button className="btn-del" style={{padding:"6px 16px"}} onClick={()=>deleteQuote(deleteConfirm.id)}>Delete</button>
-              <button className="btn" onClick={()=>setDeleteConfirm(null)}>Cancel</button>
+          <div className="modal" style={{maxWidth:380,textAlign:"center",padding:"32px 28px"}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:28,marginBottom:12}}>🗑️</div>
+            <div style={{fontSize:16,fontWeight:600,color:T.text,marginBottom:8}}>You sure about that?</div>
+            <div style={{fontSize:12,color:T.muted,marginBottom:6}}>
+              This will permanently delete quote <span style={{color:"#c8a96e",fontWeight:600}}>{deleteConfirm.quoteNum}</span>
+            </div>
+            <div style={{fontSize:11,color:T.muted,marginBottom:24}}>
+              {deleteConfirm.company||deleteConfirm.name?"for "+( deleteConfirm.company||deleteConfirm.name):""}
+            </div>
+            <div style={{display:"flex",gap:10,justifyContent:"center"}}>
+              <button className="btn" style={{padding:"9px 24px",fontSize:12}} onClick={()=>setDeleteConfirm(null)}>
+                No, keep it
+              </button>
+              <button className="btn-del" style={{padding:"9px 24px",fontSize:12,fontWeight:600}}
+                onClick={()=>deleteQuote(deleteConfirm.id)}>
+                Yes, delete it
+              </button>
             </div>
           </div>
         </div>

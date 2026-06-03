@@ -618,24 +618,27 @@ export default function SalesHub() {
 
   // Effective USD products — if a USD price field is blank, auto-convert from CAD using exchange rate
   const effectiveProductsUSD = useMemo(() => {
-    return productsUSD.map((usdP, i) => {
-      const cadP = productsCAD[i] || productsCAD.find(p => p.sku === usdP.sku);
-      if (!cadP) return usdP;
-      function conv(usdVal, cadVal) {
-        if (usdVal !== "" && usdVal !== null && usdVal !== undefined && parseFloat(usdVal) > 0) return usdVal;
-        if (cadVal !== "" && cadVal !== null && cadVal !== undefined && parseFloat(cadVal) > 0)
-          return Math.round(parseFloat(cadVal) * exchangeRate * 100) / 100;
-        return "";
-      }
-      return {
-        ...usdP,
-        price:       conv(usdP.price,       cadP.price),
-        palletPrice: conv(usdP.palletPrice, cadP.palletPrice),
-        prepaid:     conv(usdP.prepaid,     cadP.prepaid),
-        prepaidPallet: conv(usdP.prepaidPallet, cadP.prepaidPallet),
-        truckPrice:  conv(usdP.truckPrice,  cadP.truckPrice),
-      };
-    });
+    const conv = (usdVal, cadVal, rate) => {
+      const u = parseFloat(usdVal);
+      if (!isNaN(u) && u > 0) return usdVal;
+      const c = parseFloat(cadVal);
+      if (!isNaN(c) && c > 0) return Math.round(c * rate * 100) / 100;
+      return "";
+    };
+    try {
+      return productsUSD.map((usdP) => {
+        const cadP = productsCAD.find(p => p.sku === usdP.sku);
+        if (!cadP) return usdP;
+        return {
+          ...usdP,
+          price:         conv(usdP.price,         cadP.price,         exchangeRate),
+          palletPrice:   conv(usdP.palletPrice,   cadP.palletPrice,   exchangeRate),
+          prepaid:       conv(usdP.prepaid,       cadP.prepaid,       exchangeRate),
+          prepaidPallet: conv(usdP.prepaidPallet, cadP.prepaidPallet, exchangeRate),
+          truckPrice:    conv(usdP.truckPrice,    cadP.truckPrice,    exchangeRate),
+        };
+      });
+    } catch(e) { return productsUSD; }
   }, [productsUSD, productsCAD, exchangeRate]);
 
   const filteredQuotes = useMemo(()=>quotes.filter(q=>{
@@ -964,7 +967,7 @@ export default function SalesHub() {
 }
 
 // ─── Quotes Tab ────────────────────────────────────────────────────────────────
-function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUSD,createNewQuote,setActiveQuote,saveQuote,editQuote,openEmailModal,generatePDF,deleteConfirm,setDeleteConfirm,deleteQuote,duplicateQuote,quoteSort,setQuoteSort,T}) {
+function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUSD,effectiveProductsUSD,createNewQuote,setActiveQuote,saveQuote,editQuote,openEmailModal,generatePDF,deleteConfirm,setDeleteConfirm,deleteQuote,duplicateQuote,quoteSort,setQuoteSort,T}) {
   return (
     <div style={{display:"flex",height:"100%",overflow:"hidden"}}>
       {/* Left panel */}
@@ -1051,8 +1054,11 @@ function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUS
 // ─── Quote Form ────────────────────────────────────────────────────────────────
 function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail,onPDF,onClose,onNewQuote,T}) {
   // Compute load warnings live from line items
-  const loadWarnings = useMemo(() => validateQuoteLoad(quote.lineItems), [quote.lineItems]);
-  const products = quote.currency==="CAD"?productsCAD:productsUSD;
+  const loadWarnings = useMemo(() => {
+    try { return validateQuoteLoad(quote.lineItems); }
+    catch(e) { console.warn("Load validation error:", e); return []; }
+  }, [quote.lineItems]);
+  const products = quote.currency==="CAD"?productsCAD:productsUSD; // productsUSD prop is already auto-converted
   const [qtyWarnings,setQtyWarnings] = useState({});
 
   function upd(field,val){setQuote(q=>({...q,[field]:val}));}
@@ -1220,7 +1226,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
       </div>
 
       {/* Load Validation Warnings */}
-      {loadWarnings.length > 0 && (
+      {Array.isArray(loadWarnings) && loadWarnings.length > 0 && (
         <div style={{border:`1px solid ${T.border}`,marginBottom:8,overflow:"hidden"}}>
           <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".12em",color:T.muted,padding:"5px 10px",background:T.tableHead,borderBottom:`1px solid ${T.border}`}}>
             Load & Packing Check

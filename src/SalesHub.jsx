@@ -694,16 +694,16 @@ export default function SalesHub() {
       saved: false,
       savedBy: "",
       savedDate: "",
-      lineItems: q.lineItems.map(li => ({ ...li, id: Date.now() + Math.random() })),
+      lineItems: (q.lineItems||[]).map(li => ({ ...li, id: Date.now() + Math.random() })),
     };
     setActiveQuote(duped);
   }
   function openEmailModal(q) {
-    const total=q.lineItems.reduce((a,li)=>a+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0);
-    const prods=[...new Set(q.lineItems.map(li=>li.description||li.sku).filter(Boolean))].join(", ");
+    const total=(q.lineItems||[]).reduce((a,li)=>a+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0);
+    const prods=[...new Set((q.lineItems||[]).map(li=>li.description||li.sku).filter(Boolean))].join(", ");
 
     // HTML version — Outlook-compatible table (inline styles only, no classes)
-    const rowsHtml=q.lineItems.map(li=>{
+    const rowsHtml=(q.lineItems||[]).map(li=>{
       const lt=(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0);
       return `<tr>
         <td style="border:1px solid #000;padding:6px 12px;text-align:center;font-family:Calibri,Arial,sans-serif;font-size:13px;">${li.sku||"—"}</td>
@@ -743,7 +743,7 @@ export default function SalesHub() {
 </div>`;
 
     // Plain-text fallback
-    const plain=`Hello ${q.name||"{NAME}"},\n\nThanks for reaching out! I would love to help you out, please see quote:\n\n${q.lineItems.map(li=>`${li.sku||"—"}  |  ${li.description||"—"}  |  Qty: ${li.qty}  |  Unit: ${fmtCur(li.unitPrice)}  |  Total: ${fmtCur((parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0))}`).join("\n")}\n\nTotal (${q.currency}): ${fmtCur(total)}${q.notes?`\nNotes: ${q.notes}`:""}\n\nLet me know if you have any questions or concerns.\n\nThank you,`;
+    const plain=`Hello ${q.name||"{NAME}"},\n\nThanks for reaching out! I would love to help you out, please see quote:\n\n${(q.lineItems||[]).map(li=>`${li.sku||"—"}  |  ${li.description||"—"}  |  Qty: ${li.qty}  |  Unit: ${fmtCur(li.unitPrice)}  |  Total: ${fmtCur((parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0))}`).join("\n")}\n\nTotal (${q.currency}): ${fmtCur(total)}${q.notes?`\nNotes: ${q.notes}`:""}\n\nLet me know if you have any questions or concerns.\n\nThank you,`;
 
     setEmailModal({html, plain});
   }
@@ -1021,7 +1021,7 @@ function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUS
                 </div>
               </div>
               <div style={{fontSize:11,color:"#777",marginTop:2}}>{q.name||"—"}</div>
-              <div style={{fontSize:10,color:"#444"}}>{q.company||"—"} · <span style={{color:"var(--accent)",fontWeight:600}}>{q.lineItems?.reduce((a,li)=>a+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0)>0?fmtCur(q.lineItems.reduce((a,li)=>a+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0)):""}</span>{q.lineItems?.reduce((a,li)=>a+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0)>0?" "+q.currency:q.currency}</div>
+              <div style={{fontSize:10,color:"#444"}}>{q.company||"—"} · <span style={{color:"var(--accent)",fontWeight:600}}>{q.lineItems?.reduce((a,li)=>a+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0)>0?fmtCur((q.lineItems||[]).reduce((a,li)=>a+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0)):""}</span>{q.lineItems?.reduce((a,li)=>a+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0)>0?" "+q.currency:q.currency}</div>
             </div>
           ))}
         </div>
@@ -1053,6 +1053,11 @@ function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUS
 
 // ─── Quote Form ────────────────────────────────────────────────────────────────
 function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail,onPDF,onClose,onNewQuote,T}) {
+  // Ensure lineItems always exists
+  const safeQuote = useMemo(() => ({
+    ...quote,
+    lineItems: quote.lineItems || [{id:Date.now(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}]
+  }), [quote]);
   // Compute load warnings live from line items
   const loadWarnings = useMemo(() => {
     try { return validateQuoteLoad(quote.lineItems); }
@@ -1063,7 +1068,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
 
   function upd(field,val){setQuote(q=>({...q,[field]:val}));}
   function updLI(id,field,val){
-    setQuote(q=>({...q,lineItems:q.lineItems.map(li=>{
+    setQuote(q=>({...q,lineItems:(q.lineItems||[]).map(li=>{
       if(li.id!==id)return li;
       const u={...li,[field]:val};
       if(field==="sku"||field==="description"){
@@ -1098,8 +1103,8 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
       return u;
     })}));
   }
-  function addLI(){setQuote(q=>({...q,lineItems:[...q.lineItems,{id:Date.now(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}]}));}
-  function removeLI(id){setQuote(q=>({...q,lineItems:q.lineItems.filter(li=>li.id!==id)}));setQtyWarnings(w=>{const n={...w};delete n[id];return n;});}
+  function addLI(){setQuote(q=>({...q,lineItems:[...(q.lineItems||[]),{id:Date.now(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}]}));}
+  function removeLI(id){setQuote(q=>({...q,lineItems:(q.lineItems||[]).filter(li=>li.id!==id)}));setQtyWarnings(w=>{const n={...w};delete n[id];return n;});}
 
   const total=quote.lineItems.reduce((s,li)=>s+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0);
   const ro=quote.saved;
@@ -2018,7 +2023,7 @@ function PDFModal({quote:q, onClose}) {
   const [showPreview,setShowPreview]= useState(false);
   const iframeRef = useRef(null);
 
-  const subtotal   = q.lineItems.reduce((a,li)=>a+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0);
+  const subtotal   = (q.lineItems||[]).reduce((a,li)=>a+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0);
   const freightVal = parseFloat(freight)||0;
   const discountVal= parseFloat(discount)||0;
   const grandTotal = subtotal + freightVal - discountVal;
@@ -2031,7 +2036,7 @@ function PDFModal({quote:q, onClose}) {
 
   function buildHTML() {
     // Max 9 line items
-    const items = q.lineItems.slice(0,9);
+    const items = (q.lineItems||[]).slice(0,9);
     const rows = items.map((li,i)=>{
       const lt=(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0);
       const bg = i%2===0?"#ffffff":"#f7f7f7";
@@ -2272,11 +2277,11 @@ function PDFModal({quote:q, onClose}) {
         {/* Items preview */}
         <div style={{background:"#0d0d0d",border:"1px solid #1e1e1e",marginBottom:18}}>
           <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".1em",color:"#555",padding:"7px 12px",borderBottom:"1px solid #1a1a1a"}}>
-            {q.lineItems.length} line item{q.lineItems.length!==1?"s":""}{q.lineItems.length>9?" (first 9 will print)":""}
+            {(q.lineItems||[]).length} line item{(q.lineItems||[]).length!==1?"s":""}{(q.lineItems||[]).length>9?" (first 9 will print)":""}
           </div>
           <div style={{overflowX:"auto",maxHeight:160,overflowY:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-              {q.lineItems.slice(0,9).map((li,i)=>{
+              {(q.lineItems||[]).slice(0,9).map((li,i)=>{
                 const lt=(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0);
                 return <tr key={i} style={{borderBottom:"1px solid #141414"}}>
                   <td style={{padding:"5px 12px",color:"#aaa",width:"38%"}}>{li.description||"—"}</td>

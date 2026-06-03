@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { initializeApp } from "firebase/app";
 
-const APP_VERSION = "v1.7 — Jun 2025";
+const APP_VERSION = "v1.8 — Jun 2025";
 import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "firebase/firestore";
 
 // ─── Firebase config ────────────────────────────────────────────────────────
@@ -628,7 +628,7 @@ export default function SalesHub() {
       return "";
     };
     try {
-      return productsUSD.map((usdP) => {
+      return (productsUSD||[]).map((usdP) => {
         const cadP = productsCAD.find(p => p.sku === usdP.sku);
         if (!cadP) return usdP;
         return {
@@ -1088,7 +1088,10 @@ function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUS
 function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail,onPDF,onClose,onNewQuote,T}) {
   // Compute load warnings live from line items
   const loadWarnings = useMemo(() => {
-    try { return validateQuoteLoad(quote.lineItems); }
+    try {
+      const result = validateQuoteLoad(quote.lineItems);
+      return Array.isArray(result) ? result : [];
+    }
     catch(e) { return []; }
   }, [quote.lineItems]);
   const products = quote.currency==="CAD"?productsCAD:productsUSD; // productsUSD prop is already auto-converted
@@ -1211,13 +1214,13 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
                 {ro?<span style={{fontSize:11}}>{li.sku||"—"}</span>
                   :<><input list={`sl-${idx}`} value={li.sku} onChange={e=>updLI(li.id,"sku",e.target.value)}
                       style={{width:"100%",fontSize:11,height:25}} placeholder="SKU"/>
-                    <datalist id={`sl-${idx}`}>{products.map(p=><option key={p.sku} value={p.sku}/>)}</datalist></>}
+                    <datalist id={`sl-${idx}`}>{(products||[]).map(p=><option key={p.sku} value={p.sku}/>)}</datalist></>}
               </td>
               <td>
                 {ro?<span style={{fontSize:11}}>{li.description}</span>
                   :<><input list={`dl-${idx}`} value={li.description} onChange={e=>updLI(li.id,"description",e.target.value)}
                       style={{width:"100%",fontSize:11,height:25}} placeholder="Product description"/>
-                    <datalist id={`dl-${idx}`}>{products.map(p=><option key={p.sku} value={p.description}/>)}</datalist></>}
+                    <datalist id={`dl-${idx}`}>{(products||[]).map(p=><option key={p.sku} value={p.description}/>)}</datalist></>}
               </td>
               <td style={{position:"relative"}}>
                 {ro?<span>{li.qty}</span>
@@ -1266,7 +1269,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
           <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".12em",color:T.muted,padding:"5px 10px",background:T.tableHead,borderBottom:`1px solid ${T.border}`}}>
             Load & Packing Check
           </div>
-          {loadWarnings.map((w,i)=>{
+          {(loadWarnings||[]).map((w,i)=>{
             const colors = {ok:"#34c77b", warn:"#f5a623", over:"#e8472c", info:"#4a90d9"};
             const col = colors[w.type]||colors.info;
             return (
@@ -1320,7 +1323,7 @@ function DimsTab({dims,setDims}) {
   const [search,setSearch] = useState("");
   const [filterType,setFilterType] = useState("All");
 
-  const types = useMemo(()=>["All",...new Set(dims.map(d=>d.type))],[dims]);
+  const types = useMemo(()=>["All",...new Set((dims||[]).map(d=>d.type))],[dims]);
   const filtered = useMemo(()=>dims.filter(d=>{
     const q=search.toLowerCase();
     const matchS=!q||(d.product||"").toLowerCase().includes(q)||(d.type||"").toLowerCase().includes(q);
@@ -1657,7 +1660,7 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
   }
   function selectAll() {
     if (selected.size === products.length) setSelected(new Set());
-    else setSelected(new Set(products.map(p=>p.sku)));
+    else setSelected(new Set((products||[]).map(p=>p.sku)));
   }
   function toggleCollapse(cat) {
     setCollapsed(prev => {

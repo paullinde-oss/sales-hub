@@ -1056,13 +1056,13 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
   // Ensure lineItems always exists
   const safeQuote = useMemo(() => ({
     ...quote,
-    lineItems: quote.lineItems || [{id:Date.now(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}]
+    lineItems: (safeQuote.lineItems||[]) || [{id:Date.now(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}]
   }), [quote]);
   // Compute load warnings live from line items
   const loadWarnings = useMemo(() => {
-    try { return validateQuoteLoad(quote.lineItems); }
+    try { return validateQuoteLoad((safeQuote.lineItems||[])); }
     catch(e) { console.warn("Load validation error:", e); return []; }
-  }, [quote.lineItems]);
+  }, [(safeQuote.lineItems||[])]);
   const products = quote.currency==="CAD"?productsCAD:productsUSD; // productsUSD prop is already auto-converted
   const [qtyWarnings,setQtyWarnings] = useState({});
 
@@ -1106,7 +1106,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
   function addLI(){setQuote(q=>({...q,lineItems:[...(q.lineItems||[]),{id:Date.now(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}]}));}
   function removeLI(id){setQuote(q=>({...q,lineItems:(q.lineItems||[]).filter(li=>li.id!==id)}));setQtyWarnings(w=>{const n={...w};delete n[id];return n;});}
 
-  const total=quote.lineItems.reduce((s,li)=>s+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0);
+  const total=(safeQuote.lineItems||[]).reduce((s,li)=>s+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0);
   const ro=quote.saved;
 
   return (
@@ -1174,7 +1174,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
             <th style={{width:110}}>Increase (%)</th>
             {!ro&&<th style={{width:36}}/>}
           </tr></thead>
-          <tbody>{quote.lineItems.map((li,idx)=>{
+          <tbody>{(safeQuote.lineItems||[]).map((li,idx)=>{
             const lineTotal=(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0);
             return <tr key={li.id}>
               <td>
@@ -1221,7 +1221,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
                       {PRICE_INCREASE_OPTIONS.map(o=><option key={o} value={o}>{o}%</option>)}
                     </select>}
               </td>
-              {!ro&&<td>{quote.lineItems.length>1&&<button className="btn-del" style={{padding:"1px 7px"}} onClick={()=>removeLI(li.id)}>✕</button>}</td>}
+              {!ro&&<td>{(safeQuote.lineItems||[]).length>1&&<button className="btn-del" style={{padding:"1px 7px"}} onClick={()=>removeLI(li.id)}>✕</button>}</td>}
             </tr>;
           })}</tbody>
         </table>

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { initializeApp } from "firebase/app";
 
-const APP_VERSION = "v1.8 — Jun 2025";
+const APP_VERSION = "v2.0 — Jun 2025";
 import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "firebase/firestore";
 
 // ─── Firebase config ────────────────────────────────────────────────────────
@@ -561,7 +561,19 @@ function useLocalStorage(key, initial) {
   return [val, setAndStore];
 }
 
+// ─── Mobile detection hook ─────────────────────────────────────────────────────
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  return isMobile;
+}
+
 export default function SalesHub() {
+  const isMobile = useIsMobile();
   const [authed, setAuthed] = useLocalStorage('bmp_authed', false);
   const [loginName, setLoginName] = useLocalStorage('bmp_user', '');
   const [loginError, setLoginError] = useState("");
@@ -597,9 +609,12 @@ export default function SalesHub() {
   const [productSearch, setProductSearch] = useState("");
   const [emailModal, setEmailModal] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [closeConfirm, setCloseConfirm] = useState(null); // quote to confirm close on
   const [pdfQuote, setPdfQuote] = useState(null);
   const [categories, setCategories] = useLocalStorage('bmp_categories', INITIAL_CATEGORIES);
   const [theme, setTheme] = useLocalStorage('bmp_theme', 'light');
+  const [mobileTab, setMobileTab] = useState('quotes');
+  const [mobileView, setMobileView] = useState('list'); // 'list' | 'detail' for quotes
   const T = theme === "dark" ? DARK : LIGHT;
   const LOGO_B64 = ""; // logo injected at print time
 
@@ -781,6 +796,27 @@ export default function SalesHub() {
     {id:"loadcalc", label:"Load Calculator", icon:"truck"},
   ];
 
+  // ── Mobile layout ────────────────────────────────────────────────────────
+  if (authed && isMobile) return (
+    <MobileLayout
+      T={T} theme={theme} setTheme={setTheme}
+      activeTab={mobileTab} setActiveTab={setMobileTab}
+      mobileView={mobileView} setMobileView={setMobileView}
+      quotes={filteredQuotes} allQuotes={quotes}
+      activeQuote={activeQuote} setActiveQuote={setActiveQuote}
+      createNewQuote={createNewQuote} saveQuote={saveQuote}
+      editQuote={q=>setActiveQuote({...q,saved:false})}
+      deleteQuote={deleteQuote} duplicateQuote={duplicateQuote}
+      deleteConfirm={deleteConfirm} setDeleteConfirm={setDeleteConfirm}
+      closeConfirm={closeConfirm} setCloseConfirm={setCloseConfirm}
+      searchQ={searchQ} setSearchQ={setSearchQ} quoteSort={quoteSort} setQuoteSort={setQuoteSort}
+      productsCAD={productsCAD} productsUSD={productsUSD} effectiveProductsUSD={effectiveProductsUSD}
+      openEmailModal={openEmailModal} generatePDF={generatePDF}
+      dims={dims} setDims={setDims}
+      loginName={loginName} setAuthed={setAuthed} setLoginName={setLoginName}
+    />
+  );
+
   return authed ? (
     <div style={{fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",background:T.bg,color:T.text,minHeight:"100vh",display:"flex",flexDirection:"column",
       "--input-bg":T.inputBg,"--text":T.text,"--border":T.border,"--border-light":T.borderLight,"--border-mid":T.borderMid,
@@ -922,6 +958,35 @@ export default function SalesHub() {
               }}>Copy for Outlook</button>
               <button className="btn" style={{fontSize:11}} onClick={()=>navigator.clipboard.writeText(emailModal.plain)}>Copy Plain Text</button>
               <button className="btn" style={{fontSize:11,marginLeft:"auto"}} onClick={()=>setEmailModal(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Close / Save Confirm */}
+      {closeConfirm&&(
+        <div className="modal-overlay" onClick={()=>setCloseConfirm(null)}>
+          <div className="modal" style={{maxWidth:400,textAlign:"center",padding:"32px 28px"}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:24,marginBottom:12}}>💾</div>
+            <div style={{fontSize:16,fontWeight:600,color:T.text,marginBottom:8}}>Save before closing?</div>
+            <div style={{fontSize:12,color:T.muted,marginBottom:24}}>
+              <span style={{color:"#c8a96e",fontWeight:600}}>{closeConfirm.quoteNum}</span>
+              {closeConfirm.company||closeConfirm.name?" — "+(closeConfirm.company||closeConfirm.name):""}
+              {" "}has unsaved changes.
+            </div>
+            <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
+              <button className="btn" style={{padding:"9px 20px",fontSize:12}}
+                onClick={()=>setCloseConfirm(null)}>
+                Keep editing
+              </button>
+              <button className="btn-del" style={{padding:"9px 20px",fontSize:12}}
+                onClick={()=>{setActiveQuote(null);setCloseConfirm(null);}}>
+                Discard
+              </button>
+              <button className="btn-gold" style={{padding:"9px 20px",fontSize:12}}
+                onClick={()=>{saveQuote(closeConfirm);setCloseConfirm(null);}}>
+                Save & Close
+              </button>
             </div>
           </div>
         </div>
@@ -1077,7 +1142,7 @@ function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUS
             </div>
           : <QuoteForm quote={activeQuote} setQuote={setActiveQuote} productsCAD={productsCAD} productsUSD={effectiveProductsUSD}
               onSave={saveQuote} onEdit={editQuote} onEmail={openEmailModal} onPDF={generatePDF}
-              onClose={()=>setActiveQuote(null)} onNewQuote={()=>{setActiveQuote(null);setTimeout(createNewQuote,50);}} T={T}/>
+              onClose={()=>{ if(activeQuote&&!activeQuote.saved){setCloseConfirm(activeQuote);}else{setActiveQuote(null);} }} onNewQuote={()=>{setActiveQuote(null);setTimeout(createNewQuote,50);}} T={T}/>
         }
       </div>
     </div>
@@ -3058,6 +3123,258 @@ function LoadCalcTab({T}) {
         </div>
 
       </div>
+    </div>
+  );
+}
+
+// ─── Mobile Layout ─────────────────────────────────────────────────────────────
+function MobileLayout({
+  T, theme, setTheme,
+  activeTab, setActiveTab, mobileView, setMobileView,
+  quotes, allQuotes, activeQuote, setActiveQuote,
+  createNewQuote, saveQuote, editQuote, deleteQuote, duplicateQuote,
+  deleteConfirm, setDeleteConfirm, closeConfirm, setCloseConfirm,
+  searchQ, setSearchQ, quoteSort, setQuoteSort,
+  productsCAD, productsUSD, effectiveProductsUSD,
+  openEmailModal, generatePDF,
+  dims, setDims,
+  loginName, setAuthed, setLoginName,
+}) {
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  const MOBILE_TABS = [
+    {id:'quotes',   label:'Quotes',   icon:'quote'},
+    {id:'products', label:'Products', icon:'products'},
+    {id:'dims',     label:'DIMS',     icon:'dims'},
+    {id:'shipping', label:'Shipping', icon:'ship'},
+    {id:'loadcalc', label:'Load',     icon:'truck'},
+  ];
+
+  const bg = T.bg;
+  const headerH = 52;
+  const tabBarH = 58;
+
+  // ── Quote detail view ──────────────────────────────────────────────────────
+  if (activeTab === 'quotes' && activeQuote) {
+    return (
+      <div style={{fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:bg, color:T.text, height:'100vh', display:'flex', flexDirection:'column', overflow:'hidden'}}>
+        {/* Mobile quote header */}
+        <div style={{background:T.headerBg, borderBottom:`1px solid ${T.border}`, padding:'10px 14px', display:'flex', alignItems:'center', gap:10, flexShrink:0}}>
+          <button onClick={()=>{ if(!activeQuote.saved){setCloseConfirm(activeQuote);}else{setActiveQuote(null);} }}
+            style={{background:'none', border:'none', color:T.accent, fontSize:22, cursor:'pointer', padding:'0 4px', lineHeight:1}}>←</button>
+          <div style={{flex:1, minWidth:0}}>
+            <div style={{fontSize:13, fontWeight:700, color:T.accent}}>{activeQuote.quoteNum}</div>
+            <div style={{fontSize:11, color:T.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{activeQuote.company||activeQuote.name||'New Quote'}</div>
+          </div>
+          {activeQuote.saved && (
+            <div style={{display:'flex', gap:8}}>
+              <button className="btn" style={{fontSize:11, padding:'5px 10px'}} onClick={()=>openEmailModal(activeQuote)}>✉</button>
+              <button className="btn" style={{fontSize:11, padding:'5px 10px', color:T.accent}} onClick={()=>generatePDF(activeQuote)}>↓PDF</button>
+            </div>
+          )}
+        </div>
+        {/* Quote form scrollable */}
+        <div style={{flex:1, overflowY:'auto', padding:12}}>
+          <QuoteForm
+            quote={activeQuote} setQuote={setActiveQuote}
+            productsCAD={productsCAD} productsUSD={effectiveProductsUSD}
+            onSave={saveQuote} onEdit={editQuote}
+            onEmail={openEmailModal} onPDF={generatePDF}
+            onClose={()=>{ if(!activeQuote.saved){setCloseConfirm(activeQuote);}else{setActiveQuote(null);} }}
+            onNewQuote={()=>{setActiveQuote(null); setTimeout(createNewQuote,50);}}
+            T={T}/>
+        </div>
+        {/* Confirm modals */}
+        {closeConfirm && (
+          <div className="modal-overlay" onClick={()=>setCloseConfirm(null)}>
+            <div className="modal" style={{maxWidth:340, textAlign:'center', padding:'28px 20px'}} onClick={e=>e.stopPropagation()}>
+              <div style={{fontSize:22, marginBottom:10}}>💾</div>
+              <div style={{fontSize:15, fontWeight:600, marginBottom:6}}>Save before closing?</div>
+              <div style={{fontSize:12, color:T.muted, marginBottom:20}}>{closeConfirm.quoteNum} has unsaved changes.</div>
+              <div style={{display:'flex', gap:8, justifyContent:'center', flexWrap:'wrap'}}>
+                <button className="btn" style={{padding:'8px 16px'}} onClick={()=>setCloseConfirm(null)}>Keep editing</button>
+                <button className="btn-del" style={{padding:'8px 16px'}} onClick={()=>{setActiveQuote(null);setCloseConfirm(null);}}>Discard</button>
+                <button className="btn-gold" style={{padding:'8px 16px'}} onClick={()=>{saveQuote(closeConfirm);setCloseConfirm(null);}}>Save & Close</button>
+              </div>
+            </div>
+          </div>
+        )}
+        {deleteConfirm && (
+          <div className="modal-overlay" onClick={()=>setDeleteConfirm(null)}>
+            <div className="modal" style={{maxWidth:320, textAlign:'center', padding:'28px 20px'}} onClick={e=>e.stopPropagation()}>
+              <div style={{fontSize:22, marginBottom:10}}>🗑️</div>
+              <div style={{fontSize:15, fontWeight:600, marginBottom:6}}>You sure about that?</div>
+              <div style={{fontSize:12, color:T.muted, marginBottom:20}}>Delete <span style={{color:'#c8a96e'}}>{deleteConfirm.quoteNum}</span>?</div>
+              <div style={{display:'flex', gap:8, justifyContent:'center'}}>
+                <button className="btn" style={{padding:'8px 16px'}} onClick={()=>setDeleteConfirm(null)}>No, keep it</button>
+                <button className="btn-del" style={{padding:'8px 16px'}} onClick={()=>deleteQuote(deleteConfirm.id)}>Yes, delete it</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Main tab content ───────────────────────────────────────────────────────
+  const tabContent = () => {
+    if (activeTab === 'quotes') return (
+      <div style={{flex:1, overflowY:'auto', display:'flex', flexDirection:'column'}}>
+        {/* Search bar */}
+        {searchOpen && (
+          <div style={{padding:'8px 12px', background:T.panelBg, borderBottom:`1px solid ${T.border}`, display:'flex', flexDirection:'column', gap:4}}>
+            {[{k:'name',p:'Name'},{k:'company',p:'Company'},{k:'quoteNum',p:'Quote #'},{k:'sku',p:'SKU'},{k:'description',p:'Description'}].map(f=>(
+              <input key={f.k} value={searchQ[f.k]} onChange={e=>setSearchQ(p=>({...p,[f.k]:e.target.value}))}
+                placeholder={f.p} style={{height:32, fontSize:13, width:'100%'}}/>
+            ))}
+            <button className="btn" style={{fontSize:11}} onClick={()=>{setSearchQ({name:'',company:'',date:'',madeBy:'',quoteNum:'',sku:'',description:''});}}>Clear</button>
+          </div>
+        )}
+        {/* Quote list */}
+        {(quotes.length===0) && <div style={{padding:24, textAlign:'center', color:T.muted, fontSize:13}}>No quotes yet</div>}
+        {[...(quotes||[])].sort((a,b)=>{
+          const na=parseInt((a.quoteNum||'').replace(/\D/g,''))||0;
+          const nb=parseInt((b.quoteNum||'').replace(/\D/g,''))||0;
+          return quoteSort==='asc'?na-nb:nb-na;
+        }).map(q=>{
+          const total = (q.lineItems||[]).reduce((s,li)=>s+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0);
+          return (
+            <div key={q.id} style={{borderBottom:`1px solid ${T.border}`, padding:'14px 16px', cursor:'pointer', background:T.cardBg, display:'flex', alignItems:'center', gap:12}}
+              onClick={()=>setActiveQuote(q)}>
+              <div style={{flex:1, minWidth:0}}>
+                <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:3}}>
+                  <span style={{fontSize:14, fontWeight:700, color:T.accent}}>{q.quoteNum}</span>
+                  <span className={`pill ${q.saved?'pill-saved':'pill-open'}`}>{q.saved?'Saved':'Open'}</span>
+                </div>
+                <div style={{fontSize:13, color:T.subtext, marginBottom:2}}>{q.name||'—'}</div>
+                <div style={{fontSize:12, color:T.muted}}>{q.company||'—'} · {total>0?fmtCur(total)+' ':''}{q.currency}</div>
+              </div>
+              <div style={{display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end', flexShrink:0}}>
+                <button style={{background:'none', border:'none', color:T.accent, fontSize:20, cursor:'pointer', lineHeight:1}} onClick={e=>{e.stopPropagation();duplicateQuote(q);}}>⧉</button>
+                <button style={{background:'none', border:'none', color:'#c84444', fontSize:18, cursor:'pointer', lineHeight:1}} onClick={e=>{e.stopPropagation();setDeleteConfirm(q);}}>✕</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+
+    if (activeTab === 'products') return (
+      <div style={{flex:1, overflow:'hidden', display:'flex', flexDirection:'column'}}>
+        <ProductsTab
+          products={productsCAD} setProducts={()=>{}}
+          currency="CAD" setCurrency={()=>{}}
+          search="" setSearch={()=>{}}
+          categories={{}} setCategories={()=>{}}
+          exchangeRate={0.73} setExchangeRate={()=>{}}
+          T={T}/>
+      </div>
+    );
+
+    if (activeTab === 'dims') return (
+      <div style={{flex:1, overflow:'hidden', display:'flex', flexDirection:'column'}}>
+        <DimsTab dims={dims} setDims={setDims} T={T}/>
+      </div>
+    );
+
+    if (activeTab === 'shipping') return (
+      <div style={{flex:1, overflow:'hidden', display:'flex', flexDirection:'column'}}>
+        <ShippingTab T={T}/>
+      </div>
+    );
+
+    if (activeTab === 'loadcalc') return (
+      <div style={{flex:1, overflow:'hidden', display:'flex', flexDirection:'column'}}>
+        <LoadCalcTab T={T}/>
+      </div>
+    );
+
+    return null;
+  };
+
+  return (
+    <div style={{fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:bg, color:T.text, height:'100vh', display:'flex', flexDirection:'column', overflow:'hidden'}}>
+      <style>{`
+        @media (max-width: 767px) {
+          .data-table th, .data-table td { padding: 5px 8px !important; font-size: 11px !important; }
+          input, select, textarea { font-size: 16px !important; } /* prevents iOS zoom */
+        }
+      `}</style>
+
+      {/* Mobile header */}
+      <div style={{background:T.headerBg, borderBottom:`1px solid ${T.border}`, padding:'10px 14px', display:'flex', alignItems:'center', gap:10, flexShrink:0, height:headerH}}>
+        <svg width="22" height="18" viewBox="0 0 22 18">
+          {[0,4,8,12,16].map((y,i)=><rect key={i} x="0" y={y} width="14" height="2.5" fill="#c8a96e"/>)}
+        </svg>
+        <div style={{flex:1}}>
+          <div style={{fontSize:12, fontWeight:700, letterSpacing:'.08em', color:T.text}}>BMP SUPPLIES</div>
+          <div style={{fontSize:8, color:T.muted, letterSpacing:'.14em'}}>SALES HUB</div>
+        </div>
+        {/* Right actions */}
+        <div style={{display:'flex', gap:8, alignItems:'center'}}>
+          {activeTab==='quotes' && (
+            <button onClick={()=>setSearchOpen(s=>!s)}
+              style={{background:searchOpen?T.accent:'none', border:`1px solid ${T.border}`, color:searchOpen?'#fff':T.muted, width:32, height:32, borderRadius:4, cursor:'pointer', fontSize:14}}>
+              🔍
+            </button>
+          )}
+          <button onClick={()=>setTheme(t=>t==='dark'?'light':'dark')}
+            style={{background:'none', border:`1px solid ${T.border}`, color:T.muted, width:32, height:32, borderRadius:4, cursor:'pointer', fontSize:14}}>
+            {theme==='dark'?'☀':'☾'}
+          </button>
+          <button onClick={()=>{setAuthed(false);setLoginName('');}}
+            style={{background:'none', border:`1px solid ${T.border}`, color:T.muted, padding:'0 8px', height:32, borderRadius:4, cursor:'pointer', fontSize:11}}>
+            {loginName}
+          </button>
+        </div>
+      </div>
+
+      {/* Tab content */}
+      <div style={{flex:1, overflow:'hidden', display:'flex', flexDirection:'column', paddingBottom:tabBarH}}>
+        {tabContent()}
+      </div>
+
+      {/* New Quote FAB — only on quotes tab */}
+      {activeTab==='quotes' && (
+        <button onClick={createNewQuote}
+          style={{position:'fixed', right:16, bottom:tabBarH+12, width:52, height:52, borderRadius:'50%',
+            background:'#c8a96e', border:'none', color:'#0a0a0a', fontSize:26, fontWeight:300,
+            cursor:'pointer', boxShadow:'0 3px 12px rgba(0,0,0,.25)', zIndex:50, display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1}}>
+          +
+        </button>
+      )}
+
+      {/* Bottom tab bar */}
+      <div style={{position:'fixed', bottom:0, left:0, right:0, height:tabBarH,
+        background:T.headerBg, borderTop:`1px solid ${T.border}`,
+        display:'flex', zIndex:40}}>
+        {MOBILE_TABS.map(tab=>(
+          <button key={tab.id} onClick={()=>setActiveTab(tab.id)}
+            style={{flex:1, background:'none', border:'none', cursor:'pointer',
+              display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:3,
+              color: activeTab===tab.id ? '#c8a96e' : T.muted,
+              borderTop: activeTab===tab.id ? '2px solid #c8a96e' : '2px solid transparent',
+              padding:'6px 0'}}>
+            <Icon name={tab.icon} size={20} color="currentColor"/>
+            <span style={{fontSize:9, letterSpacing:'.04em', textTransform:'uppercase', fontWeight:activeTab===tab.id?600:400}}>{tab.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Modals */}
+      {deleteConfirm && (
+        <div className="modal-overlay" onClick={()=>setDeleteConfirm(null)}>
+          <div className="modal" style={{maxWidth:320, textAlign:'center', padding:'28px 20px'}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:22, marginBottom:10}}>🗑️</div>
+            <div style={{fontSize:15, fontWeight:600, marginBottom:6}}>You sure about that?</div>
+            <div style={{fontSize:12, color:T.muted, marginBottom:20}}>Delete <span style={{color:'#c8a96e'}}>{deleteConfirm.quoteNum}</span>?</div>
+            <div style={{display:'flex', gap:8, justifyContent:'center'}}>
+              <button className="btn" style={{padding:'8px 16px'}} onClick={()=>setDeleteConfirm(null)}>No, keep it</button>
+              <button className="btn-del" style={{padding:'8px 16px'}} onClick={()=>deleteQuote(deleteConfirm.id)}>Yes, delete it</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

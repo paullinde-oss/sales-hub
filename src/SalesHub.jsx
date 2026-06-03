@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { initializeApp } from "firebase/app";
 
-const APP_VERSION = "v2.1 — Jun 2025";
+const APP_VERSION = "v2.2 — Jun 2025";
 import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "firebase/firestore";
 
 // ─── Firebase config ────────────────────────────────────────────────────────
@@ -1064,6 +1064,39 @@ export default function SalesHub() {
   );
 }
 
+// ─── CSV Export ───────────────────────────────────────────────────────────────
+function exportQuotesCSV(quotes) {
+  const escape = v => {
+    const s = String(v||"").replace(/"/g,'""');
+    return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s}"` : s;
+  };
+  const headers = ['Customer Name','Company','Currency','Prepaid','Quote #','SKUs','Total','Saved By','Date Saved','Quote Notes'];
+  const rows = (quotes||[]).map(q => {
+    const skus = (q.lineItems||[]).map(li=>li.sku||"").filter(Boolean).join(', ');
+    const total = (q.lineItems||[]).reduce((s,li)=>(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0)+s,0);
+    return [
+      escape(q.name),
+      escape(q.company),
+      escape(q.currency||'CAD'),
+      escape(q.prepaid?'Yes':'No'),
+      escape(q.quoteNum),
+      escape(skus),
+      escape(total.toFixed(2)),
+      escape(q.savedBy),
+      escape(q.savedDate),
+      escape(q.notes),
+    ].join(',');
+  });
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `BMP_Quotes_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ─── Quotes Tab ────────────────────────────────────────────────────────────────
 function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUSD,effectiveProductsUSD,createNewQuote,setActiveQuote,saveQuote,editQuote,openEmailModal,generatePDF,deleteConfirm,setDeleteConfirm,deleteQuote,duplicateQuote,quoteSort,setQuoteSort,closeConfirm,setCloseConfirm,T}) {
   return (
@@ -1072,11 +1105,19 @@ function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUS
       <div style={{width:252,borderRight:"1px solid #181818",display:"flex",flexDirection:"column",background:"#0a0a0a"}}>
         <div style={{padding:"12px 12px 8px",borderBottom:"1px solid #181818"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-            <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".12em",color:"#444"}}>Search Quotes</div>
-            <button onClick={()=>setQuoteSort(s=>s==="asc"?"desc":"asc")}
-              style={{background:"transparent",border:`1px solid ${T.border}`,color:T.muted,padding:"2px 8px",fontSize:9,cursor:"pointer",letterSpacing:".04em",borderRadius:2,fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif"}}>
-              {quoteSort==="asc"?"↑ Oldest first":"↓ Newest first"}
-            </button>
+            <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".12em",color:T.sectionLabel||"#888"}}>Search Quotes</div>
+            <div style={{display:"flex",gap:4}}>
+              <button onClick={()=>setQuoteSort(s=>s==="asc"?"desc":"asc")}
+                style={{background:"transparent",border:`1px solid ${T.border}`,color:T.muted,padding:"2px 8px",fontSize:9,cursor:"pointer",letterSpacing:".04em",borderRadius:2,fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif"}}>
+                {quoteSort==="asc"?"↑ Oldest":"↓ Newest"}
+              </button>
+              <button title="Export all quotes to CSV" onClick={()=>exportQuotesCSV(quotes)}
+                style={{background:"transparent",border:`1px solid ${T.border}`,color:T.muted,padding:"2px 7px",fontSize:11,cursor:"pointer",borderRadius:2,lineHeight:1}}
+                onMouseOver={e=>e.currentTarget.style.color=T.accent}
+                onMouseOut={e=>e.currentTarget.style.color=T.muted}>
+                ⬇
+              </button>
+            </div>
           </div>
           {[{k:"name",p:"Name"},{k:"company",p:"Company"},{k:"date",p:"Date"},{k:"madeBy",p:"Made By"},{k:"quoteNum",p:"Quote #"}].map(f=>(
             <input key={f.k} value={searchQ[f.k]} onChange={e=>setSearchQ(p=>({...p,[f.k]:e.target.value}))}
@@ -1095,33 +1136,9 @@ function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUS
           )}
         </div>
         <div style={{flex:1,overflowY:"auto"}}>
-          {quotes.length===0&&<div style={{padding:16,color:"#333",fontSize:11,textAlign:"center"}}>No quotes</div>}
-          {[...quotes].sort((a,b)=>{
-            const na=parseInt((a.quoteNum||"").replace(/\D/g,""))||0;
-            const nb=parseInt((b.quoteNum||"").replace(/\D/g,""))||0;
-            return quoteSort==="asc" ? na-nb : nb-na;
-          }).map(q=>(
-            <div key={q.id} style={{padding:"9px 12px",borderBottom:"1px solid #131313",cursor:"pointer",background:activeQuote?.id===q.id?"#161616":"transparent",position:"relative"}}
-              onClick={()=>setActiveQuote(q)}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div style={{fontSize:11,fontWeight:600,color:"#bbb"}}>{q.quoteNum}</div>
-                <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <span className={`pill ${q.saved?"pill-saved":"pill-open"}`}>{q.saved?"Saved":"Open"}</span>
-                  <button title="Duplicate quote"
-                    onClick={e=>{e.stopPropagation();duplicateQuote(q);}}
-                    style={{background:"transparent",border:`1px solid ${T.borderMid}`,color:T.muted,padding:"1px 6px",fontSize:10,cursor:"pointer",transition:"all .12s",fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif"}}
-                    onMouseOver={e=>e.currentTarget.style.color=T.accent}
-                    onMouseOut={e=>e.currentTarget.style.color=T.muted}>
-                    ⧉
-                  </button>
-                  <button className="btn-del" style={{padding:"1px 6px",fontSize:10}} title="Delete quote"
-                    onClick={e=>{e.stopPropagation();setDeleteConfirm(q);}}>✕</button>
-                </div>
-              </div>
-              <div style={{fontSize:11,color:"#777",marginTop:2}}>{q.name||"—"}</div>
-              <div style={{fontSize:10,color:"#444"}}>{q.company||"—"} · <span style={{color:"var(--accent)",fontWeight:600}}>{q.lineItems?.reduce((a,li)=>a+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0)>0?fmtCur((q.lineItems||[]).reduce((a,li)=>a+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0)):""}</span>{q.lineItems?.reduce((a,li)=>a+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0)>0?" "+q.currency:q.currency}</div>
-            </div>
-          ))}
+          <QuoteGroupedList quotes={quotes} activeQuote={activeQuote} setActiveQuote={setActiveQuote}
+            setDeleteConfirm={setDeleteConfirm} duplicateQuote={duplicateQuote} searchQ={searchQ}
+            quoteSort={quoteSort} T={T}/>
         </div>
       </div>
       {/* Right: form */}
@@ -3575,6 +3592,186 @@ function MobileLoadCalc({T}) {
           ↺ Reset All
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Quote Grouped List ────────────────────────────────────────────────────────
+function QuoteGroupedList({quotes, activeQuote, setActiveQuote, setDeleteConfirm, duplicateQuote, searchQ, quoteSort, T}) {
+
+  // ── Week/month helpers ───────────────────────────────────────────────────
+  function getWeekBounds() {
+    const now = new Date();
+    const day = now.getDay(); // 0=Sun,1=Mon...6=Sat
+    const mon = new Date(now); mon.setDate(now.getDate() - ((day+6)%7)); mon.setHours(0,0,0,0);
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59,999);
+    return {mon, sun};
+  }
+
+  function parseDate(savedDate) {
+    if (!savedDate) return null;
+    const d = new Date(savedDate);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function getMonthKey(d) {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  }
+
+  function getMonthLabel(key) {
+    const [y, m] = key.split('-');
+    return new Date(parseInt(y), parseInt(m)-1, 1).toLocaleDateString('en-CA', {month:'long', year:'numeric'});
+  }
+
+  // ── Apply search filter ───────────────────────────────────────────────────
+  const filtered = useMemo(() => {
+    const s = searchQ || {};
+    return (quotes||[]).filter(q => {
+      const items = q.lineItems||[];
+      const skuMatch = !s.sku || items.some(li=>(li.sku||"").toLowerCase().includes(s.sku.toLowerCase()));
+      const descMatch = !s.description || items.some(li=>(li.description||"").toLowerCase().includes(s.description.toLowerCase()));
+      return (
+        (!s.name || (q.name||"").toLowerCase().includes(s.name.toLowerCase())) &&
+        (!s.company || (q.company||"").toLowerCase().includes(s.company.toLowerCase())) &&
+        (!s.date || (q.savedDate||"").includes(s.date)) &&
+        (!s.madeBy || (q.savedBy||"").toLowerCase().includes(s.madeBy.toLowerCase())) &&
+        (!s.quoteNum || (q.quoteNum||"").toLowerCase().includes(s.quoteNum.toLowerCase())) &&
+        skuMatch && descMatch
+      );
+    });
+  }, [quotes, searchQ]);
+
+  // ── Group into this week / this month / past months ───────────────────────
+  const {groups, thisWeekKey, thisMonthKey} = useMemo(() => {
+    const {mon, sun} = getWeekBounds();
+    const now = new Date();
+    const thisMonthKey = getMonthKey(now);
+
+    const thisWeek = [];
+    const byMonth = {};
+
+    const sorted = [...filtered].sort((a,b) => {
+      const na = parseInt((a.quoteNum||"").replace(/\D/g,""))||0;
+      const nb = parseInt((b.quoteNum||"").replace(/\D/g,""))||0;
+      return quoteSort==="asc" ? na-nb : nb-na;
+    });
+
+    sorted.forEach(q => {
+      const d = parseDate(q.savedDate);
+      if (d && d >= mon && d <= sun) {
+        thisWeek.push(q);
+      } else {
+        const mk = d ? getMonthKey(d) : 'unsorted';
+        if (!byMonth[mk]) byMonth[mk] = [];
+        byMonth[mk].push(q);
+      }
+    });
+
+    // Sort month keys newest first
+    const monthKeys = Object.keys(byMonth).sort((a,b) => b.localeCompare(a));
+
+    const groups = [];
+    if (thisWeek.length > 0) groups.push({id:'thisweek', label:'This Week', quotes:thisWeek, defaultOpen:true});
+    monthKeys.forEach(mk => {
+      const label = mk==='unsorted' ? 'Unsorted' : getMonthLabel(mk);
+      const isCurrentMonth = mk === thisMonthKey;
+      groups.push({id:mk, label, quotes:byMonth[mk], defaultOpen:isCurrentMonth});
+    });
+
+    return {groups, thisWeekKey:'thisweek', thisMonthKey};
+  }, [filtered, quoteSort]);
+
+  // ── Folder open/close state ────────────────────────────────────────────────
+  const [open, setOpen] = useState(() => {
+    const init = {};
+    groups.forEach(g => { if(g.defaultOpen) init[g.id] = true; });
+    return init;
+  });
+
+  // Auto-open new groups when groups change
+  useEffect(() => {
+    setOpen(prev => {
+      const next = {...prev};
+      groups.forEach(g => { if(g.defaultOpen && next[g.id] === undefined) next[g.id] = true; });
+      return next;
+    });
+  }, [groups.map(g=>g.id).join(',')]);
+
+  const toggle = id => setOpen(o => ({...o, [id]:!o[id]}));
+
+  if (filtered.length === 0) {
+    return <div style={{padding:16, color:T.muted, fontSize:11, textAlign:'center'}}>
+      {(quotes||[]).length===0 ? 'No quotes yet' : 'No quotes match your search'}
+    </div>;
+  }
+
+  return (
+    <div style={{paddingBottom:8}}>
+      {groups.map(group => (
+        <div key={group.id}>
+          {/* Folder header */}
+          <div onClick={()=>toggle(group.id)}
+            style={{display:'flex', alignItems:'center', gap:6, padding:'6px 12px',
+              cursor:'pointer', background:T.tableHead, borderBottom:`1px solid ${T.border}`,
+              borderTop:`1px solid ${T.border}`, userSelect:'none',
+              position:'sticky', top:0, zIndex:2}}
+            onMouseOver={e=>e.currentTarget.style.background=T.rowHover}
+            onMouseOut={e=>e.currentTarget.style.background=T.tableHead}>
+            <span style={{fontSize:10, color:T.muted, width:10, flexShrink:0}}>
+              {open[group.id] ? '▾' : '▸'}
+            </span>
+            <span style={{fontSize:10, fontWeight:600, color:T.subtext, letterSpacing:'.04em', flex:1}}>
+              {group.label}
+            </span>
+            <span style={{fontSize:9, background:T.borderMid, color:T.muted, borderRadius:10,
+              padding:'1px 7px', fontWeight:600, flexShrink:0}}>
+              {group.quotes.length}
+            </span>
+          </div>
+
+          {/* Quotes in folder */}
+          {open[group.id] && group.quotes.map(q => {
+            const isActive = activeQuote?.id === q.id;
+            const total = (q.lineItems||[]).reduce((s,li)=>(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0)+s, 0);
+            return (
+              <div key={q.id}
+                onClick={()=>setActiveQuote(q)}
+                style={{padding:'9px 12px', cursor:'pointer', borderBottom:`1px solid ${T.border}`,
+                  background: isActive ? T.activeBg : T.cardBg,
+                  borderLeft: isActive ? `2px solid #c8a96e` : '2px solid transparent'}}
+                onMouseOver={e=>{ if(!isActive) e.currentTarget.style.background=T.rowHover; }}
+                onMouseOut={e=>{ if(!isActive) e.currentTarget.style.background=T.cardBg; }}>
+                <div style={{display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:6}}>
+                  <div style={{flex:1, minWidth:0}}>
+                    <div style={{display:'flex', alignItems:'center', gap:6, marginBottom:2}}>
+                      <span style={{fontSize:12, fontWeight:700, color:'#c8a96e'}}>{q.quoteNum}</span>
+                      <span className={`pill ${q.saved?'pill-saved':'pill-open'}`}>{q.saved?'Saved':'Open'}</span>
+                    </div>
+                    <div style={{fontSize:11, color:T.subtext, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{q.name||'—'}</div>
+                    <div style={{fontSize:10, color:T.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                      {q.company||'—'}
+                      {total>0 && <span style={{color:T.accent, fontWeight:600}}> · {fmtCur(total)}</span>}
+                      {' '}{q.currency}
+                    </div>
+                  </div>
+                  <div style={{display:'flex', flexDirection:'column', gap:3, flexShrink:0}}>
+                    <button title="Duplicate" onClick={e=>{e.stopPropagation();duplicateQuote(q);}}
+                      style={{background:'transparent', border:`1px solid ${T.borderMid}`, color:T.muted,
+                        width:22, height:22, cursor:'pointer', fontSize:11, borderRadius:2, lineHeight:1,
+                        display:'flex', alignItems:'center', justifyContent:'center'}}
+                      onMouseOver={e=>e.currentTarget.style.color=T.accent}
+                      onMouseOut={e=>e.currentTarget.style.color=T.muted}>⧉</button>
+                    <button title="Delete" onClick={e=>{e.stopPropagation();setDeleteConfirm(q);}}
+                      style={{background:'transparent', border:'1px solid #2a1818', color:'#774444',
+                        width:22, height:22, cursor:'pointer', fontSize:11, borderRadius:2, lineHeight:1,
+                        display:'flex', alignItems:'center', justifyContent:'center'}}>✕</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }

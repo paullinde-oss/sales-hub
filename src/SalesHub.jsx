@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { initializeApp } from "firebase/app";
 
-const APP_VERSION = "v2.2 — Jun 2025";
+const APP_VERSION = "v2.4 — Jun 2025";
 import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "firebase/firestore";
 
 // ─── Firebase config ────────────────────────────────────────────────────────
@@ -644,7 +644,7 @@ export default function SalesHub() {
     };
     try {
       return (productsUSD||[]).map((usdP) => {
-        const cadP = productsCAD.find(p => p.sku === usdP.sku);
+        const cadP = (productsCAD||[]).find(p => p.sku === usdP.sku);
         if (!cadP) return usdP;
         return {
           ...usdP,
@@ -741,11 +741,11 @@ export default function SalesHub() {
     const rowsHtml=(q.lineItems||[]).map(li=>{
       const lt=(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0);
       return `<tr>
-        <td style="border:1px solid #000;padding:6px 12px;text-align:center;font-family:Calibri,Arial,sans-serif;font-size:13px;">${li.sku||"—"}</td>
-        <td style="border:1px solid #000;padding:6px 12px;font-family:Calibri,Arial,sans-serif;font-size:13px;">${li.description||"—"}</td>
-        <td style="border:1px solid #000;padding:6px 12px;text-align:center;font-family:Calibri,Arial,sans-serif;font-size:13px;">${li.qty}</td>
-        <td style="border:1px solid #000;padding:6px 12px;text-align:right;font-family:Calibri,Arial,sans-serif;font-size:13px;">${fmtCur(li.unitPrice)}</td>
-        <td style="border:1px solid #000;padding:6px 12px;text-align:right;font-family:Calibri,Arial,sans-serif;font-size:13px;font-weight:bold;">${fmtCur(lt)}</td>
+        <td style="border:1px solid #000;padding:5px 8px;text-align:center;font-family:Calibri,Arial,sans-serif;font-size:12px;">${li.sku||"—"}</td>
+        <td style="border:1px solid #000;padding:5px 8px;font-family:Calibri,Arial,sans-serif;font-size:12px;">${li.description||"—"}</td>
+        <td style="border:1px solid #000;padding:5px 8px;text-align:center;font-family:Calibri,Arial,sans-serif;font-size:12px;">${li.qty}</td>
+        <td style="border:1px solid #000;padding:5px 8px;text-align:right;font-family:Calibri,Arial,sans-serif;font-size:12px;">${fmtCur(li.unitPrice)}</td>
+        <td style="border:1px solid #000;padding:5px 8px;text-align:right;font-family:Calibri,Arial,sans-serif;font-size:12px;font-weight:bold;">${fmtCur(lt)}</td>
       </tr>`;
     }).join("");
 
@@ -756,16 +756,14 @@ export default function SalesHub() {
     </tr>`;
 
     const html=`<div style="font-family:Calibri,Arial,sans-serif;font-size:14px;line-height:1.6;color:#000;">
-<p>Hello ${q.name||"{NAME}"},</p>
-<p>Thanks for reaching out! I would love to help you out, please see quote:</p>
-<table style="border-collapse:collapse;width:100%;margin:16px 0;">
+<table style="border-collapse:collapse;width:640px;margin:16px 0;table-layout:fixed;">
   <thead>
     <tr>
-      <th style="border:1px solid #000;padding:7px 12px;background:#000;color:#fff;font-family:Calibri,Arial,sans-serif;font-size:13px;font-weight:bold;text-align:center;">SKU</th>
-      <th style="border:1px solid #000;padding:7px 12px;background:#000;color:#fff;font-family:Calibri,Arial,sans-serif;font-size:13px;font-weight:bold;text-align:center;">Description</th>
-      <th style="border:1px solid #000;padding:7px 12px;background:#000;color:#fff;font-family:Calibri,Arial,sans-serif;font-size:13px;font-weight:bold;text-align:center;">Qty</th>
-      <th style="border:1px solid #000;padding:7px 12px;background:#000;color:#fff;font-family:Calibri,Arial,sans-serif;font-size:13px;font-weight:bold;text-align:center;">Unit Price</th>
-      <th style="border:1px solid #000;padding:7px 12px;background:#000;color:#fff;font-family:Calibri,Arial,sans-serif;font-size:13px;font-weight:bold;text-align:center;">Total Price</th>
+      <th style="border:1px solid #000;padding:7px 10px;background:#000;color:#fff;font-family:Calibri,Arial,sans-serif;font-size:12px;font-weight:bold;text-align:center;width:130px;">SKU</th>
+      <th style="border:1px solid #000;padding:7px 10px;background:#000;color:#fff;font-family:Calibri,Arial,sans-serif;font-size:12px;font-weight:bold;text-align:center;">Description</th>
+      <th style="border:1px solid #000;padding:7px 10px;background:#000;color:#fff;font-family:Calibri,Arial,sans-serif;font-size:12px;font-weight:bold;text-align:center;width:50px;">Qty</th>
+      <th style="border:1px solid #000;padding:7px 10px;background:#000;color:#fff;font-family:Calibri,Arial,sans-serif;font-size:12px;font-weight:bold;text-align:center;width:100px;">Unit Price</th>
+      <th style="border:1px solid #000;padding:7px 10px;background:#000;color:#fff;font-family:Calibri,Arial,sans-serif;font-size:12px;font-weight:bold;text-align:center;width:100px;">Total Price</th>
     </tr>
   </thead>
   <tbody>
@@ -773,12 +771,12 @@ export default function SalesHub() {
     ${bottomRow}
   </tbody>
 </table>
-<p>Let me know if you have any questions or concerns.</p>
+<p>Let me know if you have any questions or need additional information.</p>
 <p>Thank you,</p>
 </div>`;
 
     // Plain-text fallback
-    const plain=`Hello ${q.name||"{NAME}"},\n\nThanks for reaching out! I would love to help you out, please see quote:\n\n${(q.lineItems||[]).map(li=>`${li.sku||"—"}  |  ${li.description||"—"}  |  Qty: ${li.qty}  |  Unit: ${fmtCur(li.unitPrice)}  |  Total: ${fmtCur((parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0))}`).join("\n")}\n\nTotal (${q.currency}): ${fmtCur(total)}${q.notes?`\nNotes: ${q.notes}`:""}\n\nLet me know if you have any questions or concerns.\n\nThank you,`;
+    const plain=`${(q.lineItems||[]).map(li=>`${li.sku||"—"}  |  ${li.description||"—"}  |  Qty: ${li.qty}  |  Unit: ${fmtCur(li.unitPrice)}  |  Total: ${fmtCur((parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0))}`).join("\n")}\n\nTotal (${q.currency}): ${fmtCur(total)}${q.notes?`\nNotes: ${q.notes}`:""}\n\nLet me know if you have any questions or need additional information.\n\nThank you,`;
 
     setEmailModal({html, plain});
   }
@@ -1179,13 +1177,31 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
   const products = quote.currency==="CAD"?productsCAD:productsUSD; // productsUSD prop is already auto-converted
   const [qtyWarnings,setQtyWarnings] = useState({});
 
-  function upd(field,val){setQuote(q=>({...q,[field]:val}));}
+  function upd(field,val){
+    setQuote(q=>{
+      const updated = {...q, [field]:val};
+      // When currency switches, recalc all line item prices from the new product list
+      if (field==='currency') {
+        const newProds = val==='CAD' ? productsCAD : (productsUSD||[]);
+        updated.lineItems = (q.lineItems||[]).map(li => {
+          const prod = newProds.find(p=>p.sku===li.sku);
+          if (!prod) return li;
+          const tier = getPriceTier(prod, li.qty, updated.prepaid);
+          if (!tier.price) return li;
+          const newBase = tier.price;
+          const newUnit = Math.round(newBase*(1+(li.increase||0)/100)*100)/100;
+          return {...li, basePrice:newBase, unitPrice:newUnit, priceTier:tier.tier};
+        });
+      }
+      return updated;
+    });
+  }
   function updLI(id,field,val){
     setQuote(q=>({...q,lineItems:(q.lineItems||[]).map(li=>{
       if(li.id!==id)return li;
       const u={...li,[field]:val};
       if(field==="sku"||field==="description"){
-        const prod=field==="sku"?products.find(p=>p.sku===val):products.find(p=>p.description===val);
+        const prod=field==="sku"?(products||[]).find(p=>p.sku===val):(products||[]).find(p=>p.description===val);
         if(prod){
           if(field==="sku")u.description=prod.description;else u.sku=prod.sku;
           const tier=getPriceTier(prod,u.qty,q.prepaid);
@@ -1195,7 +1211,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
       }
       if(field==="increase"){const p=parseFloat(val)||0;u.unitPrice=Math.round(u.basePrice*(1+p/100)*100)/100;}
       if(field==="qty"){
-        const prod=products.find(p=>p.sku===u.sku);
+        const prod=(products||[]).find(p=>p.sku===u.sku);
         if(prod){
           // Recalc price tier when qty changes
           const tier=getPriceTier(prod,val,q.prepaid);
@@ -3682,20 +3698,18 @@ function QuoteGroupedList({quotes, activeQuote, setActiveQuote, setDeleteConfirm
   }, [filtered, quoteSort]);
 
   // ── Folder open/close state ────────────────────────────────────────────────
-  const [open, setOpen] = useState(() => {
-    const init = {};
-    groups.forEach(g => { if(g.defaultOpen) init[g.id] = true; });
-    return init;
-  });
+  const [open, setOpen] = useState({});
 
-  // Auto-open new groups when groups change
+  // Auto-open new groups when groups change (and on first render)
   useEffect(() => {
     setOpen(prev => {
       const next = {...prev};
-      groups.forEach(g => { if(g.defaultOpen && next[g.id] === undefined) next[g.id] = true; });
+      (groups||[]).forEach(g => {
+        if (g.defaultOpen && next[g.id] === undefined) next[g.id] = true;
+      });
       return next;
     });
-  }, [groups.map(g=>g.id).join(',')]);
+  }, [(groups||[]).map(g=>g.id).join(',')]);
 
   const toggle = id => setOpen(o => ({...o, [id]:!o[id]}));
 

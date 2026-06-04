@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { initializeApp } from "firebase/app";
 
-const APP_VERSION = "v2.7 — Jun 2025";
+const APP_VERSION = "v2.8 — Jun 2025";
 import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "firebase/firestore";
 
 // ─── Firebase config ────────────────────────────────────────────────────────
@@ -894,7 +894,7 @@ export default function SalesHub() {
           {activeTab==="quotes"&&<QuotesTab quotes={filteredQuotes} activeQuote={activeQuote} searchQ={searchQ} setSearchQ={setSearchQ}
             productsCAD={productsCAD} productsUSD={effectiveProductsUSD} createNewQuote={createNewQuote}
             setActiveQuote={setActiveQuote} saveQuote={saveQuote} editQuote={q=>setActiveQuote({...q,saved:false})}
-            openEmailModal={openEmailModal} generatePDF={generatePDF} deleteConfirm={deleteConfirm} setDeleteConfirm={setDeleteConfirm} deleteQuote={deleteQuote} duplicateQuote={duplicateQuote} quoteSort={quoteSort} setQuoteSort={setQuoteSort} closeConfirm={closeConfirm} setCloseConfirm={setCloseConfirm} T={T}/>}
+            openEmailModal={openEmailModal} generatePDF={generatePDF} deleteConfirm={deleteConfirm} setDeleteConfirm={setDeleteConfirm} deleteQuote={deleteQuote} duplicateQuote={duplicateQuote} quoteSort={quoteSort} setQuoteSort={setQuoteSort} closeConfirm={closeConfirm} setCloseConfirm={setCloseConfirm} exchangeRate={exchangeRate} T={T}/>}
           {activeTab==="dims"&&<DimsTab dims={dims} setDims={setDims} T={T}/>}
           {activeTab==="shipping"&&<ShippingTab T={T}/>}
           {activeTab==="products"&&<ProductsTab products={filteredProducts} setProducts={setCurrentProducts}
@@ -1096,7 +1096,7 @@ function exportQuotesCSV(quotes) {
 }
 
 // ─── Quotes Tab ────────────────────────────────────────────────────────────────
-function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUSD,effectiveProductsUSD,createNewQuote,setActiveQuote,saveQuote,editQuote,openEmailModal,generatePDF,deleteConfirm,setDeleteConfirm,deleteQuote,duplicateQuote,quoteSort,setQuoteSort,closeConfirm,setCloseConfirm,T}) {
+function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUSD,effectiveProductsUSD,createNewQuote,setActiveQuote,saveQuote,editQuote,openEmailModal,generatePDF,deleteConfirm,setDeleteConfirm,deleteQuote,duplicateQuote,quoteSort,setQuoteSort,closeConfirm,setCloseConfirm,exchangeRate,T}) {
   return (
     <div style={{display:"flex",height:"100%",overflow:"hidden"}}>
       {/* Left panel */}

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { initializeApp } from "firebase/app";
 
-const APP_VERSION = "v2.6 — Jun 2025";
+const APP_VERSION = "v2.7 — Jun 2025";
 import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "firebase/firestore";
 
 // ─── Firebase config ────────────────────────────────────────────────────────
@@ -1166,7 +1166,7 @@ function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUS
 }
 
 // ─── Quote Form ────────────────────────────────────────────────────────────────
-function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail,onPDF,onClose,onNewQuote,isMobile,exchangeRate,T}) {
+function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail,onPDF,onClose,onNewQuote,isMobile,exchangeRate=0.73,T}) {
   // Compute load warnings live from line items
   const loadWarnings = useMemo(() => {
     try {
@@ -1183,7 +1183,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
       const updated = {...q, [field]:val};
       // When currency switches, recalc all line item prices
       if (field==='currency') {
-        const rate = parseFloat(exchangeRate) || 0.73;
+        const rate = parseFloat(exchangeRate||0.73) || 0.73;
         updated.lineItems = (q.lineItems||[]).map(li => {
           // Always get the base CAD price first
           const cadProd = (productsCAD||[]).find(p=>p.sku===li.sku);

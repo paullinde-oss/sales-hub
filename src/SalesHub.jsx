@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { initializeApp } from "firebase/app";
 
-const APP_VERSION = "v2.4 — Jun 2025";
+const APP_VERSION = "v2.6 — Jun 2025";
 import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "firebase/firestore";
 
 // ─── Firebase config ────────────────────────────────────────────────────────
@@ -1157,7 +1157,8 @@ function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUS
             </div>
           : <QuoteForm quote={activeQuote} setQuote={setActiveQuote} productsCAD={productsCAD} productsUSD={effectiveProductsUSD}
               onSave={saveQuote} onEdit={editQuote} onEmail={openEmailModal} onPDF={generatePDF}
-              onClose={()=>{ if(activeQuote&&!activeQuote.saved){setCloseConfirm(activeQuote);}else{setActiveQuote(null);} }} onNewQuote={()=>{setActiveQuote(null);setTimeout(createNewQuote,50);}} T={T}/>
+              onClose={()=>{ if(activeQuote&&!activeQuote.saved){setCloseConfirm(activeQuote);}else{setActiveQuote(null);} }} onNewQuote={()=>{setActiveQuote(null);setTimeout(createNewQuote,50);}}
+              exchangeRate={exchangeRate} T={T}/>
         }
       </div>
     </div>
@@ -1165,7 +1166,7 @@ function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUS
 }
 
 // ─── Quote Form ────────────────────────────────────────────────────────────────
-function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail,onPDF,onClose,onNewQuote,isMobile,T}) {
+function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail,onPDF,onClose,onNewQuote,isMobile,exchangeRate,T}) {
   // Compute load warnings live from line items
   const loadWarnings = useMemo(() => {
     try {
@@ -1180,17 +1181,32 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
   function upd(field,val){
     setQuote(q=>{
       const updated = {...q, [field]:val};
-      // When currency switches, recalc all line item prices from the new product list
+      // When currency switches, recalc all line item prices
       if (field==='currency') {
-        const newProds = val==='CAD' ? productsCAD : (productsUSD||[]);
+        const rate = parseFloat(exchangeRate) || 0.73;
         updated.lineItems = (q.lineItems||[]).map(li => {
-          const prod = newProds.find(p=>p.sku===li.sku);
-          if (!prod) return li;
-          const tier = getPriceTier(prod, li.qty, updated.prepaid);
-          if (!tier.price) return li;
-          const newBase = tier.price;
-          const newUnit = Math.round(newBase*(1+(li.increase||0)/100)*100)/100;
-          return {...li, basePrice:newBase, unitPrice:newUnit, priceTier:tier.tier};
+          // Always get the base CAD price first
+          const cadProd = (productsCAD||[]).find(p=>p.sku===li.sku);
+          if (!cadProd) return li;
+          const cadTier = getPriceTier(cadProd, li.qty, updated.prepaid);
+          if (!cadTier.price) return li;
+
+          let newBase;
+          if (val==='USD') {
+            // Check if USD product list has a specific price for this SKU
+            const usdProd = (productsUSD||[]).find(p=>p.sku===li.sku);
+            const usdTier = usdProd ? getPriceTier(usdProd, li.qty, updated.prepaid) : null;
+            // Use explicit USD price if set, otherwise convert from CAD
+            newBase = (usdTier && usdTier.price > 0)
+              ? usdTier.price
+              : Math.round(cadTier.price * rate * 100) / 100;
+          } else {
+            // Switching back to CAD — use CAD price directly
+            newBase = cadTier.price;
+          }
+
+          const newUnit = Math.round(newBase * (1+(li.increase||0)/100) * 100) / 100;
+          return {...li, basePrice:newBase, unitPrice:newUnit, priceTier:cadTier.tier};
         });
       }
       return updated;

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { initializeApp } from "firebase/app";
 
-const APP_VERSION = "v3.0 — Jun 2025";
+const APP_VERSION = "v3.2 — Jun 2025";
 const FAVICON_DARK  = "data:image/png;base64,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";
 const FAVICON_LIGHT = "data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAIAAgADASIAAhEBAxEB/8QAHAABAQACAwEBAAAAAAAAAAAAAAkBCAUGBwQC/8QAQRABAAABCgQCCAQGAQQCAwAAAAECAwQFBgcYVpXSEVFX0xeUCBYxN1V1kpM1dLKzEhMhM3GxFTI0QWEUgSJFY//EABQBAQAAAAAAAAAAAAAAAAAAAAD/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwDcsAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGm1Y+m3SKJWFIovh5NS/wCTOypv+L/lYw48Ixhx/tf+gbkjS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojS7HHSOnU1q0e0Y46R06mtWj2gbojUu770w5+1Vuaks1Gwc1RYVpTpmiRnoVnGX/L/mS4Sf4uH8qHHhx9nGDbQAAAAAAAACKO1ovx+sPzU7+uKxMUdrRfj9Yfmp39cQfAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADvPo/+++xXzyifvSVX4exKD0f/ffYr55RP3pKr8PYAAAAAAAABFHa0X4/WH5qd/XFYmKO1ovx+sPzU7+uIPgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB3n0f/AH32K+eUT96Sq/D2JQej/wC++xXzyifvSVX4ewAAAAAAAACKO1ovx+sPzU7+uKxMUdrQwj/z9Yf0j/3U7+uIPgGeEeUThHlEGBnhHlE4R5RBgZ4R5ROEeUQYGeEeUThHlEGBnhHlE4R5RBgZ4R5ROEeUQYGeEeUThHlEGBnhHlE4R5RBgZ4R5ROEeUQYGeEeUThHlEGBnhHlE4R5RBgZ4R5ROEeUQYGeEeUThHlEGBnhHlE4R5RBgZ4R5ROEeUQYGeEeUThHlEGBnhHlE4R5RBgZ4R5ROEeUQYGeEeUThHlEGBnhHlE4R5RBgZ4R5ROEeUQYGeEeUThHlEGBnhHlE4R5RBgZ4R5ROEeUQYGeEeUThHlEGBnhHlE4R5RB3j0f/ffYr55RP3pKr8PYlBcBCPjfYr+n/wC8on70lV+HsAAAAAAAAAcNKspZaVKjKlWbqaMqMeMYxoM3xjH6XMgOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOF9UrK5ZqbyM1tPVKyuWam8jNbXNAOJo9mLN0efkT9Hs/VMzOzcqEqRLkUObkypMYeyMIwh/SLlgAAAAAAAAAdSnLzrtpuclTc5eDZORLkxjCVJlVxR4RhGHthH/APN22KO1oYx/5+sPzU7+uIKteKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK0eKN2fUSyWs0feeKN2fUSyWs0fekvxjzOMeYK30G8a72n02ZoVBt3ZilUqflwm5mZma2mJcuclxjwhJkyYSuMYxj/ThB2hKD0f4x8b7FfPKJ+9JVfh7AAAAAAAAAIo7Wi/H6w/NTv64rExR2tF+P1h+anf1xB8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAO8+j/777FfPKJ+9JVfh7EoPR/999ivnlE/ekqvw9gAAAAAAAAEUdrRfj9Yfmp39cViYo7Wi/H6w/NTv64g+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHefR/8AffYr55RP3pKr8PYlB6P/AL77FfPKJ+9JVfh7AAAAAAAAAIo7Wi/H6w/NTv64rEtS6f6E1S0unUilRt9WEmM9OypyMn/jpEeHGMY8P+v/ANg0bG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g0iG7uB6pOoFYadI3mB6pOoFYadI3g1b9H/332K+eUT96Sq/D2NXrC+h7VFlbZ1PaWatxTqVOVXTZqlyZmVQJEmE5GRLhK/hjH+P+nHg2hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAT/AL9vSDves3fBamoaltfLotXUGsZyZo0zCgUaX/BIhH+kOMqbjGP/ANxioAld6Tfv/tr82nv9g5zE9flnmXp1E7RievyzzL06idp44A9jxPX5Z5l6dRO0Ynr8s8y9OonaeOAPY8T1+WeZenUTtGJ6/LPMvTqJ2njgD2PE9flnmXp1E7RievyzzL06idp44A9jxPX5Z5l6dRO0Ynr8s8y9OonaeOAPY8T1+WeZenUTtGJ6/LPMvTqJ2njgD2PE9flnmXp1E7RievyzzL06idp44A9jxPX5Z5l6dRO0Ynr8s8y9OonaeOAPY8T1+WeZenUTtGJ6/LPMvTqJ2njgD2PE9flnmXp1E7RievyzzL06idp44A9jxPX5Z5l6dRO0Ynr8s8y9OonaeOAPY8T1+WeZenUTtGJ6/LPMvTqJ2njgD2PE9flnmXp1E7RievyzzL06idp44A9jxPX5Z5l6dRO0Ynr8s8y9OonaeOAPY8T1+WeZenUTtGJ6/LPMvTqJ2njgD2PE9flnmXp1E7RievyzzL06idp44A9jxPX5Z5l6dRO0Ynr8s8y9OonaeOAPY8T1+WeZenUTtGJ6/LPMvTqJ2njgD2PE9flnmXp1E7RievyzzL06idp44A9jxPX5Z5l6dRO0Ynr8s8y9OonaeOAPY8T1+WeZenUTtGJ6/LPMvTqJ2njgD2PE9flnmXp1E7RievyzzL06idp44A9jxPX5Z5l6dRO0Ynr8s8y9OonaeOAPY8T1+WeZenUTtGJ6/LPMvTqJ2njgD2PE9flnmXp1E7RievyzzL06idp44A9jxPX5Z5l6dRO0Ynr8s8y9OonaeOANjrn/AEiL4q+vUsvUta2xl0igU6taNR6RNf8AwKNJ/jm5U5JhKk8ZM3CMOMIx/rCMIqFQ9iUFwHvusV88on70lV+HsAAAAAAAAASu9Jv3/wBtfm09/tVFK70m/f8A21+bT3+wecAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA7zcB77rFfPKJ+9JVfh7EoLgPfdYr55RP3pKr8PYAAAAAAAAAld6Tfv/tr82nv9qopXek37/wC2vzae/wBg84AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB3m4D33WK+eUT96Sq/D2JQXAe+6xXzyifvSVX4ewAAAAAAAABPK/wAuQvWr++W1dc1PYusKXQKZWU7O0efkSpv+GckRj/SMOMrioaAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAlzh5vnyBWf1Te4w83z5ArP6pvcqMAnNc1cZezU17Fla2rOxNY0ahUOt6NPUielSpvhNyJM7JjKlR4SvZCEFGYewAAAAAAAAAAaZ1j6blLolYUmiwu4mZf8mdlTf8X/MRhx4RjDj/AGf/AEDcwaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMaWY5KZ01mNZj2THJTOmsxrMeyDdMak3e+mJSrV26qOzUqwEzRJNaU+ZokZ+FbRl/wAv+ZLhJ/i/h/lQ48OPs4wbbAAAAAAAAARR2tF+P1h+anf1xWJijtaL8frD81O/riD4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAd59H/wB99ivnlE/ekqvw9iUHo/8AvvsV88on70lV+HsAAAAAAAAAijtaL8frD81O/risTFHa0X4/WH5qd/XEHwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA7z6P8A777FfPKJ+9JVfh7EoPR/999ivnlE/ekqvw9gAAAAAAAAEUdrRfj9Yfmp39cViYo7WhhH/n6w/NTv64g+AZ4R5HCPIGBnhHkcI8gYGeEeRwjyBgZ4R5HCPIGBnhHkcI8gYGeEeRwjyBgZ4R5HCPIGBnhHkcI8gYGeEeRwjyBgZ4R5HCPIGBnhHkcI8gYGeEeRwjyBgZ4R5HCPIGBnhHkcI8gYGeEeRwjyBgZ4R5HCPIGBnhHkcI8gYGeEeRwjyBgZ4R5HCPIGBnhHkcI8gYGeEeRwjyBgZ4R5HCPIGBnhHkcI8gYGeEeRwjyBgZ4R5HCPIGBnhHkcI8gd49H/AN99ivnlE/ekqvw9iUHo/wAI+N9ivnlE/ekqvw9gAAAAAAAADrkuwNhZcuVLl2Ls3KlSo8YxjVczGMY8/wDpdjAda8P7B5Js1pUxtPD+weSbNaVMbXZQHWvD+weSbNaVMbTw/sHkmzWlTG12UB1rw/sHkmzWlTG08P7B5Js1pUxtdlAda8P7B5Js1pUxtPD+weSbNaVMbXZQHWvD+weSbNaVMbTw/sHkmzWlTG12UB1rw/sHkmzWlTG08P7B5Js1pUxtdlAda8P7B5Js1pUxtPD+weSbNaVMbXZQHWvD+weSbNaVMbTw/sHkmzWlTG12UB1rw/sHkmzWlTG08P7B5Js1pUxtdlAda8P7B5Js1pUxtPD+weSbNaVMbXZQHWvD+weSbNaVMbTw/sHkmzWlTG12UB1rw/sHkmzWlTG08P7B5Js1pUxtdlAda8P7B5Js1pUxtPD+weSbNaVMbXZQHWvD+weSbNaVMbTw/sHkmzWlTG12UB1rw/sHkmzWlTG08P7B5Js1pUxtdlAda8P7B5Js1pUxtPD+weSbNaVMbXZQHWvD+weSbNaVMbTw/sHkmzWlTG12UB1rw/sHkmzWlTG08P7B5Js1pUxtdlAda8P7B5Js1pUxtPD+weSbNaVMbXZQHWvD+weSbNaVMbTw/sHkmzWlTG12UB1rw/sHkmzWlTG08P7B5Js1pUxtdlAda8P7B5Js1pUxtPD+weSbNaVMbXZQHWvD+weSbNaVMbTw/sHkmzWlTG12UB1rw/sHkmzWlTG08P7B5Js1pUxtdlAda8P7B5Js1pUxtPD+weSbNaVMbXZQHWvD+weSbNaVMbTw/sHkmzWlTG12UB1+iWHsXQ6VNUqiWQs/R6RMy4S5qdmqtmZMuRKhHjCMIwk8YRhH/wAwdgAAAAAAAAAB4Pbf0qrtrIWtrOzNaVfaSXTatpEqjz8qYos1Km4ypMeEf4YxnYRjD/6g94St9Jv3/wBtvm09/sG4OM66f4ZavyUz3jGddP8ADLV+Sme8nwAoPjOun+GWr8lM94xnXT/DLV+Sme8nwAoPjOun+GWr8lM94xnXT/DLV+Sme8nwAoPjOun+GWr8lM94xnXT/DLV+Sme8nwAoPjOun+GWr8lM94xnXT/AAy1fkpnvJ8AKD4zrp/hlq/JTPeMZ10/wy1fkpnvJ8AKD4zrp/hlq/JTPeMZ10/wy1fkpnvJ8AKD4zrp/hlq/JTPeMZ10/wy1fkpnvJ8AKD4zrp/hlq/JTPeMZ10/wAMtX5KZ7yfACg+M66f4ZavyUz3jGddP8MtX5KZ7yfACg+M66f4ZavyUz3jGddP8MtX5KZ7yfACg+M66f4ZavyUz3jGddP8MtX5KZ7yfACg+M66f4ZavyUz3jGddP8ADLV+Sme8nwAoPjOun+GWr8lM94xnXT/DLV+Sme8nwAoPjOun+GWr8lM94xnXT/DLV+Sme8nwAoPjOun+GWr8lM94xnXT/DLV+Sme8nwAoPjOun+GWr8lM94xnXT/AAy1fkpnvJ8AKD4zrp/hlq/JTPeMZ10/wy1fkpnvJ8AKD4zrp/hlq/JTPeMZ10/wy1fkpnvJ8AKD4zrp/hlq/JTPeMZ10/wy1fkpnvJ8AKD4zrp/hlq/JTPeMZ10/wAMtX5KZ7yfACg+M66f4ZavyUz3jGddP8MtX5KZ7yfACg+M66f4ZavyUz3jGddP8MtX5KZ7yfACg+M66f4ZavyUz3jGddP8MtX5KZ7yfACg+M66f4ZavyUz3jGddP8ADLV+Sme8nwAoPjOun+GWr8lM94xnXT/DLV+Sme8nwAoRJ9M26iVKhCFWWr4xjw/7KZ7zZCTHjJhGH/mHFGqZ/uyP8wWTmv7cn/EAfoAAAAAAABK30m/f/bb5tPf7VSSt9Jv3/wBtvm09/sHnIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP3M/3ZH+YLJzX9uT/iCNkz/dkf5gsnNf25P+IA/QAAAAAAACVvpN+/8Att82nv8AaqSVvpN+/wDtt82nv9g85AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB+5n+7I/zBZOa/tyf8QRsmf7sj/MFk5r+3J/xAH6AAAAAAAASt9Jv3/22+bT3+1UnnFobi7p7QV3S66rixdBpdYUydjO0iflzs7CM5Lj7Yx4S4QBK4VCw53KZAq/709vMOdymQKv+9PbwS9FQsOdymQKv+9PbzDncpkCr/vT28EvRULDncpkCr/vT28w53KZAq/709vBL0VCw53KZAq/709vMOdymQKv+9PbwS9FQsOdymQKv+9PbzDncpkCr/vT28EvRULDncpkCr/vT28w53KZAq/709vBL0VCw53KZAq/709vMOdymQKv+9PbwS9FQsOdymQKv+9PbzDncpkCr/vT28EvRULDncpkCr/vT28w53KZAq/709vBL0VCw53KZAq/709vMOdymQKv+9PbwS9FQsOdymQKv+9PbzDncpkCr/vT28EvRULDncpkCr/vT28w53KZAq/709vBL0VCw53KZAq/709vMOdymQKv+9PbwS9FQsOdymQKv+9PbzDncpkCr/vT28EvRULDncpkCr/vT28w53KZAq/709vBL0VCw53KZAq/709vMOdymQKv+9PbwS9FQsOdymQKv+9PbzDncpkCr/vT28EvRULDncpkCr/vT28w53KZAq/709vBL0VCw53KZAq/709vMOdymQKv+9PbwS9FQsOdymQKv+9PbzDncpkCr/vT28EvRULDncpkCr/vT28w53KZAq/709vBL0VCw53KZAq/709vMOdymQKv+9PbwS9FQsOdymQKv+9PbzDncpkCr/vT28EvRULDncpkCr/vT28w53KZAq/709vBL0VCw53KZAq/709vMOdymQKv+9PbwS9FQsOdymQKv+9PbzDncpkCr/vT28EwJn+7I/zBZOa/tyf8QeWQ9HS5WEYRhYGr+MP/AO09veqwhCEOEPZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH//Z";
 import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "firebase/firestore";
@@ -47,6 +47,7 @@ const Icon = ({ name, size=18, color="currentColor" }) => {
   const paths = {
     quote: <><rect x="3" y="3" width="18" height="18" rx="2" stroke={color} strokeWidth="1.5" fill="none"/><line x1="7" y1="8" x2="17" y2="8" stroke={color} strokeWidth="1.5"/><line x1="7" y1="12" x2="14" y2="12" stroke={color} strokeWidth="1.5"/><line x1="7" y1="16" x2="11" y2="16" stroke={color} strokeWidth="1.5"/></>,
     truck: <><rect x="1" y="6" width="14" height="12" rx="1" stroke={color} strokeWidth="1.5" fill="none"/><path d="M15 9h4l3 4v5h-7V9z" stroke={color} strokeWidth="1.5" fill="none"/><circle cx="5" cy="19" r="2" stroke={color} strokeWidth="1.5" fill="none"/><circle cx="18" cy="19" r="2" stroke={color} strokeWidth="1.5" fill="none"/></>,
+    leads: <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke={color} strokeWidth="1.5" fill="none"/><circle cx="9" cy="7" r="4" stroke={color} strokeWidth="1.5" fill="none"/><path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke={color} strokeWidth="1.5" fill="none"/><path d="M16 3.13a4 4 0 0 1 0 7.75" stroke={color} strokeWidth="1.5" fill="none"/></>,
     pipeline: <><circle cx="6" cy="6" r="3" stroke={color} strokeWidth="1.5" fill="none"/><circle cx="18" cy="12" r="3" stroke={color} strokeWidth="1.5" fill="none"/><circle cx="6" cy="18" r="3" stroke={color} strokeWidth="1.5" fill="none"/><line x1="9" y1="6" x2="15" y2="11" stroke={color} strokeWidth="1.5"/><line x1="9" y1="18" x2="15" y2="13" stroke={color} strokeWidth="1.5"/></>,
     dims: <><rect x="3" y="3" width="7" height="7" stroke={color} strokeWidth="1.5" fill="none"/><rect x="14" y="3" width="7" height="7" stroke={color} strokeWidth="1.5" fill="none"/><rect x="3" y="14" width="7" height="7" stroke={color} strokeWidth="1.5" fill="none"/><rect x="14" y="14" width="7" height="7" stroke={color} strokeWidth="1.5" fill="none"/></>,
     ship: <><path d="M3 17l2-8h14l2 8H3z" stroke={color} strokeWidth="1.5" fill="none"/><path d="M8 9V5h8v4" stroke={color} strokeWidth="1.5" fill="none"/><line x1="12" y1="5" x2="12" y2="3" stroke={color} strokeWidth="1.5"/><path d="M3 17c0 1.1.9 2 2 2s2-.9 2-2 .9-2 2-2 2 .9 2 2 .9 2 2 2 2-.9 2-2 .9-2 2-2 2 .9 2 2" stroke={color} strokeWidth="1.5" fill="none"/></>,
@@ -329,6 +330,83 @@ const INITIAL_CATEGORIES = {
 };
 
 
+// ─── Leads Data ────────────────────────────────────────────────────────────────
+const INITIAL_LEADS = [
+{id:1000,company:"Devron Ltd",contact:"Anthony Rufrano",type:"Distributor",leadSource:"Ads/Website",potentialValue:30000.0,status:"inprogress",lastContact:"May 6, 2025",productsQuoted:"",notes:"",quoteNumber:"",year:2026,isLead:true},
+{id:1001,company:"Mint Farm/ Dale Thacker Specialty Crops",contact:"Gavin Thacker",type:"End User",leadSource:"Ads/Website",potentialValue:750.0,status:"cold",lastContact:"April 15, 2025",productsQuoted:"",notes:"2.5x50 Type 2 IND - MIA - Next fall most likely.",quoteNumber:"",year:2026,isLead:true},
+{id:1002,company:"Villeneuve",contact:"Denis Levac",type:"Distributor",leadSource:"Ads/Website",potentialValue:32125.0,status:"won",lastContact:"January 7, 2026",productsQuoted:"",notes:"Pricing Sent 16' BDNC",quoteNumber:"",year:2026,isLead:true},
+{id:1003,company:"Multi-Formes",contact:"Shawn Marier",type:"Distributor",leadSource:"Ads/Website",potentialValue:51260.0,status:"cold",lastContact:"November 20, 2025",productsQuoted:"",notes:"Pricng sent also 16' BDNC",quoteNumber:"",year:2026,isLead:true},
+{id:1004,company:"Weaver Group Ltd",contact:"Chad",type:"End User",leadSource:"Ads/Website",potentialValue:156319.0,status:"cold",lastContact:"November 19, 2025",productsQuoted:"",notes:"2 contacts",quoteNumber:"",year:2026,isLead:true},
+{id:1005,company:"Bronte Construction",contact:"Kyle Campbell",type:"End User",leadSource:"Ads/Website",potentialValue:5500.0,status:"lost",lastContact:"November 24, 2025",productsQuoted:"",notes:"",quoteNumber:"",year:2026,isLead:true},
+{id:1006,company:"Associated Environmental Consultants Inc",contact:"Jayden Gross",type:"End User",leadSource:"Ads/Website",potentialValue:35796.0,status:"inprogress",lastContact:"January 13, 2026",productsQuoted:"",notes:"sent pricing/frieght",quoteNumber:"",year:2026,isLead:true},
+{id:1007,company:"John",contact:"John Rich",type:"End User",leadSource:"Ads/Website",potentialValue:9900.0,status:"lost",lastContact:"January 20, 2026",productsQuoted:"",notes:"Pricing sent, deep curtains",quoteNumber:"",year:2026,isLead:true},
+{id:1008,company:"Slate Construction",contact:"Julian Wilkinson",type:"End User",leadSource:"Ads/Website",potentialValue:4170.0,status:"won",lastContact:"January 29, 2026",productsQuoted:"",notes:"",quoteNumber:"",year:2026,isLead:true},
+{id:1009,company:"Slate Construction",contact:"Julian Wilkinson",type:"End User",leadSource:"Ads/Website",potentialValue:2362.5,status:"won",lastContact:"February 6, 2026",productsQuoted:"",notes:"",quoteNumber:"",year:2026,isLead:true},
+{id:1010,company:"FADD LLC",contact:"Abraham Park",type:"End User",leadSource:"Ads/Website",potentialValue:12538.7,status:"lost",lastContact:"February 11, 2026",productsQuoted:"",notes:"",quoteNumber:"",year:2026,isLead:true},
+{id:1011,company:"Dakota Ridge Builders",contact:"Micah Harding",type:"End User",leadSource:"Ads/Website",potentialValue:5000.0,status:"won",lastContact:"",productsQuoted:"",notes:"",quoteNumber:"",year:2026,isLead:true},
+{id:1012,company:"Bridgemans",contact:"Chaudhry",type:"End User",leadSource:"Ads/Website",potentialValue:10900.0,status:"won",lastContact:"March 10, 2026",productsQuoted:"",notes:"",quoteNumber:"",year:2026,isLead:true},
+{id:1013,company:"Plaidcomb Ecology Ltd.",contact:"Ben Poltorak",type:"End User",leadSource:"Ads/Website",potentialValue:2000.0,status:"inprogress",lastContact:"",productsQuoted:"",notes:"",quoteNumber:"",year:2026,isLead:true},
+{id:1014,company:"",contact:"Josh Wilcox",type:"End User",leadSource:"Ads/Website",potentialValue:5217.02,status:"inprogress",lastContact:"",productsQuoted:"",notes:"",quoteNumber:"",year:2026,isLead:true},
+{id:1015,company:"Hammond River Angling Association",contact:"Sarah Blenis",type:"End User",leadSource:"Ads/Website",potentialValue:2800.0,status:"won",lastContact:"",productsQuoted:"",notes:"",quoteNumber:"",year:2026,isLead:true},
+{id:1016,company:"Heavy Metal Marine Ltd.",contact:"Jon Ashbee",type:"End User",leadSource:"Ads/Website",potentialValue:96500.0,status:"inprogress",lastContact:"March 11, 2026",productsQuoted:"",notes:"50x 15' Type 2 DOT",quoteNumber:"",year:2026,isLead:true},
+{id:1017,company:"Gibraltar Mines Ltd.",contact:"Matthew Powell",type:"End User",leadSource:"Ads/Website",potentialValue:22920.0,status:"won",lastContact:"",productsQuoted:"",notes:"",quoteNumber:"",year:2026,isLead:true},
+{id:1018,company:"CKPI",contact:"Jorge Rodriguez",type:"End User",leadSource:"Ads/Website",potentialValue:3585.0,status:"inprogress",lastContact:"April 13, 2026",productsQuoted:"",notes:"For June 30",quoteNumber:"",year:2026,isLead:true},
+{id:1019,company:"WILD WEST DIRT WORKS LTD.",contact:"Bobby Young",type:"End User",leadSource:"Ads/Website",potentialValue:4100.0,status:"cold",lastContact:"April 20, 2026",productsQuoted:"",notes:"",quoteNumber:"",year:2026,isLead:true},
+{id:1020,company:"Inlailawatash",contact:"Ellie",type:"End User",leadSource:"Ads/Website",potentialValue:2124.0,status:"cold",lastContact:"April 20, 2026",productsQuoted:"",notes:"",quoteNumber:"",year:2026,isLead:true},
+{id:1021,company:"Mozingo Construction",contact:"Jeff Graham",type:"End User",leadSource:"Ads/Website",potentialValue:1531.27,status:"inprogress",lastContact:"April 14, 2026",productsQuoted:"",notes:"",quoteNumber:"",year:2026,isLead:true},
+{id:1022,company:"Terrasol",contact:"Mark Sahlstrom",type:"End User",leadSource:"Ads/Website",potentialValue:11350.0,status:"inprogress",lastContact:"April 22, 2026",productsQuoted:"",notes:"bio blankets",quoteNumber:"",year:2026,isLead:true},
+{id:1023,company:"Source Atlanitc",contact:"Roderick Weagle",type:"End User",leadSource:"Ads/Website",potentialValue:2500.0,status:"cold",lastContact:"April 22, 2026",productsQuoted:"",notes:"",quoteNumber:"",year:2026,isLead:true},
+{id:1024,company:"DavenAnnA Carnell",contact:"",type:"End User",leadSource:"Ads/Website",potentialValue:600.0,status:"lost",lastContact:"April 22, 2026",productsQuoted:"",notes:"",quoteNumber:"",year:2026,isLead:true},
+{id:1025,company:"Primary Engineering and Construction",contact:"Chris Allan",type:"End User",leadSource:"Ads/Website",potentialValue:6263.04,status:"won",lastContact:"April 21, 2026",productsQuoted:"",notes:"",quoteNumber:"",year:2026,isLead:true},
+{id:1026,company:"JVK Holdings Inc",contact:"Josh Kuriakose",type:"End User",leadSource:"Ads/Website",potentialValue:4824.0,status:"won",lastContact:"",productsQuoted:"",notes:"",quoteNumber:"",year:2026,isLead:true},
+{id:1027,company:"Brooks Asphalt & Aggregate",contact:"Beryl Lobdell",type:"End User",leadSource:"Outreach/Prospecting",potentialValue:7160.0,status:"won",lastContact:"April 27, 2026",productsQuoted:"",notes:"",quoteNumber:"",year:2026,isLead:true},
+{id:1028,company:"SRP Projects Ltd",contact:"Clinton Reeder",type:"End User",leadSource:"Ads/Website",potentialValue:4500.0,status:"won",lastContact:"April 27, 2026",productsQuoted:"",notes:"Exceslior Wattles",quoteNumber:"",year:2026,isLead:true},
+{id:1029,company:"EPCOR",contact:"Sam",type:"End User",leadSource:"Ads/Website",potentialValue:1890.0,status:"won",lastContact:"May 6, 2026",productsQuoted:"",notes:"",quoteNumber:"",year:2026,isLead:true},
+{id:1030,company:"Vitae Environmental",contact:"Dylan Michaud",type:"End User",leadSource:"Ads/Website",potentialValue:4000.0,status:"won",lastContact:"May 4, 2026",productsQuoted:"",notes:"Exceslior",quoteNumber:"",year:2026,isLead:true},
+{id:1031,company:"SVEMY Construction",contact:"Veru Slovakova",type:"End User",leadSource:"Ads/Website",potentialValue:4000.0,status:"won",lastContact:"May 22, 2026",productsQuoted:"",notes:"",quoteNumber:"",year:2026,isLead:true},
+{id:1032,company:"Terraquavie",contact:"Yann Monnin",type:"Distributor",leadSource:"Outreach/Prospecting",potentialValue:39387.0,status:"won",lastContact:"May 26, 2025",productsQuoted:"",notes:"Ai find by Grant - interested still have blankets in stock but when they run low. Follow in few months",quoteNumber:"",year:2025,isLead:true},
+{id:1033,company:"Mint Farm/ Dale Thacker Specialty Crops",contact:"Gavin Thacker",type:"End User",leadSource:"Ads/Website",potentialValue:750.0,status:"cold",lastContact:"April 15, 2025",productsQuoted:"",notes:"2.5x50 Type 2 IND - MIA - Next fall most likely.",quoteNumber:"",year:2025,isLead:true},
+{id:1034,company:"ETS Infrastructure Ltd.",contact:"Ian Hughes",type:"End User",leadSource:"Ads/Website",potentialValue:33600.0,status:"won",lastContact:"June 2, 2025",productsQuoted:"",notes:"Jumbo Erosion Control Blankets - projec for this summer, not excited about it but may need blankets",quoteNumber:"",year:2025,isLead:true},
+{id:1035,company:"Clear Water Construction",contact:"Jeff Gauci",type:"End User",leadSource:"Ads/Website",potentialValue:16858.0,status:"lost",lastContact:"April 2, 2025",productsQuoted:"",notes:"10' x 50' Turbidity Curtain Type 1 DOT, reflectors?",quoteNumber:"",year:2025,isLead:true},
+{id:1036,company:"Gateway Shipping",contact:"Tracey Hittel",type:"End User",leadSource:"Ads/Website",potentialValue:10326.0,status:"won",lastContact:"April 9, 2025",productsQuoted:"",notes:"",quoteNumber:"",year:2025,isLead:true},
+{id:1037,company:"Penteco Environmental Solutions",contact:"Ayed Kamis",type:"Distributor",leadSource:"Outreach/Prospecting",potentialValue:5000.0,status:"cold",lastContact:"April 14, 2025",productsQuoted:"",notes:"Newish company but very forward htining guy. Releasing the first ever Geo Store.",quoteNumber:"",year:2025,isLead:true},
+{id:1038,company:"Centerfield Supply Inc.",contact:"Will Morrison",type:"Distributor",leadSource:"Ads/Website",potentialValue:35000.0,status:"won",lastContact:"March 27, 2025",productsQuoted:"",notes:"New company - some of the people that came from Northlink, in Grand Prairie want",quoteNumber:"",year:2025,isLead:true},
+{id:1039,company:"Canadian Erosion and Containment Ltd",contact:"James Wilkinson",type:"End User",leadSource:"Outreach/Prospecting",potentialValue:35000.0,status:"cold",lastContact:"April 24, 2025",productsQuoted:"",notes:"Installer/End User",quoteNumber:"",year:2025,isLead:true},
+{id:1040,company:"Sunnydale Landscaping",contact:"Miriam Havenmann",type:"End User",leadSource:"Ads/Website",potentialValue:9000.0,status:"cold",lastContact:"April 28, 2025",productsQuoted:"",notes:"3 skids of blankets google search",quoteNumber:"",year:2025,isLead:true},
+{id:1041,company:"Massman Construction",contact:"Gary Worder",type:"End User",leadSource:"Ads/Website",potentialValue:17000.0,status:"lost",lastContact:"April 29, 2025",productsQuoted:"",notes:"10' x 50' Turbidity Curtain Type 1 DOT again",quoteNumber:"",year:2025,isLead:true},
+{id:1042,company:"Votorantim Cimentos",contact:"Sergio Canello",type:"End User",leadSource:"Ads/Website",potentialValue:55000.0,status:"lost",lastContact:"May 28, 2025",productsQuoted:"",notes:"heard about us through Soderholm",quoteNumber:"",year:2025,isLead:true},
+{id:1043,company:"Lambourne Enviornmental",contact:"Phil Stephan",type:"End User",leadSource:"Ads/Website",potentialValue:6060.0,status:"won",lastContact:"May 21, 2025",productsQuoted:"",notes:"",quoteNumber:"",year:2025,isLead:true},
+{id:1044,company:"Nutrien",contact:"Jon Bronson",type:"End User",leadSource:"",potentialValue:49000.0,status:"won",lastContact:"May 22, 2025",productsQuoted:"",notes:"Called mark randomly",quoteNumber:"",year:2025,isLead:true},
+{id:1045,company:"Christopher Murley",contact:"Christopher Murley",type:"End User",leadSource:"Ads/Website",potentialValue:3943.7,status:"won",lastContact:"June 3, 2025",productsQuoted:"",notes:"has purchased before. 3x purchase",quoteNumber:"",year:2025,isLead:true},
+{id:1046,company:"Kalamoir Construction",contact:"Keith Mitchell",type:"End User",leadSource:"Ads/Website",potentialValue:13500.0,status:"won",lastContact:"June 9, 2025",productsQuoted:"",notes:"",quoteNumber:"",year:2025,isLead:true},
+{id:1047,company:"Mountainland Supply",contact:"Nick Giffiths",type:"Distributor",leadSource:"Tradeshow",potentialValue:80860.0,status:"won",lastContact:"June 16, 2025",productsQuoted:"",notes:"",quoteNumber:"",year:2025,isLead:true},
+{id:1048,company:"Northwest Pipe Fitting Inc",contact:"Mark Gies",type:"Distributor",leadSource:"Ads/Website",potentialValue:5000.0,status:"lost",lastContact:"June 25, 2025",productsQuoted:"",notes:"hasnt distributed ECB before but wants to start",quoteNumber:"",year:2025,isLead:true},
+{id:1049,company:"TA Excavating",contact:"Logan",type:"End User",leadSource:"Ads/Website",potentialValue:3080.0,status:"won",lastContact:"June 24, 2025",productsQuoted:"",notes:"",quoteNumber:"",year:2025,isLead:true},
+{id:1050,company:"Norland Contracting",contact:"Jerry Sethi",type:"End User",leadSource:"Ads/Website",potentialValue:13398.0,status:"won",lastContact:"July 30, 2025",productsQuoted:"",notes:"Straw Wattles + Stakes",quoteNumber:"",year:2025,isLead:true},
+{id:1051,company:"Athabasca County",contact:"",type:"End User",leadSource:"",potentialValue:3677.0,status:"won",lastContact:"July 30, 2025",productsQuoted:"",notes:"",quoteNumber:"",year:2025,isLead:true},
+{id:1052,company:"Coastal Excavation",contact:"Emily Cameron",type:"End User",leadSource:"Ads/Website",potentialValue:10000.0,status:"cold",lastContact:"",productsQuoted:"",notes:"",quoteNumber:"",year:2025,isLead:true},
+{id:1053,company:"Woerner Farms",contact:"Elizabeth Vasquez",type:"End User",leadSource:"Ads/Website",potentialValue:8047.0,status:"won",lastContact:"August 27, 2025",productsQuoted:"",notes:"6 Stakes lead form",quoteNumber:"",year:2025,isLead:true},
+{id:1054,company:"QIS Supply",contact:"Adam Hirshberg",type:"Distributor",leadSource:"Outreach/Prospecting",potentialValue:40000.0,status:"inprogress",lastContact:"September 2, 2025",productsQuoted:"",notes:"I reached out on linkedin, some interest, sent pricing and info",quoteNumber:"",year:2025,isLead:true},
+{id:1055,company:"Ontario Parks",contact:"Jessica Smith",type:"End User",leadSource:"Ads/Website",potentialValue:1932.0,status:"won",lastContact:"September 3, 2025",productsQuoted:"",notes:"",quoteNumber:"",year:2025,isLead:true},
+{id:1056,company:"Silverline Group Inc.",contact:"Ann-Marie Forbes",type:"End User",leadSource:"Ads/Website",potentialValue:9000.0,status:"lost",lastContact:"September 3, 2025",productsQuoted:"",notes:"",quoteNumber:"",year:2025,isLead:true},
+{id:1057,company:"D.H.R Construction",contact:"Nico Ramullo",type:"End User",leadSource:"Ads/Website",potentialValue:3945.0,status:"cold",lastContact:"September 3, 2025",productsQuoted:"",notes:"",quoteNumber:"",year:2025,isLead:true},
+{id:1058,company:"ETS Infrastructure Ltd.",contact:"",type:"End User",leadSource:"Ads/Website",potentialValue:2107.0,status:"won",lastContact:"September 26, 2025",productsQuoted:"",notes:"Stakes",quoteNumber:"",year:2025,isLead:true},
+{id:1059,company:"Kindret Landscaping",contact:"Genesis Pena",type:"End User",leadSource:"Ads/Website",potentialValue:14190.0,status:"cold",lastContact:"September 29, 2025",productsQuoted:"",notes:"RFQ - Lagimodiere Twin Overpass",quoteNumber:"",year:2025,isLead:true},
+{id:1060,company:"Oroville Tonasket Irrigation District",contact:"Lindsey",type:"End User",leadSource:"Ads/Website",potentialValue:1560.0,status:"cold",lastContact:"September 29, 2025",productsQuoted:"",notes:"",quoteNumber:"",year:2025,isLead:true},
+{id:1061,company:"BG Auto Shop Inc",contact:"",type:"End User",leadSource:"Ads/Website",potentialValue:1960.0,status:"won",lastContact:"October 8, 2025",productsQuoted:"",notes:"Dewatering Bags",quoteNumber:"",year:2025,isLead:true},
+{id:1062,company:"CMS Construction",contact:"Lucas",type:"End User",leadSource:"Ads/Website",potentialValue:5390.0,status:"lost",lastContact:"October 9, 2025",productsQuoted:"",notes:"",quoteNumber:"",year:2025,isLead:true},
+{id:1063,company:"Gibraltar Mines Ltd.",contact:"Matthew Powell",type:"End User",leadSource:"Ads/Website",potentialValue:29260.0,status:"won",lastContact:"October 16, 2025",productsQuoted:"",notes:"Curtains for mins",quoteNumber:"",year:2025,isLead:true},
+{id:1064,company:"TC Trees",contact:"Doug Strankman",type:"End User",leadSource:"Ads/Website",potentialValue:25816.0,status:"won",lastContact:"October 22, 2025",productsQuoted:"",notes:"",quoteNumber:"",year:2025,isLead:true},
+{id:1065,company:"Villeneuve",contact:"Denis Levac",type:"Distributor",leadSource:"Ads/Website",potentialValue:50525.0,status:"inprogress",lastContact:"November 20, 2025",productsQuoted:"",notes:"Pricing Sent 16' BDNC",quoteNumber:"",year:2025,isLead:true},
+{id:1066,company:"Multi-Formes",contact:"Shawn Marier",type:"Distributor",leadSource:"Ads/Website",potentialValue:51260.0,status:"inprogress",lastContact:"November 20, 2025",productsQuoted:"",notes:"Pricng sent also 16' BDNC",quoteNumber:"",year:2025,isLead:true},
+{id:1067,company:"ETS Infrastructure Ltd.",contact:"",type:"End User",leadSource:"Ads/Website",potentialValue:7530.0,status:"won",lastContact:"November 10, 2025",productsQuoted:"",notes:"More jumbos and staples",quoteNumber:"",year:2025,isLead:true},
+{id:1068,company:"Weaver Group Ltd",contact:"Chad",type:"End User",leadSource:"Ads/Website",potentialValue:156319.0,status:"inprogress",lastContact:"November 19, 2025",productsQuoted:"",notes:"2 contacts",quoteNumber:"",year:2025,isLead:true},
+{id:1069,company:"Pacific Industrial & Marine",contact:"Romel Adarlo",type:"End User",leadSource:"Ads/Website",potentialValue:15540.0,status:"lost",lastContact:"November 19, 2025",productsQuoted:"",notes:"Unfortunately, our bid was unsuccessful",quoteNumber:"",year:2025,isLead:true},
+{id:1070,company:"Fraser Burrard Diving Ltd",contact:"Aaron Heath",type:"End User",leadSource:"Ads/Website",potentialValue:5656.0,status:"inprogress",lastContact:"November 19, 2025",productsQuoted:"",notes:"",quoteNumber:"",year:2025,isLead:true},
+{id:1071,company:"Ven-Tech Subsea Inspections",contact:"Dewald Venter",type:"End User",leadSource:"Ads/Website",potentialValue:7808.0,status:"won",lastContact:"November 24, 2025",productsQuoted:"",notes:"",quoteNumber:"",year:2025,isLead:true},
+{id:1072,company:"Bronte Construction",contact:"Kyle Campbell",type:"End User",leadSource:"Ads/Website",potentialValue:5500.0,status:"inprogress",lastContact:"November 24, 2025",productsQuoted:"",notes:"",quoteNumber:"",year:2025,isLead:true}
+];
+
 // ─── DIMS Data from CSV ────────────────────────────────────────────────────────
 const INITIAL_DIMS = [
   { product:"DDS2424", type:"BMP Box", pieces:15, L:'20"', W:'16"', H:'15"', weight:"16.2", indWeight:"" },
@@ -607,7 +685,9 @@ export default function SalesHub() {
   const [activeQuote, setActiveQuote] = useState(null);
   const [searchQ, setSearchQ] = useState({name:"",company:"",date:"",madeBy:"",quoteNum:"",sku:"",description:""});
   const [quoteSort, setQuoteSort] = useLocalStorage('bmp_quote_sort', 'asc');
-  const [exchangeRate, setExchangeRate] = useLocalStorage('bmp_exchange_rate', 0.73); // asc = oldest first (BMP44004 top)
+  const [exchangeRate, setExchangeRate] = useLocalStorage('bmp_exchange_rate', 0.73);
+  const [leads, setLeads] = useLocalStorage('bmp_leads', INITIAL_LEADS);
+  const [adSpend, setAdSpend] = useLocalStorage('bmp_ad_spend', {}); // {year: {google, other}} // asc = oldest first (BMP44004 top)
   const [productCurrency, setProductCurrency] = useState("CAD");
   const [productSearch, setProductSearch] = useState("");
   const [emailModal, setEmailModal] = useState(null);
@@ -695,7 +775,7 @@ export default function SalesHub() {
   function createNewQuote() {
     const q={id:Date.now(),quoteNum:nextQNum(quotes),name:"",company:"",prepaid:false,currency:"CAD",
       lineItems:[{id:Date.now(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}],
-      notes:"",internalNotes:"",validFor:30,quoteStatus:"inprogress",followUps:[],saved:false,savedBy:"",savedDate:""};
+      notes:"",internalNotes:"",validFor:30,quoteStatus:"inprogress",followUps:[],isNewLead:false,leadType:"",leadSource:"",saved:false,savedBy:"",savedDate:""};
     setActiveQuote(q);
   }
   function saveQuote(q) {
@@ -809,6 +889,7 @@ export default function SalesHub() {
     {id:"shipping", label:"Shipping",        icon:"ship"},
     {id:"products", label:"Products",        icon:"products"},
     {id:"loadcalc", label:"Load Calculator", icon:"truck"},
+    {id:"leads",    label:"Lead Tracking",  icon:"leads"},
   ];
 
   // ── Mobile layout ────────────────────────────────────────────────────────
@@ -920,6 +1001,8 @@ export default function SalesHub() {
             exchangeRate={exchangeRate} setExchangeRate={setExchangeRate} T={T}/>}
           {activeTab==="loadcalc"&&<LoadCalcTab T={T}/>}
           {activeTab==="pipeline"&&<PipelineTab quotes={quotes} setQuotes={setQuotes} T={T} loginName={loginName} setActiveQuote={setActiveQuote} setActiveTab={setActiveTab}/>}
+          {activeTab==="leads"&&loginName!=="John"&&<LeadTrackingTab leads={leads} setLeads={setLeads} adSpend={adSpend} setAdSpend={setAdSpend} quotes={quotes} T={T} loginName={loginName}/>}
+          {activeTab==="leads"&&loginName==="John"&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:T.muted,fontSize:13}}>Lead Tracking is not available for your account.</div>}
         </div>
       </div>
 
@@ -1348,7 +1431,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
                         onChange={e=>updLI(li.id,"description",e.target.value)}
                         placeholder="Product description…"
                         style={{width:"100%",fontSize:15,height:44,padding:"0 10px",borderRadius:3}}/> 
-                      <datalist id={`dl-m-${li.id}`}>{(products||[]).map(p=><option key={p.sku} value={p.description}/>)}</datalist>
+                      <datalist id={`dl-m-${li.id}`}>{(productsCAD||[]).map(p=><option key={p.sku} value={p.description}/>)}</datalist>
                     </>
                   }
                 </div>
@@ -1361,7 +1444,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
                         onChange={e=>updLI(li.id,"sku",e.target.value)}
                         placeholder="SKU…"
                         style={{width:"100%",fontSize:14,height:40,padding:"0 10px",borderRadius:3,fontFamily:"monospace"}}/>
-                      <datalist id={`sl-m-${li.id}`}>{(products||[]).map(p=><option key={p.sku} value={p.sku}/>)}</datalist>
+                      <datalist id={`sl-m-${li.id}`}>{(productsCAD||[]).map(p=><option key={p.sku} value={p.sku}/>)}</datalist>
                     </>
                   }
                 </div>
@@ -1425,15 +1508,15 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
                 {ro?<span style={{fontSize:11}}>{li.sku||"—"}</span>
                   :<><input list={`sl-${idx}`} value={li.sku} onChange={e=>updLI(li.id,"sku",e.target.value)}
                       style={{width:"100%",fontSize:11,height:25}} placeholder="SKU"/>
-                    <datalist id={`sl-${idx}`}>{(products||[]).map(p=><option key={p.sku} value={p.sku}/>)}</datalist>
-                    <datalist id={`sl-${idx}`}>{(products||[]).map(p=><option key={p.sku} value={p.sku}/>)}</datalist></>}
+                    <datalist id={`sl-${idx}`}>{(productsCAD||[]).map(p=><option key={p.sku} value={p.sku}/>)}</datalist>
+                    <datalist id={`sl-${idx}`}>{(productsCAD||[]).map(p=><option key={p.sku} value={p.sku}/>)}</datalist></>}
               </td>
               <td>
                 {ro?<span style={{fontSize:11}}>{li.description}</span>
                   :<><input list={`dl-${idx}`} value={li.description} onChange={e=>updLI(li.id,"description",e.target.value)}
                       style={{width:"100%",fontSize:11,height:25}} placeholder="Product description"/>
-                    <datalist id={`dl-${idx}`}>{(products||[]).map(p=><option key={p.sku} value={p.description}/>)}</datalist>
-                    <datalist id={`dl-${idx}`}>{(products||[]).map(p=><option key={p.sku} value={p.description}/>)}</datalist></>}
+                    <datalist id={`dl-${idx}`}>{(productsCAD||[]).map(p=><option key={p.sku} value={p.description}/>)}</datalist>
+                    <datalist id={`dl-${idx}`}>{(productsCAD||[]).map(p=><option key={p.sku} value={p.description}/>)}</datalist></>}
               </td>
               <td style={{position:"relative"}}>
                 {ro?<span>{li.qty}</span>
@@ -1508,6 +1591,38 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
           <div style={{fontSize:9,color:"var(--accent)",letterSpacing:".1em",textTransform:"uppercase",marginTop:8,marginBottom:4}}>Internal Notes <span style={{color:"var(--muted)",fontWeight:300,textTransform:"none"}}>(not on quote)</span></div>
           <textarea disabled={ro} value={quote.internalNotes||""} onChange={e=>upd("internalNotes",e.target.value)}
             style={{width:"100%",height:48,resize:"vertical",fontSize:11,background:"var(--input-bg)",border:`1px solid ${quote.internalNotes?"var(--accent)":"var(--border)"}`,color:"var(--text)"}} placeholder={`Internal notes by ${quote.savedBy||"you"}…`}/>
+          {/* New Lead flag */}
+          <div style={{marginTop:10,padding:"10px 12px",background:T.tableHead,border:`1px solid ${T.border}`,borderRadius:3}}>
+            <label style={{display:"flex",alignItems:"center",gap:8,cursor:ro?"default":"pointer",userSelect:"none"}}>
+              <input type="checkbox" disabled={ro} checked={!!quote.isNewLead} onChange={e=>upd("isNewLead",e.target.checked)}
+                style={{width:14,height:14,cursor:ro?"default":"pointer"}}/>
+              <span style={{fontSize:11,fontWeight:600,color:T.subtext}}>New Lead</span>
+              <span style={{fontSize:10,color:T.muted}}>(came from marketing / new customer)</span>
+            </label>
+            {quote.isNewLead&&(
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:10}}>
+                <div>
+                  <div style={{fontSize:9,color:T.muted,letterSpacing:".08em",marginBottom:4}}>TYPE</div>
+                  <select disabled={ro} value={quote.leadType||""} onChange={e=>upd("leadType",e.target.value)}
+                    style={{width:"100%",fontSize:12,height:32,background:"var(--input-bg)",border:"1px solid var(--border-light)",color:"var(--text)"}}>
+                    <option value="">Select type…</option>
+                    <option value="End User">End User</option>
+                    <option value="Distributor">Distributor</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={{fontSize:9,color:T.muted,letterSpacing:".08em",marginBottom:4}}>LEAD SOURCE</div>
+                  <select disabled={ro} value={quote.leadSource||""} onChange={e=>upd("leadSource",e.target.value)}
+                    style={{width:"100%",fontSize:12,height:32,background:"var(--input-bg)",border:"1px solid var(--border-light)",color:"var(--text)"}}>
+                    <option value="">Select source…</option>
+                    <option value="Ads/Website">Ads / Website</option>
+                    <option value="Outreach/Prospecting">Outreach / Prospecting</option>
+                    <option value="Tradeshow">Tradeshow</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",justifyContent:"space-between",minWidth:190}}>
           <div style={{textAlign:"right"}}>
@@ -4045,6 +4160,30 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
 
   return (
     <div style={{display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', background:T.bg}}>
+      {/* Global summary bar */}
+      {(()=>{
+        const saved = (quotes||[]).filter(q=>q.saved);
+        const won = saved.filter(q=>q.quoteStatus==='won');
+        const inprog = saved.filter(q=>!q.quoteStatus||q.quoteStatus==='inprogress'||q.quoteStatus==='followed');
+        const lostcold = saved.filter(q=>q.quoteStatus==='lost'||q.quoteStatus==='cold');
+        const sumVal = qs => qs.reduce((s,q)=>(q.lineItems||[]).reduce((a,li)=>(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0)+a,0)+s,0);
+        return (
+          <div style={{display:'flex',gap:0,background:T.panelBg,borderBottom:`1px solid ${T.border}`,flexShrink:0,flexWrap:'wrap'}}>
+            {[
+              {label:'Deals Won', val:sumVal(won), color:'#34c77b', count:won.length},
+              {label:'In Progress', val:sumVal(inprog), color:'#f5a623', count:inprog.length},
+              {label:'Loss / Cold', val:sumVal(lostcold), color:'#e8472c', count:lostcold.length},
+            ].map(({label,val,color,count})=>(
+              <div key={label} style={{flex:1,padding:'8px 16px',borderRight:`1px solid ${T.border}`,textAlign:'center',minWidth:140}}>
+                <div style={{fontSize:9,fontWeight:600,letterSpacing:'.08em',textTransform:'uppercase',color:T.muted,marginBottom:2}}>{label}</div>
+                <div style={{fontSize:16,fontWeight:700,color}}>{fmtCur(val)}</div>
+                <div style={{fontSize:9,color:T.muted}}>{count} quote{count!==1?'s':''}</div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* Rep tabs */}
       <div style={{display:'flex', borderBottom:`2px solid ${T.border}`, background:T.headerBg, flexShrink:0, overflowX:'auto'}}>
         {repsWithQuotes.map(rep=>{
@@ -4099,6 +4238,361 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
         {repQuotes.length===0&&(
           <div style={{textAlign:'center', color:T.muted, fontSize:13, paddingTop:40}}>
             No saved quotes for {activeRep} yet.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Lead Tracking Tab ─────────────────────────────────────────────────────────
+function LeadTrackingTab({leads, setLeads, adSpend, setAdSpend, quotes, T, loginName}) {
+  const currentYear = new Date().getFullYear();
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [showMatrix, setShowMatrix] = useState(false);
+  const [sortF, setSortF] = useState('lastContact');
+  const [sortD, setSortD] = useState(-1);
+  const [editingId, setEditingId] = useState(null);
+  const [editRow, setEditRow] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
+  const fileRef = useRef(null);
+  const [hoveredMetric, setHoveredMetric] = useState(null);
+
+  // Get all years from leads data
+  const allYears = useMemo(() => {
+    const yrs = new Set((leads||[]).map(l=>l.year||currentYear));
+    yrs.add(currentYear);
+    return [...yrs].sort((a,b)=>b-a);
+  }, [leads, currentYear]);
+
+  const yearLeads = useMemo(() =>
+    (leads||[]).filter(l=>(l.year||currentYear)===selectedYear),
+    [leads, selectedYear]);
+
+  // Marketing spend for selected year
+  const yearSpend = adSpend?.[selectedYear] || {google:0, other:0};
+  const totalSpend = (parseFloat(yearSpend.google)||0) + (parseFloat(yearSpend.other)||0);
+
+  function setSpend(field, val) {
+    setAdSpend(prev => ({...prev, [selectedYear]: {...(prev[selectedYear]||{}), [field]:val}}));
+  }
+
+  // Stats
+  const stats = useMemo(() => {
+    const won     = yearLeads.filter(l=>l.status==='won');
+    const lost    = yearLeads.filter(l=>l.status==='lost');
+    const cold    = yearLeads.filter(l=>l.status==='cold');
+    const inprog  = yearLeads.filter(l=>l.status==='inprogress');
+    const wonVal  = won.reduce((s,l)=>s+(parseFloat(l.potentialValue)||0),0);
+    const allVal  = yearLeads.reduce((s,l)=>s+(parseFloat(l.potentialValue)||0),0);
+    const inpVal  = inprog.reduce((s,l)=>s+(parseFloat(l.potentialValue)||0),0);
+    const lostVal = [...lost,...cold].reduce((s,l)=>s+(parseFloat(l.potentialValue)||0),0);
+    return {won,lost,cold,inprog,wonVal,allVal,inpVal,lostVal,
+      total:yearLeads.length};
+  }, [yearLeads]);
+
+  // Marketing matrix
+  const matrix = useMemo(() => {
+    const {won, lost, wonVal, allVal} = stats;
+    const spend = totalSpend;
+    const closeRate = (won.length+lost.length)>0 ? won.length/(won.length+lost.length)*100 : 0;
+    const roi = spend>0 ? (wonVal-spend)/spend*100 : null;
+    const revPerDollar = spend>0 ? wonVal/spend : null;
+    const costPerRev = wonVal>0 ? spend/wonVal : null;
+    const avgDeal = won.length>0 ? wonVal/won.length : null;
+    const pipelineROAS = spend>0 ? allVal/spend : null;
+    return {roi, revPerDollar, costPerRev, closeRate, avgDeal, pipelineROAS};
+  }, [stats, totalSpend]);
+
+  const METRICS = [
+    {key:'roi',           label:'ROI (Deals Won)',       fmt:v=>`${v.toFixed(0)}%`,     desc:"How much profit you're generating relative to ad spend (revenue-based ROI)."},
+    {key:'revPerDollar',  label:'Revenue per $1 Spent',  fmt:v=>`$${v.toFixed(2)}`,     desc:"How many dollars of revenue each $1 of ads generates."},
+    {key:'costPerRev',    label:'Cost per $1 Revenue',   fmt:v=>`$${v.toFixed(2)}`,     desc:"How much ad spend is required to generate $1 of revenue."},
+    {key:'closeRate',     label:'Close Rate',            fmt:v=>`${v.toFixed(2)}%`,     desc:"Lead quality — how much of your active + lost pipeline actually turns into sales."},
+    {key:'avgDeal',       label:'Avg Deal Value',        fmt:v=>fmtCur(v),              desc:"Average revenue per closed deal from marketing leads."},
+    {key:'pipelineROAS',  label:'Pipeline ROAS',         fmt:v=>`$${v.toFixed(2)}`,     desc:"How much total pipeline value is generated per $1 spent. ⚠️ This is forecasting, not realized profit."},
+  ];
+
+  // Sorted leads
+  const sorted = useMemo(() => {
+    return [...yearLeads].sort((a,b) => {
+      let va = a[sortF]||"", vb = b[sortF]||"";
+      if(sortF==='potentialValue'){va=parseFloat(a.potentialValue)||0; vb=parseFloat(b.potentialValue)||0;}
+      if(va<vb) return -sortD; if(va>vb) return sortD; return 0;
+    });
+  }, [yearLeads, sortF, sortD]);
+
+  function hs(f){if(sortF===f)setSortD(d=>-d);else{setSortF(f);setSortD(-1);}}
+  function sortArrow(f){return sortF===f?(sortD===1?'▲':'▼'):''}
+
+  function startEdit(l){setEditingId(l.id);setEditRow({...l});}
+  function cancelEdit(){setEditingId(null);setEditRow(null);}
+  function saveEdit(){
+    setLeads(prev=>prev.map(l=>l.id===editRow.id?editRow:l));
+    setEditingId(null); setEditRow(null);
+  }
+  function deleteLeadRow(id){setLeads(prev=>prev.filter(l=>l.id!==id));}
+  function addNewLead(){
+    const nl={id:Date.now(),company:"",contact:"",type:"End User",leadSource:"Ads/Website",
+      potentialValue:0,status:"inprogress",lastContact:new Date().toLocaleDateString("en-CA",{month:"short",day:"numeric",year:"numeric"}),
+      productsQuoted:"",notes:"",quoteNumber:"",year:selectedYear,isLead:true};
+    setLeads(prev=>[nl,...prev]);
+    startEdit(nl);
+  }
+
+  // CSV Import
+  function handleImport(e){
+    const file=e.target.files[0]; if(!file)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      try{
+        const text=ev.target.result;
+        const lines=text.split(/[\r\n]+/).filter(l=>l.trim());
+        if(lines.length<2){setImportResult({error:"File appears empty."});return;}
+        const headers=lines[0].split(',').map(h=>h.replace(/"/g,'').trim().toLowerCase());
+        const col=(...names)=>headers.findIndex(h=>names.some(n=>h.includes(n)));
+        const iCo=col('company'),iCn=col('contact'),iType=col('type'),iSrc=col('lead source','source'),
+              iVal=col('potential','value'),iStat=col('status'),iDate=col('date','contact'),
+              iProd=col('product'),iNote=col('note'),iQn=col('quote'),iYr=col('year');
+        const newLeads=[]; let added=0;
+        lines.slice(1).forEach((line,i)=>{
+          const cols=line.split(',').map(c=>c.replace(/^"|"$/g,'').trim());
+          const co=iCo>=0?cols[iCo]||'':'';
+          if(!co) return;
+          const val=parseFloat((iVal>=0?cols[iVal]||'0':'0').replace(/[$,]/g,''))||0;
+          const yr=iYr>=0?parseInt(cols[iYr])||currentYear:currentYear;
+          const normStat=s=>{const sl=s.toLowerCase();return sl.includes('win')||sl.includes('won')?'won':sl.includes('loss')||sl.includes('lost')?'lost':sl==='cold'?'cold':'inprogress';};
+          newLeads.push({
+            id:Date.now()+i,
+            company:co,
+            contact:iCn>=0?cols[iCn]||'':'',
+            type:iType>=0?cols[iType]||'End User':'End User',
+            leadSource:iSrc>=0?cols[iSrc]||'Ads/Website':'Ads/Website',
+            potentialValue:val,
+            status:iStat>=0?normStat(cols[iStat]||''):'inprogress',
+            lastContact:iDate>=0?cols[iDate]||'':'',
+            productsQuoted:iProd>=0?cols[iProd]||'':'',
+            notes:iNote>=0?cols[iNote]||'':'',
+            quoteNumber:iQn>=0?cols[iQn]||'':'',
+            year:yr, isLead:true,
+          });
+          added++;
+        });
+        setLeads(prev=>[...newLeads,...prev]);
+        setImportResult({added});
+      }catch(err){setImportResult({error:String(err)});}
+    };
+    reader.readAsText(file);
+    e.target.value='';
+  }
+
+  // CSV Export
+  function exportLeads(){
+    const esc=v=>{const s=String(v||'').replace(/"/g,'""');return s.includes(',')||s.includes('"')?`"${s}"`:s;};
+    const hdrs=['Company Name','Contact Name','Type','Lead Source','Potential Value','Status','Last Contact Date','Products Quoted','Notes','Quote Number','Year'];
+    const rows=sorted.map(l=>[esc(l.company),esc(l.contact),esc(l.type),esc(l.leadSource),esc(l.potentialValue),esc(l.status),esc(l.lastContact),esc(l.productsQuoted),esc(l.notes),esc(l.quoteNumber),esc(l.year)].join(','));
+    const csv=[hdrs.join(','),...rows].join('\n');
+    const blob=new Blob([csv],{type:'text/csv'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download=`BMP_Leads_${selectedYear}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const STATUS_OPTS=[{v:'inprogress',l:'In Progress'},{v:'won',l:'Won'},{v:'lost',l:'Loss'},{v:'cold',l:'Cold'}];
+  const TYPE_OPTS=['End User','Distributor'];
+  const SRC_OPTS=['Ads/Website','Outreach/Prospecting','Tradeshow'];
+  const statusColor={won:'#34c77b',lost:'#e8472c',cold:'#4a90d9',inprogress:'#f5a623'};
+  const statusLabel={won:'Win',lost:'Loss',cold:'Cold',inprogress:'In Progress'};
+
+  const thStyle={padding:'6px 10px',textAlign:'left',fontSize:9,fontWeight:700,letterSpacing:'.08em',
+    color:T.tableHeadText,background:T.tableHead,borderBottom:`1px solid ${T.border}`,
+    cursor:'pointer',whiteSpace:'nowrap',userSelect:'none'};
+  const tdStyle={padding:'5px 8px',fontSize:11,borderBottom:`1px solid ${T.border}`,color:T.text,verticalAlign:'top'};
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden',background:T.bg,fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif"}}>
+
+      {/* Year selector */}
+      <div style={{display:'flex',alignItems:'center',gap:12,padding:'10px 16px',background:T.headerBg,borderBottom:`1px solid ${T.border}`,flexShrink:0,flexWrap:'wrap'}}>
+        <div style={{display:'flex',alignItems:'center',gap:6}}>
+          <button onClick={()=>setSelectedYear(y=>Math.max(y-1,2024))} style={{background:'none',border:`1px solid ${T.border}`,color:T.muted,width:24,height:24,cursor:'pointer',borderRadius:2,fontSize:12}}>←</button>
+          <span style={{fontSize:15,fontWeight:700,color:T.text,minWidth:50,textAlign:'center'}}>{selectedYear}</span>
+          <button onClick={()=>setSelectedYear(y=>y+1)} style={{background:'none',border:`1px solid ${T.border}`,color:T.muted,width:24,height:24,cursor:'pointer',borderRadius:2,fontSize:12}}>→</button>
+        </div>
+        {/* Spend inputs */}
+        <div style={{display:'flex',alignItems:'center',gap:8,flex:1,flexWrap:'wrap'}}>
+          {[['google','Google Ads $'],['other','Other Marketing $']].map(([k,label])=>(
+            <div key={k} style={{display:'flex',alignItems:'center',gap:6}}>
+              <span style={{fontSize:10,color:T.muted,whiteSpace:'nowrap'}}>{label}</span>
+              <input type="number" value={yearSpend[k]||""} onChange={e=>setSpend(k,e.target.value)}
+                placeholder="0.00" style={{width:90,fontSize:11,height:26,textAlign:'right'}}/>
+            </div>
+          ))}
+          <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <span style={{fontSize:10,color:T.muted}}>Total Spent:</span>
+            <span style={{fontSize:12,fontWeight:700,color:T.text}}>{fmtCur(totalSpend)}</span>
+          </div>
+        </div>
+        {/* Stats pills */}
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          {[
+            {l:'Deals Won',    v:fmtCur(stats.wonVal),    c:'#34c77b', n:stats.won.length},
+            {l:'In Progress',  v:fmtCur(stats.inpVal),    c:'#f5a623', n:stats.inprog.length},
+            {l:'Loss / Cold',  v:fmtCur(stats.lostVal),   c:'#e8472c', n:stats.lost.length+stats.cold.length},
+          ].map(({l,v,c,n})=>(
+            <div key={l} style={{background:`${c}14`,border:`1px solid ${c}`,borderRadius:3,padding:'4px 12px',textAlign:'center'}}>
+              <div style={{fontSize:8,color:c,fontWeight:700,letterSpacing:'.06em'}}>{l}</div>
+              <div style={{fontSize:13,fontWeight:700,color:c}}>{v}</div>
+              <div style={{fontSize:8,color:c}}>{n} lead{n!==1?'s':''}</div>
+            </div>
+          ))}
+        </div>
+        {/* Marketing matrix toggle */}
+        <button onClick={()=>setShowMatrix(m=>!m)}
+          style={{background:showMatrix?T.accent:'transparent',border:`1px solid ${T.borderMid}`,
+            color:showMatrix?'#fff':T.muted,padding:'4px 12px',fontSize:10,cursor:'pointer',borderRadius:2,whiteSpace:'nowrap'}}>
+          {showMatrix?'▲ Hide Matrix':'▼ Marketing Matrix'}
+        </button>
+      </div>
+
+      {/* Marketing Matrix */}
+      {showMatrix&&(
+        <div style={{background:T.panelBg,borderBottom:`2px solid ${T.border}`,padding:'12px 16px',flexShrink:0}}>
+          <div style={{fontSize:9,fontWeight:700,letterSpacing:'.12em',color:T.muted,marginBottom:10}}>MARKETING MATRIX — {selectedYear}</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:8}}>
+            {METRICS.map(m=>{
+              const val = matrix[m.key];
+              const isHovered = hoveredMetric===m.key;
+              return (
+                <div key={m.key}
+                  onMouseEnter={()=>setHoveredMetric(m.key)}
+                  onMouseLeave={()=>setHoveredMetric(null)}
+                  style={{background:T.cardBg,border:`1px solid ${isHovered?T.accent:T.border}`,borderRadius:4,padding:'10px 12px',
+                    cursor:'default',position:'relative',transition:'border-color .15s'}}>
+                  <div style={{fontSize:9,fontWeight:600,color:T.muted,letterSpacing:'.06em',marginBottom:4}}>{m.label.toUpperCase()}</div>
+                  <div style={{fontSize:18,fontWeight:700,color:val!=null?T.accent:T.muted}}>
+                    {val!=null?m.fmt(val):'—'}
+                  </div>
+                  {isHovered&&(
+                    <div style={{position:'absolute',bottom:'calc(100% + 6px)',left:0,zIndex:20,background:T.cardBg,
+                      border:`1px solid ${T.border}`,borderRadius:4,padding:'8px 12px',fontSize:11,color:T.subtext,
+                      boxShadow:'0 4px 16px rgba(0,0,0,.15)',width:220,lineHeight:1.5,pointerEvents:'none'}}>
+                      {m.desc}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {totalSpend===0&&<div style={{fontSize:10,color:'#f5a623',marginTop:8}}>⚠ Enter marketing spend above to see matrix calculations.</div>}
+        </div>
+      )}
+
+      {/* Toolbar */}
+      <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 16px',borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.panelBg,flexWrap:'wrap'}}>
+        <span style={{fontSize:10,color:T.muted}}>{sorted.length} leads</span>
+        <button className="btn-gold" style={{fontSize:10,padding:'4px 12px'}} onClick={addNewLead}>+ Add Lead</button>
+        <button className="btn" style={{fontSize:10,padding:'4px 10px'}} onClick={()=>fileRef.current?.click()}>⬆ Import CSV</button>
+        <input ref={fileRef} type="file" accept=".csv" style={{display:'none'}} onChange={handleImport}/>
+        <button className="btn" style={{fontSize:10,padding:'4px 10px'}} onClick={exportLeads}>⬇ Export CSV</button>
+        {importResult&&(
+          <span style={{fontSize:10,color:importResult.error?'#e8472c':'#34c77b'}}>
+            {importResult.error?`Error: ${importResult.error}`:`✓ Imported ${importResult.added} leads`}
+          </span>
+        )}
+      </div>
+
+      {/* Table */}
+      <div style={{flex:1,overflow:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,minWidth:900}}>
+          <thead style={{position:'sticky',top:0,zIndex:3}}>
+            <tr>
+              {[
+                ['company','Company'],['contact','Contact'],['type','Type'],
+                ['leadSource','Lead Source'],['potentialValue','Value'],
+                ['status','Status'],['lastContact','Last Contact'],
+                ['productsQuoted','Products'],['notes','Notes'],['actions',''],
+              ].map(([f,l])=>(
+                <th key={f} style={thStyle} onClick={()=>f!=='actions'&&hs(f)}>
+                  {l} {f!=='actions'&&sortArrow(f)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map(lead=>{
+              const isEditing = editingId===lead.id;
+              const sc = statusColor[lead.status]||'#888';
+              if(isEditing) return (
+                <tr key={lead.id} style={{background:T.tableHead}}>
+                  {['company','contact','type','leadSource','potentialValue','status','lastContact','productsQuoted','notes'].map(f=>(
+                    <td key={f} style={tdStyle}>
+                      {f==='type'
+                        ? <select value={editRow.type||''} onChange={e=>setEditRow(r=>({...r,type:e.target.value}))} style={{width:'100%',fontSize:11}}>
+                            {TYPE_OPTS.map(o=><option key={o}>{o}</option>)}
+                          </select>
+                        : f==='leadSource'
+                        ? <select value={editRow.leadSource||''} onChange={e=>setEditRow(r=>({...r,leadSource:e.target.value}))} style={{width:'100%',fontSize:11}}>
+                            {SRC_OPTS.map(o=><option key={o}>{o}</option>)}
+                          </select>
+                        : f==='status'
+                        ? <select value={editRow.status||'inprogress'} onChange={e=>setEditRow(r=>({...r,status:e.target.value}))} style={{width:'100%',fontSize:11}}>
+                            {STATUS_OPTS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+                          </select>
+                        : f==='notes'
+                        ? <textarea value={editRow.notes||''} onChange={e=>setEditRow(r=>({...r,notes:e.target.value}))} style={{width:'100%',fontSize:11,height:52,resize:'vertical'}}/>
+                        : <input value={editRow[f]||''} onChange={e=>setEditRow(r=>({...r,[f]:e.target.value}))} style={{width:'100%',fontSize:11}}/>
+                      }
+                    </td>
+                  ))}
+                  <td style={tdStyle}>
+                    <div style={{display:'flex',gap:4}}>
+                      <button className="btn-gold" style={{fontSize:10,padding:'3px 8px'}} onClick={saveEdit}>✓</button>
+                      <button className="btn" style={{fontSize:10,padding:'3px 8px'}} onClick={cancelEdit}>✕</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+              return (
+                <tr key={lead.id}
+                  style={{background:T.cardBg}}
+                  onMouseOver={e=>e.currentTarget.style.background=T.rowHover}
+                  onMouseOut={e=>e.currentTarget.style.background=T.cardBg}>
+                  <td style={{...tdStyle,fontWeight:600}}>{lead.company}</td>
+                  <td style={tdStyle}>{lead.contact}</td>
+                  <td style={tdStyle}>
+                    <span style={{fontSize:9,background:lead.type==='Distributor'?'rgba(123,94,167,.15)':'rgba(74,144,217,.15)',
+                      color:lead.type==='Distributor'?'#7b5ea7':'#4a90d9',padding:'2px 6px',borderRadius:10,fontWeight:600,whiteSpace:'nowrap'}}>
+                      {lead.type||'—'}
+                    </span>
+                  </td>
+                  <td style={tdStyle}><span style={{fontSize:10,color:T.muted}}>{lead.leadSource||'—'}</span></td>
+                  <td style={{...tdStyle,fontWeight:600,color:T.accent}}>{lead.potentialValue>0?fmtCur(lead.potentialValue):'—'}</td>
+                  <td style={tdStyle}>
+                    <span style={{fontSize:9,background:`${sc}18`,color:sc,padding:'2px 8px',borderRadius:10,fontWeight:700,whiteSpace:'nowrap'}}>
+                      {statusLabel[lead.status]||lead.status}
+                    </span>
+                  </td>
+                  <td style={{...tdStyle,color:T.muted,whiteSpace:'nowrap'}}>{lead.lastContact||'—'}</td>
+                  <td style={{...tdStyle,color:T.muted,fontSize:10,maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lead.productsQuoted||'—'}</td>
+                  <td style={{...tdStyle,color:T.muted,maxWidth:200}}>
+                    <div style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:200}} title={lead.notes}>{lead.notes||''}</div>
+                  </td>
+                  <td style={tdStyle}>
+                    <div style={{display:'flex',gap:4}}>
+                      <button className="btn" style={{fontSize:10,padding:'2px 8px'}} onClick={()=>startEdit(lead)}>✏</button>
+                      <button className="btn-del" style={{fontSize:10,padding:'2px 6px'}} onClick={()=>deleteLeadRow(lead.id)}>✕</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {sorted.length===0&&(
+          <div style={{textAlign:'center',padding:40,color:T.muted,fontSize:13}}>
+            No leads for {selectedYear} — add one or import a CSV.
           </div>
         )}
       </div>

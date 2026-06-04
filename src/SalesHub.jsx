@@ -1391,12 +1391,14 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
                 {ro?<span style={{fontSize:11}}>{li.sku||"—"}</span>
                   :<><input list={`sl-${idx}`} value={li.sku} onChange={e=>updLI(li.id,"sku",e.target.value)}
                       style={{width:"100%",fontSize:11,height:25}} placeholder="SKU"/>
+                    <datalist id={`sl-${idx}`}>{(products||[]).map(p=><option key={p.sku} value={p.sku}/>)}</datalist>
                     <datalist id={`sl-${idx}`}>{(products||[]).map(p=><option key={p.sku} value={p.sku}/>)}</datalist></>}
               </td>
               <td>
                 {ro?<span style={{fontSize:11}}>{li.description}</span>
                   :<><input list={`dl-${idx}`} value={li.description} onChange={e=>updLI(li.id,"description",e.target.value)}
                       style={{width:"100%",fontSize:11,height:25}} placeholder="Product description"/>
+                    <datalist id={`dl-${idx}`}>{(products||[]).map(p=><option key={p.sku} value={p.description}/>)}</datalist>
                     <datalist id={`dl-${idx}`}>{(products||[]).map(p=><option key={p.sku} value={p.description}/>)}</datalist></>}
               </td>
               <td style={{position:"relative"}}>

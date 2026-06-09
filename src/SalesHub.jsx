@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { initializeApp } from "firebase/app";
 
-const APP_VERSION = "v3.4 — Jun 2025";
+const APP_VERSION = "v4.0 — Jun 2026";
 const FAVICON_DARK  = "data:image/png;base64,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";
 const FAVICON_LIGHT = "data:image/png;base64,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";
 import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "firebase/firestore";
@@ -723,8 +723,45 @@ export default function SalesHub() {
     return () => unsub();
   }, []);
 
+  // ── Firebase: sync products CAD ───────────────────────────────────────────
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "config", "productsCAD"), (snap) => {
+      if (snap.exists() && Array.isArray(snap.data().items)) {
+        setProductsCAD(snap.data().items);
+      }
+    }, err => console.warn("Products sync error:", err));
+    return () => unsub();
+  }, []);
+
+  // ── Firebase: sync categories ─────────────────────────────────────────────
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "config", "categories"), (snap) => {
+      if (snap.exists() && snap.data().map) {
+        setCategories(snap.data().map);
+      }
+    }, err => console.warn("Categories sync error:", err));
+    return () => unsub();
+  }, []);
+
   const currentProducts = productCurrency==="CAD" ? productsCAD : productsUSD;
-  const setCurrentProducts = productCurrency==="CAD" ? setProductsCAD : setProductsUSD;
+  function setCurrentProducts(updater) {
+    if (productCurrency === "CAD") {
+      setProductsCAD(prev => {
+        const next = typeof updater === 'function' ? updater(prev) : updater;
+        setDoc(doc(db, "config", "productsCAD"), {items: next}).catch(console.error);
+        return next;
+      });
+    } else {
+      setProductsUSD(updater);
+    }
+  }
+  function setCurrentCategories(updater) {
+    setCategories(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      setDoc(doc(db, "config", "categories"), {map: next}).catch(console.error);
+      return next;
+    });
+  }
 
   // Effective USD products — if a USD price field is blank, auto-convert from CAD using exchange rate
   const effectiveProductsUSD = useMemo(() => {
@@ -980,6 +1017,7 @@ export default function SalesHub() {
         .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;z-index:100}
         .modal{background:var(--card-bg);border:1px solid var(--border-mid);border-radius:3px;padding:22px;max-width:580px;width:92%;max-height:80vh;overflow-y:auto;color:var(--text);box-shadow:0 4px 24px rgba(0,0,0,.12)}
         .warn-toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#1e1808;border:1px solid #3a2e08;color:#c8a030;font-size:11px;padding:6px 14px;white-space:nowrap;z-index:500;cursor:pointer;border-radius:2px;box-shadow:0 2px 12px rgba(0,0,0,.4);}
+        @keyframes fadeOut{0%{opacity:1}70%{opacity:1}100%{opacity:0}}
       `}</style>
 
       {/* Header */}
@@ -1031,7 +1069,7 @@ export default function SalesHub() {
           {activeTab==="shipping"&&<ShippingTab T={T}/>}
           {activeTab==="products"&&<ProductsTab products={filteredProducts} setProducts={setCurrentProducts}
             currency={productCurrency} setCurrency={setProductCurrency} search={productSearch} setSearch={setProductSearch}
-            categories={categories} setCategories={setCategories}
+            categories={categories} setCategories={setCurrentCategories}
             exchangeRate={exchangeRate} setExchangeRate={setExchangeRate} T={T}/>}
           {activeTab==="loadcalc"&&<LoadCalcTab T={T}/>}
           {activeTab==="pipeline"&&<PipelineTab quotes={quotes} setQuotes={setQuotes} T={T} loginName={loginName} setActiveQuote={setActiveQuote} setActiveTab={setActiveTab}/>}
@@ -1312,6 +1350,12 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
   }, [quote.lineItems]);
   const products = quote.currency==="CAD"?productsCAD:productsUSD; // productsUSD prop is already auto-converted
   const [qtyWarnings,setQtyWarnings] = useState({});
+  const [priceFlash, setPriceFlash] = useState({}); // lineItemId -> bool
+
+  function flashPrice(id) {
+    setPriceFlash(f => ({...f, [id]: true}));
+    setTimeout(() => setPriceFlash(f => ({...f, [id]: false})), 1400);
+  }
 
   function upd(field,val){
     setQuote(q=>{
@@ -1358,6 +1402,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
           const tier=getPriceTier(prod,u.qty,q.prepaid);
           u.basePrice=tier.price; u.priceTier=tier.tier;
           u.unitPrice=Math.round(tier.price*(1+(u.increase||0)/100)*100)/100;
+          flashPrice(id);
         }
       }
       if(field==="increase"){const p=parseFloat(val)||0;u.unitPrice=Math.round(u.basePrice*(1+p/100)*100)/100;}
@@ -1369,6 +1414,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
           if(tier.price>0){
             u.basePrice=tier.price; u.priceTier=tier.tier;
             u.unitPrice=Math.round(tier.price*(1+(u.increase||0)/100)*100)/100;
+            flashPrice(id);
           }
           if(prod.pkg&&prod.pkg!==""){
             const pkg=parseInt(prod.pkg);
@@ -1528,7 +1574,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
       <div style={{border:"1px solid #1e1e1e",marginBottom:8,overflowX:"auto"}}><table className="data-table">
           <thead><tr>
             <th style={{width:140}}>SKU</th>
-            <th>Description</th>
+            <th style={{width:320}}>Description</th>
             <th style={{width:72}}>Qty</th>
             <th style={{width:105}}>Unit Price</th>
             <th style={{width:105}}>Total</th>
@@ -1567,12 +1613,17 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
                       <div>{fmtCur(li.unitPrice)}</div>
                       {li.priceTier&&li.priceTier!=="unit"&&<div style={{fontSize:8,color:"#c8a96e",textTransform:"uppercase",letterSpacing:".06em",marginTop:1}}>{li.priceTier}</div>}
                     </div>
-                  : <div>
+                  : <div style={{position:"relative"}}>
                       <input type="number" step="0.01" value={li.unitPrice===0?"":li.unitPrice}
                         onChange={e=>updLI(li.id,"unitPrice",e.target.value)}
                         onBlur={e=>{if(e.target.value==="")updLI(li.id,"unitPrice",0);}}
                         style={{width:"100%",fontSize:11,height:25}}/>
                       {li.priceTier&&li.priceTier!=="unit"&&<div style={{fontSize:8,color:"#c8a96e",textTransform:"uppercase",letterSpacing:".06em",marginTop:1}}>{li.priceTier} price</div>}
+                      {priceFlash[li.id]&&(
+                        <div style={{position:"absolute",right:-72,top:-1,background:"#1a3a1a",border:"1px solid #2a6a2a",color:"#5ace5a",fontSize:9,padding:"2px 6px",borderRadius:2,whiteSpace:"nowrap",pointerEvents:"none",zIndex:10,animation:"fadeOut 1.4s forwards"}}>
+                          ✓ Updated
+                        </div>
+                      )}
                     </div>
                 }
               </td>
@@ -1593,6 +1644,93 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
         </div>}
       </div>
       )} {/* end ternary */}
+
+      {/* Coverage Totals — Turbidity Curtains, Straw Wattles, ECB/TRM */}
+      {(()=>{
+        const items = quote.lineItems || [];
+
+        // Turbidity Curtains: SKU contains "TBC" — each section = 50ft / 15m
+        const curtainQty = items.filter(li => /TBC/i.test(li.sku||'')).reduce((s,li)=>s+(parseInt(li.qty)||0),0);
+
+        // Straw Wattles: STW0925/RDSTW0925/BSTW0925/AEW0925 = 25ft; STW1220/RDSTW1220/BSTW1220/AEW1220 = 20ft
+        const wattle25Qty = items.filter(li => /0925/i.test(li.sku||'')).reduce((s,li)=>s+(parseInt(li.qty)||0),0);
+        const wattle20Qty = items.filter(li => /1220/i.test(li.sku||'')).reduce((s,li)=>s+(parseInt(li.qty)||0),0);
+        const totalWattleFt = wattle25Qty * 25 + wattle20Qty * 20;
+
+        // ECB/TRM: size by SKU suffix
+        // 08 = 100sy/83m²  16 = 200sy/167m²  08JR = 500sy/418m²  16JR = 1000sy/836m²
+        function ecbSize(sku) {
+          if (/16JR/i.test(sku)) return {sy:1000,m2:836};
+          if (/08JR/i.test(sku)) return {sy:500, m2:418};
+          if (/16/i.test(sku))   return {sy:200, m2:167};
+          if (/08/i.test(sku))   return {sy:100, m2:83};
+          return null;
+        }
+        let totalSY = 0, totalM2 = 0;
+        items.forEach(li => {
+          const sku = li.sku || '';
+          if (!/^BMP-/i.test(sku)) return; // only BMP- prefix products
+          const size = ecbSize(sku);
+          if (!size) return;
+          const qty = parseInt(li.qty) || 0;
+          totalSY += qty * size.sy;
+          totalM2 += qty * size.m2;
+        });
+        const totalSF = Math.round(totalSY * 9);
+
+        const hasCurtains = curtainQty > 0;
+        const hasWattles  = wattle25Qty > 0 || wattle20Qty > 0;
+        const hasECB      = totalSY > 0;
+        if (!hasCurtains && !hasWattles && !hasECB) return null;
+
+        return (
+          <div style={{border:`1px solid ${T.border}`,marginBottom:8,overflow:"hidden"}}>
+            <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".12em",color:T.muted,padding:"5px 10px",background:T.tableHead,borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:6}}>
+              <span>📐</span> Coverage Totals
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:0}}>
+              {hasCurtains && (
+                <div style={{padding:"8px 14px",borderRight:`1px solid ${T.border}`,minWidth:160}}>
+                  <div style={{fontSize:9,color:T.muted,letterSpacing:".08em",textTransform:"uppercase",marginBottom:3}}>Turbidity Curtain</div>
+                  <div style={{fontSize:13,fontWeight:600,color:T.subtext,fontVariantNumeric:"tabular-nums"}}>
+                    {(curtainQty*50).toLocaleString()} ft &nbsp;<span style={{color:T.muted,fontWeight:400,fontSize:11}}>({(curtainQty*15).toLocaleString()} m)</span>
+                  </div>
+                  <div style={{fontSize:10,color:T.muted,marginTop:2}}>{curtainQty} section{curtainQty!==1?"s":""} × 50 ft each</div>
+                </div>
+              )}
+              {hasWattles && (
+                <div style={{padding:"8px 14px",borderRight:`1px solid ${T.border}`,minWidth:160}}>
+                  <div style={{fontSize:9,color:T.muted,letterSpacing:".08em",textTransform:"uppercase",marginBottom:3}}>Straw Wattles</div>
+                  <div style={{fontSize:13,fontWeight:600,color:T.subtext,fontVariantNumeric:"tabular-nums"}}>
+                    {totalWattleFt.toLocaleString()} ft
+                  </div>
+                  {wattle25Qty>0 && <div style={{fontSize:10,color:T.muted,marginTop:2}}>{wattle25Qty} × 25 ft</div>}
+                  {wattle20Qty>0 && <div style={{fontSize:10,color:T.muted,marginTop:2}}>{wattle20Qty} × 20 ft</div>}
+                </div>
+              )}
+              {hasECB && (
+                <div style={{padding:"8px 14px",minWidth:220}}>
+                  <div style={{fontSize:9,color:T.muted,letterSpacing:".08em",textTransform:"uppercase",marginBottom:3}}>ECB / TRM Coverage</div>
+                  <div style={{display:"flex",gap:16}}>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:600,color:T.subtext,fontVariantNumeric:"tabular-nums"}}>{totalSY.toLocaleString()} sy</div>
+                      <div style={{fontSize:9,color:T.muted,marginTop:1}}>Square yards</div>
+                    </div>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:600,color:T.subtext,fontVariantNumeric:"tabular-nums"}}>{totalM2.toLocaleString()} m²</div>
+                      <div style={{fontSize:9,color:T.muted,marginTop:1}}>Square metres</div>
+                    </div>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:600,color:T.subtext,fontVariantNumeric:"tabular-nums"}}>{totalSF.toLocaleString()} sf</div>
+                      <div style={{fontSize:9,color:T.muted,marginTop:1}}>Square feet</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Load Validation Warnings */}
       {Array.isArray(loadWarnings) && loadWarnings.length > 0 && (
@@ -1679,20 +1817,31 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
 }
 
 // ─── DIMS Tab ──────────────────────────────────────────────────────────────────
-function DimsTab({dims,setDims}) {
+function DimsTab({dims,setDims,T}) {
   const [editing,setEditing] = useState(null);
   const [adding,setAdding] = useState(false);
   const [newRow,setNewRow] = useState({product:"",type:"Pallet",pieces:"",L:"",W:"",H:"",weight:"",indWeight:""});
   const [search,setSearch] = useState("");
   const [filterType,setFilterType] = useState("All");
+  const [sortF, setSortF] = useState("product");
+  const [sortD, setSortD] = useState(1);
+
+  function hs(f){if(sortF===f)setSortD(d=>-d);else{setSortF(f);setSortD(1);}}
+  const Th=({l,f})=><th onClick={()=>hs(f)} style={{cursor:"pointer",userSelect:"none"}}>{l}{sortF===f?(sortD===1?" ↑":" ↓"):""}</th>;
 
   const types = useMemo(()=>["All",...new Set((dims||[]).map(d=>d.type))],[dims]);
-  const filtered = useMemo(()=>dims.filter(d=>{
-    const q=search.toLowerCase();
-    const matchS=!q||(d.product||"").toLowerCase().includes(q)||(d.type||"").toLowerCase().includes(q);
-    const matchT=filterType==="All"||d.type===filterType;
-    return matchS&&matchT;
-  }),[dims,search,filterType]);
+  const filtered = useMemo(()=>{
+    const base = (dims||[]).filter(d=>{
+      const q=search.toLowerCase();
+      const matchS=!q||(d.product||"").toLowerCase().includes(q)||(d.type||"").toLowerCase().includes(q);
+      const matchT=filterType==="All"||d.type===filterType;
+      return matchS&&matchT;
+    });
+    return [...base].sort((a,b)=>{
+      const av=String(a[sortF]??""), bv=String(b[sortF]??"");
+      return av.localeCompare(bv,undefined,{numeric:true})*sortD;
+    });
+  },[dims,search,filterType,sortF,sortD]);
 
   function handleImport(e) {
     const file=e.target.files[0]; if(!file)return;
@@ -1730,17 +1879,17 @@ function DimsTab({dims,setDims}) {
       <div style={{flex:1,overflowY:"auto"}}>
         <table className="data-table">
           <thead><tr>
-            <th>Product</th>
-            <th>Type</th>
-            <th>Pieces</th>
-            <th>L</th><th>W</th><th>H</th>
-            <th>Weight</th>
-            <th>Ind. Weight</th>
+            <Th l="Product" f="product"/>
+            <Th l="Type" f="type"/>
+            <Th l="Pieces" f="pieces"/>
+            <Th l="L" f="L"/><Th l="W" f="W"/><Th l="H" f="H"/>
+            <Th l="Weight" f="weight"/>
+            <Th l="Ind. Weight" f="indWeight"/>
             <th>Actions</th>
           </tr></thead>
           <tbody>
             {filtered.map((row,i)=>{
-              const origIdx=dims.indexOf(row);
+              const origIdx=dims.findIndex(d=>d===row);
               return editing?.idx===origIdx
                 ? <DimEditRow key={i} row={editing.data} setRow={d=>setEditing(e=>({...e,data:d}))} onSave={()=>saveEdit(editing.data)} onCancel={()=>setEditing(null)}/>
                 : <tr key={i}>
@@ -2013,6 +2162,8 @@ function ProductsTab({products,setProducts,currency,setCurrency,search,setSearch
   const [catInput,     setCatInput]     = useState("");          // typed category name
   const [collapsed,    setCollapsed]    = useState(new Set());   // collapsed category names
   const [viewMode,     setViewMode]     = useState("grouped");   // "grouped" | "flat"
+  const [addModal,     setAddModal]     = useState(false);       // add new product modal
+  const [newProduct,   setNewProduct]   = useState({sku:"",product:"",description:"",pkg:"",pallet:"",truckQty:"",price:"",palletPrice:"",prepaid:"",prepaidPallet:"",truckPrice:""});
 
   const SAMPLE_CSV = `SKU,Product,Product Description,Truck Volume,Package Volume,Pallet Volume,Price Per,Pallet Price Per,Prepaid Price Per,Prepaid Pallet Price Per,Truck Price Per,category
 TBC1250T2IND,Turbidity Curtain,12.5x50 Turbidity Curtain Type 2 IND,,1,8,$1210.00,,,,,Turbidity Curtain
@@ -2331,9 +2482,57 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
         </div>
       )}
 
+      {/* Add Product Modal */}
+      {addModal && (
+        <div className="modal-overlay" onClick={()=>setAddModal(false)}>
+          <div className="modal" style={{maxWidth:560,width:"94%"}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:".12em",color:T.tableHeadText,marginBottom:16}}>＋ Add New Product</div>
+            {[{k:"sku",label:"SKU *",ph:"e.g. BMP-NEWSKU01"},{k:"product",label:"Product Name",ph:"e.g. Standard ECB"},{k:"description",label:"Description",ph:"e.g. Std-Single Net Straw Blanket - 8' x 112.5'"}].map(({k,label,ph})=>(
+              <div key={k} style={{marginBottom:10}}>
+                <div style={{fontSize:9,color:T.muted,letterSpacing:".08em",textTransform:"uppercase",marginBottom:3}}>{label}</div>
+                <input value={newProduct[k]} onChange={e=>setNewProduct(p=>({...p,[k]:e.target.value}))} placeholder={ph} style={{width:"100%",fontSize:12,height:32}}/>
+              </div>
+            ))}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
+              {[{k:"pkg",l:"Pkg Qty"},{k:"pallet",l:"Pallet Qty"},{k:"truckQty",l:"Truck Qty"}].map(({k,l})=>(
+                <div key={k}><div style={{fontSize:9,color:T.muted,letterSpacing:".08em",textTransform:"uppercase",marginBottom:3}}>{l}</div><input value={newProduct[k]} onChange={e=>setNewProduct(p=>({...p,[k]:e.target.value}))} style={{width:"100%",fontSize:12,height:32}}/></div>
+              ))}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+              {[{k:"price",l:"Price/Unit"},{k:"palletPrice",l:"Pallet Price"},{k:"prepaid",l:"Prepaid Unit"},{k:"prepaidPallet",l:"Prepaid Pallet"},{k:"truckPrice",l:"Truck Price"}].map(({k,l})=>(
+                <div key={k}><div style={{fontSize:9,color:T.muted,letterSpacing:".08em",textTransform:"uppercase",marginBottom:3}}>{l}</div><input type="number" step="0.01" value={newProduct[k]} onChange={e=>setNewProduct(p=>({...p,[k]:e.target.value}))} placeholder="0.00" style={{width:"100%",fontSize:12,height:32}}/></div>
+              ))}
+            </div>
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:9,color:T.muted,letterSpacing:".08em",textTransform:"uppercase",marginBottom:3}}>Category (optional)</div>
+              <input value={newProduct._category||""} onChange={e=>setNewProduct(p=>({...p,_category:e.target.value}))}
+                list="cat-datalist-add" placeholder="e.g. Erosion Control Blanket" style={{width:"100%",fontSize:12,height:32}}/>
+              <datalist id="cat-datalist-add">{allCategories.filter(c=>c!=="Uncategorized").map(c=><option key={c} value={c}/>)}</datalist>
+            </div>
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button className="btn" onClick={()=>setAddModal(false)}>Cancel</button>
+              <button className="btn-gold" disabled={!newProduct.sku.trim()} onClick={()=>{
+                if (!newProduct.sku.trim()) return;
+                const {_category,...prod} = newProduct;
+                const pp = v=>{const n=parseFloat(String(v||"").replace(/[$,\s]/g,""));return isNaN(n)?"":n;};
+                const cleaned={...prod,price:pp(prod.price),palletPrice:pp(prod.palletPrice),prepaid:pp(prod.prepaid),prepaidPallet:pp(prod.prepaidPallet),truckPrice:pp(prod.truckPrice)};
+                setProducts(prev=>{
+                  if((prev||[]).find(p=>p.sku===cleaned.sku)){alert(`SKU "${cleaned.sku}" already exists.`);return prev;}
+                  return [...(prev||[]),cleaned];
+                });
+                if(_category?.trim()) setCategories(prev=>({...prev,[cleaned.sku]:_category.trim()}));
+                setNewProduct({sku:"",product:"",description:"",pkg:"",pallet:"",truckQty:"",price:"",palletPrice:"",prepaid:"",prepaidPallet:"",truckPrice:""});
+                setAddModal(false);
+              }}>Add Product</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div style={{padding:"10px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10,background:T.panelBg||T.headerBg,flexWrap:"wrap"}}>
         <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".12em",color:T.sectionLabel}}>Product &amp; Price List</div>
+        <button className="btn-gold" style={{fontSize:10,padding:"4px 12px",whiteSpace:"nowrap"}} onClick={()=>setAddModal(true)}>＋ Add Product</button>
         <div style={{display:"flex",gap:3}}>
           {["CAD","USD"].map(c=>(
             <button key={c} onClick={()=>setCurrency(c)}
@@ -3880,11 +4079,12 @@ function QuoteGroupedList({quotes, activeQuote, setActiveQuote, setDeleteConfirm
     const monthKeys = Object.keys(byMonth).sort((a,b) => b.localeCompare(a));
 
     const groups = [];
-    if (thisWeek.length > 0) groups.push({id:'thisweek', label:'This Week', quotes:thisWeek, defaultOpen:true});
+    // Always show This Week folder, even if empty (shows placeholder)
+    groups.push({id:'thisweek', label:'This Week', quotes:thisWeek, defaultOpen:true, isThisWeek:true});
     monthKeys.forEach(mk => {
       const label = mk==='unsorted' ? 'Unsorted' : getMonthLabel(mk);
-      const isCurrentMonth = mk === thisMonthKey;
-      groups.push({id:mk, label, quotes:byMonth[mk], defaultOpen:isCurrentMonth});
+      // Close all month folders when This Week is shown (it always is now)
+      groups.push({id:mk, label, quotes:byMonth[mk], defaultOpen:false});
     });
 
     return {groups, thisWeekKey:'thisweek', thisMonthKey};
@@ -3906,10 +4106,24 @@ function QuoteGroupedList({quotes, activeQuote, setActiveQuote, setDeleteConfirm
 
   const toggle = id => setOpen(o => ({...o, [id]:!o[id]}));
 
-  if (filtered.length === 0) {
-    return <div style={{padding:16, color:T.muted, fontSize:11, textAlign:'center'}}>
-      {(quotes||[]).length===0 ? 'No quotes yet' : 'No quotes match your search'}
-    </div>;
+  if (filtered.length === 0 && (quotes||[]).length > 0) {
+    return <div style={{padding:16, color:T.muted, fontSize:11, textAlign:'center'}}>No quotes match your search</div>;
+  }
+
+  // If no quotes at all, still render the This Week folder with empty state
+  if ((quotes||[]).length === 0) {
+    return (
+      <div style={{paddingBottom:8}}>
+        <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',background:T.tableHead,borderBottom:`1px solid ${T.border}`,borderTop:`1px solid ${T.border}`,userSelect:'none',position:'sticky',top:0,zIndex:2}}>
+          <span style={{fontSize:10,color:T.muted,width:10,flexShrink:0}}>▾</span>
+          <span style={{fontSize:10,fontWeight:600,color:T.subtext,letterSpacing:'.04em',flex:1}}>This Week</span>
+          <span style={{fontSize:9,background:T.borderMid,color:T.muted,borderRadius:10,padding:'1px 7px',fontWeight:600,flexShrink:0}}>0</span>
+        </div>
+        <div style={{padding:'14px 12px',textAlign:'center',color:T.muted,fontSize:11,fontStyle:'italic',borderBottom:`1px solid ${T.border}`}}>
+          No quotes made this week yet
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -3937,6 +4151,11 @@ function QuoteGroupedList({quotes, activeQuote, setActiveQuote, setDeleteConfirm
           </div>
 
           {/* Quotes in folder */}
+          {open[group.id] && group.isThisWeek && group.quotes.length === 0 && (
+            <div style={{padding:'14px 12px', textAlign:'center', color:T.muted, fontSize:11, fontStyle:'italic', borderBottom:`1px solid ${T.border}`}}>
+              No quotes made this week yet
+            </div>
+          )}
           {open[group.id] && group.quotes.map(q => {
             const isActive = activeQuote?.id === q.id;
             const total = (q.lineItems||[]).reduce((s,li)=>(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0)+s, 0);
@@ -4253,9 +4472,10 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
         {BUCKETS.map(bucket=>{
           const bQuotes = repQuotes.filter(q=>getQuoteBucket(q)===bucket.key)
             .sort((a,b)=>{
-              // Sort by urgency within bucket: oldest first for active, newest first for closed
-              const da = daysSince(a.savedDate), db = daysSince(b.savedDate);
-              return ['won','lost','cold','followed'].includes(bucket.key) ? db-da : db-da;
+              // Most recently contacted/saved always on top within each bucket
+              const da = new Date(a.savedDate||0).getTime();
+              const db = new Date(b.savedDate||0).getTime();
+              return db - da; // newest first
             });
           if(bQuotes.length===0) return null;
           const isOpen = openSections[bucket.key]??bucket.defaultOpen;

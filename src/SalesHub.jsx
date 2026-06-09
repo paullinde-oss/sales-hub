@@ -2123,7 +2123,7 @@ function ProductEditRow({row,setRow,onSave,onCancel}) {
   });
   return (
     <tr style={{background:"#14140e",verticalAlign:"top"}}>
-      <td style={{paddingTop:6}}><span style={{fontSize:11,color:"#c8a96e"}}>{row.sku}</span></td>
+      <td style={{paddingTop:6}}><input {...f("sku")} style={{width:"100%",fontSize:11,height:26,fontFamily:"monospace",color:"#c8a96e",fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif"}}/></td>
       <td><input {...f("product")}/></td>
       <td style={{minWidth:220}}>
         <textarea value={row.description??""} onChange={e=>setRow(r=>({...r,description:e.target.value}))}
@@ -2316,7 +2316,19 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
     const cat = categories[p.sku];
     return editing?.sku===p.sku
       ? <ProductEditRow key={p.sku} row={editing} setRow={setEditing}
-          onSave={()=>{setProducts(ps=>ps.map(r=>r.sku===editing.sku?editing:r));setEditing(null);}}
+          onSave={()=>{
+            setProducts(ps=>ps.map(r=>r.sku===(editing._origSku||editing.sku)?editing:r));
+            // If SKU changed, migrate the category entry
+            const origSku = editing._origSku;
+            if (origSku && origSku !== editing.sku) {
+              setCategories(prev=>{
+                const n={...prev};
+                if (n[origSku]) { n[editing.sku]=n[origSku]; delete n[origSku]; }
+                return n;
+              });
+            }
+            setEditing(null);
+          }}
           onCancel={()=>setEditing(null)}/>
       : <tr key={p.sku} style={{background:isSelected?(T===DARK?"#1a1a14":"#f0ede4"):T.cardBg}}>
           <td style={{padding:"4px 8px",width:32}}>
@@ -2336,7 +2348,7 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
                   <td style={{fontSize:11,fontFamily:"monospace",textAlign:"right",color:parsePrice(p.truckPrice)>0?T.subtext:T.muted}}>{fmtCur(p.truckPrice)}</td>
           <td>
             <div style={{display:"flex",gap:4}}>
-              <button className="btn" style={{fontSize:10,padding:"2px 8px"}} onClick={()=>setEditing({...p})}>Edit</button>
+              <button className="btn" style={{fontSize:10,padding:"2px 8px"}} onClick={()=>setEditing({...p, _origSku:p.sku})}>Edit</button>
               {cat && <button className="btn-del" style={{fontSize:9,padding:"2px 6px"}} title={`Remove from "${cat}"`} onClick={()=>removeCategory(p.sku)}>✕</button>}
             </div>
           </td>
@@ -2351,7 +2363,7 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
       </th>
       <Th l="SKU" f="sku"/>
       <Th l="Product" f="product"/>
-      <th>Description</th>
+      <Th l="Description" f="description"/>
       <Th l="Pkg" f="pkg" style={{textAlign:"right"}}/>
       <Th l="Pallet" f="pallet" style={{textAlign:"right"}}/>
       <Th l="Price/Unit" f="price" style={{textAlign:"right"}}/>

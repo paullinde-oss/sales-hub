@@ -696,6 +696,7 @@ export default function SalesHub() {
   const [pdfQuote, setPdfQuote] = useState(null);
   const [categories, setCategories] = useLocalStorage('bmp_categories', INITIAL_CATEGORIES);
   const [subCategories, setSubCategories] = useState({});  // sku -> subcat string, Firebase-synced
+  const [subCatDefs, setSubCatDefs] = useState({});        // cat -> [subcat, ...], Firebase-synced
   const [theme, setTheme] = useLocalStorage('bmp_theme', 'light');
   const [mobileTab, setMobileTab] = useState('quotes');
   const [mobileView, setMobileView] = useState('list'); // 'list' | 'detail' for quotes
@@ -754,6 +755,16 @@ export default function SalesHub() {
     return () => unsub();
   }, []);
 
+  // ── Firebase: sync subCatDefs (defined sub-cat names per category) ─────────
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "config", "subCatDefs"), (snap) => {
+      if (snap.exists() && snap.data().map) {
+        setSubCatDefs(snap.data().map);
+      }
+    }, err => console.warn("SubCatDefs sync error:", err));
+    return () => unsub();
+  }, []);
+
   const currentProducts = productCurrency==="CAD" ? productsCAD : productsUSD;
   function setCurrentProducts(updater) {
     if (productCurrency === "CAD") {
@@ -777,6 +788,13 @@ export default function SalesHub() {
     setSubCategories(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
       setDoc(doc(db, "config", "subCategories"), {map: next}).catch(console.error);
+      return next;
+    });
+  }
+  function setCurrentSubCatDefs(updater) {
+    setSubCatDefs(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      setDoc(doc(db, "config", "subCatDefs"), {map: next}).catch(console.error);
       return next;
     });
   }
@@ -1089,6 +1107,7 @@ export default function SalesHub() {
             currency={productCurrency} setCurrency={setProductCurrency} search={productSearch} setSearch={setProductSearch}
             categories={categories} setCategories={setCurrentCategories}
             subCategories={subCategories} setSubCategories={setCurrentSubCategories}
+            subCatDefs={subCatDefs} setSubCatDefs={setCurrentSubCatDefs}
             exchangeRate={exchangeRate} setExchangeRate={setExchangeRate} T={T}/>}
           {activeTab==="loadcalc"&&<LoadCalcTab T={T}/>}
           {activeTab==="pipeline"&&<PipelineTab quotes={quotes} setQuotes={setQuotes} T={T} loginName={loginName} setActiveQuote={setActiveQuote} setActiveTab={setActiveTab} leads={leads} setLeads={setLeads}/>}
@@ -2131,7 +2150,7 @@ function ShippingTab({T}) {
 }
 
 // ─── Products Tab ──────────────────────────────────────────────────────────────
-function ProductEditRow({row,setRow,onSave,onCancel}) {
+function ProductEditRow({row,setRow,onSave,onCancel,availableSubCats=[],currentSubCat="",onSubCatChange}) {
   // Defined OUTSIDE ProductsTab so it doesn't remount on every keystroke
   const f=(k,type="text")=>({
     type,
@@ -2153,6 +2172,17 @@ function ProductEditRow({row,setRow,onSave,onCancel}) {
           rows={3}
           onInput={e=>{e.target.style.height="auto";e.target.style.height=e.target.scrollHeight+"px";}}
         />
+        {(availableSubCats.length>0||currentSubCat)&&(
+          <div style={{marginTop:3,display:"flex",alignItems:"center",gap:4}}>
+            <span style={{fontSize:9,color:"#888",whiteSpace:"nowrap"}}>↳ Sub-cat:</span>
+            <select value={currentSubCat} onChange={e=>onSubCatChange&&onSubCatChange(e.target.value)}
+              style={{fontSize:10,height:22,flex:1,background:"#1a1a12",color:"#c8a96e",border:"1px solid #333"}}>
+              <option value="">— None —</option>
+              {availableSubCats.map(s=><option key={s} value={s}>{s}</option>)}
+              {currentSubCat&&!availableSubCats.includes(currentSubCat)&&<option value={currentSubCat}>{currentSubCat}</option>}
+            </select>
+          </div>
+        )}
       </td>
       <td><input {...f("pkg")}/></td>
       <td><input {...f("pallet")}/></td>
@@ -2170,7 +2200,7 @@ function ProductEditRow({row,setRow,onSave,onCancel}) {
   );
 }
 
-function ProductsTab({products,setProducts,currency,setCurrency,search,setSearch,categories,setCategories,subCategories,setSubCategories,exchangeRate,setExchangeRate,T}) {
+function ProductsTab({products,setProducts,currency,setCurrency,search,setSearch,categories,setCategories,subCategories,setSubCategories,subCatDefs,setSubCatDefs,exchangeRate,setExchangeRate,T}) {
   const [editing,      setEditing]      = useState(null);
   const [sortF,        setSortF]        = useState("sku");
   const [sortD,        setSortD]        = useState(1);
@@ -2203,21 +2233,23 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
     } catch(e) { return ["Uncategorized"]; }
   }, [categories]);
 
-  // Sub-categories per category: {cat: [subcat, ...]}
+  // Sub-categories per category: always show defined ones, plus any inferred from assignments
   const subCatsByCat = useMemo(()=>{
-    const map = {};
+    const map = {...(subCatDefs||{})};  // start with defined sub-cats
+    // Also include any assigned-but-not-defined ones
     (products||[]).forEach(p=>{
       const cat = (categories||{})[p.sku]||"Uncategorized";
       const sub = (subCategories||{})[p.sku];
       if (sub) {
-        if (!map[cat]) map[cat]=new Set();
-        map[cat].add(sub);
+        if (!map[cat]) map[cat]=[];
+        if (!map[cat].includes(sub)) map[cat] = [...map[cat], sub];
       }
     });
+    // Sort each list
     const result = {};
-    Object.keys(map).forEach(k=>{ result[k]=Array.from(map[k]).sort(); });
+    Object.keys(map).forEach(k=>{ result[k]=[...new Set(map[k]||[])].sort(); });
     return result;
-  },[products,categories,subCategories]);
+  },[products,categories,subCategories,subCatDefs]);
 
   // Sub-categories visible under active category filter
   const availableSubCats = useMemo(()=>{
@@ -2314,6 +2346,22 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
   }
 
   // Sub-category helpers
+  function addSubCatDef(cat, sub) {
+    if (!sub?.trim()) return;
+    setSubCatDefs(prev=>{
+      const existing = prev[cat]||[];
+      if (existing.includes(sub.trim())) return prev;
+      return {...prev, [cat]: [...existing, sub.trim()].sort()};
+    });
+  }
+  function removeSubCatDef(cat, sub) {
+    setSubCatDefs(prev=>{
+      const n={...prev};
+      n[cat]=(n[cat]||[]).filter(s=>s!==sub);
+      if(n[cat].length===0) delete n[cat];
+      return n;
+    });
+  }
   function assignSubCategory(sku, sub) {
     if (!sub) {
       setSubCategories(prev=>{ const n={...prev}; delete n[sku]; return n; });
@@ -2322,6 +2370,7 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
     }
   }
   function removeSubCategoryAll(cat, sub) {
+    // Unassign all products from this sub-cat AND remove the definition
     setSubCategories(prev=>{
       const n={...prev};
       Object.keys(n).forEach(k=>{
@@ -2329,6 +2378,7 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
       });
       return n;
     });
+    removeSubCatDef(cat, sub);
   }
 
   // Drag handlers
@@ -2339,15 +2389,14 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
   function onDrop(e, target)   {
     e.preventDefault();
     if (!dragSku) return;
-    // target format: "cat::CategoryName" or "sub::CategoryName::SubCatName"
     const parts = target.split("::");
     if (parts[0]==="cat") {
       setCategories(prev=>({...prev,[dragSku]:parts[1]}));
-      // Clear sub-cat when moving to a new top-level category
       setSubCategories(prev=>{ const n={...prev}; delete n[dragSku]; return n; });
     } else if (parts[0]==="sub") {
       setCategories(prev=>({...prev,[dragSku]:parts[1]}));
       setSubCategories(prev=>({...prev,[dragSku]:parts[2]}));
+      addSubCatDef(parts[1], parts[2]); // ensure definition exists
     }
     setDragSku(null); setDropTarget(null);
   }
@@ -2423,6 +2472,9 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
     const sub = (subCategories||{})[p.sku];
     return editing?.sku===p.sku
       ? <ProductEditRow key={p.sku} row={editing} setRow={setEditing}
+          availableSubCats={subCatsByCat[(categories||{})[editing.sku]||"Uncategorized"]||[]}
+          currentSubCat={(subCategories||{})[editing.sku]||""}
+          onSubCatChange={val=>assignSubCategory(editing.sku, val||null)}
           onSave={()=>{
             setProducts(ps=>ps.map(r=>r.sku===(editing._origSku||editing.sku)?editing:r));
             // If SKU changed, migrate the category entry
@@ -2771,15 +2823,14 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
                               <button className="btn" style={{fontSize:9,padding:"1px 8px"}}
                                 onClick={e=>{
                                   e.stopPropagation();
-                                  const name = window.prompt(`New sub-category name under "${cat}":`);
+                                  const name = window.prompt(`New sub-category under "${cat}":`);
                                   if(name?.trim()) {
-                                    // Assign to all selected, or just note for drag-drop use
+                                    addSubCatDef(cat, name.trim());
+                                    // If products are selected in this cat, assign them
                                     if(selected.size>0){
                                       const skusInCat=[...selected].filter(s=>(categories||{})[s]===cat);
                                       skusInCat.forEach(s=>assignSubCategory(s,name.trim()));
-                                      setSelected(new Set());
-                                    } else {
-                                      alert(`Sub-category "${name.trim()}" created under "${cat}". Select products then drag them onto it, or use the sub-category dropdown in each product's edit row.`);
+                                      if(skusInCat.length>0) setSelected(new Set());
                                     }
                                   }
                                 }}>＋ Sub-cat</button>
@@ -2801,34 +2852,44 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
                         if(q && !(p.sku||"").toLowerCase().includes(q) && !(p.product||"").toLowerCase().includes(q) && !(p.description||"").toLowerCase().includes(q)) return false;
                         return true;
                       });
-                      if(subProds.length===0 && dropTarget!==`sub::${cat}::${sub}`) return null;
                       const subCollapsed = collapsed.has(`${cat}::${sub}`);
                       const subDropId = `sub::${cat}::${sub}`;
                       const isSubDrop = dropTarget===subDropId;
+                      const isEmpty = subProds.length===0;
                       return [
                         <tr key={`sub-${cat}-${sub}`}
-                          style={{background:isSubDrop?"rgba(200,169,110,.12)":T.bg, cursor:"pointer",
-                            outline:isSubDrop?`2px dashed ${T.accent}`:"none"}}
+                          style={{background:isSubDrop?"rgba(200,169,110,.15)":isEmpty?"rgba(255,255,255,.02)":T.bg,
+                            cursor:"pointer", outline:isSubDrop?`2px dashed ${T.accent}`:"none",
+                            borderLeft:`3px solid ${T.accent}44`}}
                           onClick={()=>{const k=`${cat}::${sub}`;setCollapsed(prev=>{const n=new Set(prev);n.has(k)?n.delete(k):n.add(k);return n;});}}
                           onDragOver={e=>onDragOver(e,subDropId)}
                           onDragLeave={onDragLeave}
                           onDrop={e=>onDrop(e,subDropId)}>
-                          <td colSpan={12} style={{padding:"5px 12px 5px 32px",userSelect:"none"}}>
+                          <td colSpan={12} style={{padding:"5px 12px 5px 28px",userSelect:"none"}}>
                             <div style={{display:"flex",alignItems:"center",gap:6}}>
-                              <span style={{fontSize:10,color:T.muted,transition:"transform .15s",display:"inline-block",transform:subCollapsed?"rotate(-90deg)":"rotate(0deg)"}}>▾</span>
-                              <span style={{fontSize:10,color:T.muted}}>↳</span>
-                              <span style={{fontSize:10,fontWeight:600,color:T.subtext,letterSpacing:".03em"}}>{sub}</span>
+                              <span style={{fontSize:10,color:T.accent,opacity:.6,transition:"transform .15s",display:"inline-block",
+                                transform:subCollapsed?"rotate(-90deg)":"rotate(0deg)"}}>▾</span>
+                              <span style={{fontSize:11,color:T.accent,opacity:.7}}>↳</span>
+                              <span style={{fontSize:10,fontWeight:600,color:T.subtext}}>{sub}</span>
                               <span style={{fontSize:9,color:T.muted}}>({subProds.length})</span>
-                              {isSubDrop&&<span style={{fontSize:9,color:T.accent,marginLeft:4}}>Drop here</span>}
-                              <button className="btn-del" style={{marginLeft:"auto",fontSize:9,padding:"1px 8px"}}
-                                onClick={e=>{e.stopPropagation();removeSubCategoryAll(cat,sub);}}>Remove sub-cat</button>
+                              {isEmpty&&!isSubDrop&&(
+                                <span style={{fontSize:9,color:T.muted,fontStyle:"italic",marginLeft:2}}>
+                                  — drag products here or select &amp; assign
+                                </span>
+                              )}
+                              {isSubDrop&&<span style={{fontSize:9,color:T.accent,fontWeight:600,marginLeft:4}}>⬇ Drop here</span>}
+                              <div style={{marginLeft:"auto",display:"flex",gap:4}} onClick={e=>e.stopPropagation()}>
+                                <button className="btn-del" style={{fontSize:9,padding:"1px 8px"}}
+                                  onClick={e=>{e.stopPropagation();removeSubCategoryAll(cat,sub);}}>✕ Remove</button>
+                              </div>
                             </div>
                           </td>
                         </tr>,
-                        ...(!subCollapsed ? subProds.map(p=>(
+                        ...(!subCollapsed && !isEmpty ? subProds.map(p=>(
                           <ProductRow key={p.sku} p={p}
                             draggable onDragStart={e=>onDragStart(e,p.sku)} onDragEnd={onDragEnd}
-                            style={{opacity: dragSku===p.sku ? 0.4 : 1, cursor:"grab"}}/>
+                            style={{opacity: dragSku===p.sku ? 0.4 : 1, cursor:"grab",
+                              borderLeft:`3px solid ${T.accent}22`}}/>
                         )) : [])
                       ];
                     }).flat().filter(Boolean) : []),
@@ -4520,14 +4581,14 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
 
   function setStatus(q, status){
     updateQuote(q.id, {quoteStatus:status});
-    // Sync to Lead Tracking — match by quoteNumber or company name
+    // Sync to Lead Tracking — match by quoteNum (e.g. "BMP44006") or company name fallback
     if (setLeads) {
-      const quoteNum = String(q.id);
-      const company  = (q.company||"").trim().toLowerCase();
+      const quoteNum   = String(q.quoteNum||"").trim();
+      const company    = (q.company||q.name||"").trim().toLowerCase();
       const leadStatus = pipelineToLeadStatus(status);
       setLeads(prev => prev.map(l => {
-        const matchByNum  = l.quoteNumber && String(l.quoteNumber).trim() === quoteNum;
-        const matchByComp = !l.quoteNumber && company && (l.company||"").trim().toLowerCase() === company;
+        const matchByNum  = quoteNum && String(l.quoteNumber||"").trim() === quoteNum;
+        const matchByComp = !quoteNum && company && (l.company||"").trim().toLowerCase() === company;
         if (matchByNum || matchByComp) return {...l, status: leadStatus};
         return l;
       }));
@@ -4868,10 +4929,9 @@ function LeadTrackingTab({leads, setLeads, adSpend, setAdSpend, quotes, setQuote
       const company   = (editRow.company||"").trim().toLowerCase();
       const qStatus   = leadToPipelineStatus(editRow.status);
       setQuotes(prev => prev.map(q => {
-        const matchByNum  = quoteNum && String(q.id) === quoteNum;
-        const matchByComp = !quoteNum && company && (q.company||"").trim().toLowerCase() === company;
+        const matchByNum  = quoteNum && String(q.quoteNum||"").trim() === quoteNum;
+        const matchByComp = !quoteNum && company && (q.company||q.name||"").trim().toLowerCase() === company;
         if (matchByNum || matchByComp) {
-          // Save to Firebase too
           const updated = {...q, quoteStatus: qStatus};
           import('firebase/firestore').then(({doc,setDoc,getFirestore})=>{
             setDoc(doc(getFirestore(),'quotes',String(q.id)),updated).catch(console.error);

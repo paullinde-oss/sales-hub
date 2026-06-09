@@ -2186,7 +2186,6 @@ function DimsTab({dims,setDims,T}) {
           </tbody>
         </table>
       </div>
-      )}
     </div>
   );
 }
@@ -4827,7 +4826,6 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
     if(daysSinceAct >= 7)  return 'checkin';
     return 'recent';
   }
-  }
 
   function updateQuote(id, changes){
     setQuotes(prev => {
@@ -5146,7 +5144,6 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
       </div>
     </div>
   );
-}
 
 // ─── Lead Tracking Tab ─────────────────────────────────────────────────────────
 function LeadTrackingTab({leads, setLeads, adSpend, setAdSpend, quotes, setQuotes, T, loginName}) {

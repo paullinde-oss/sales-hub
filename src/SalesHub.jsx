@@ -1477,6 +1477,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
   if (!quote || typeof quote !== 'object') return null;
 
   return (
+    <>
     <div>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -1862,7 +1863,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
       </div>
     </div>
     {stockOpen&&<StockDrawer quote={quote} onClose={()=>setStockOpen(false)} T={T}/>}
-  );
+  </>;
 }
 
 // ─── Stock Check Drawer ────────────────────────────────────────────────────────

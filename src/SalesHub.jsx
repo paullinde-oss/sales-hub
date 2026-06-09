@@ -1863,7 +1863,8 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
       </div>
     </div>
     {stockOpen&&<StockDrawer quote={quote} onClose={()=>setStockOpen(false)} T={T}/>}
-  </>;
+    </>
+  );
 }
 
 // ─── Stock Check Drawer ────────────────────────────────────────────────────────

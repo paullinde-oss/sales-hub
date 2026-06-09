@@ -695,6 +695,7 @@ export default function SalesHub() {
   const [closeConfirm, setCloseConfirm] = useState(null); // quote to confirm close on
   const [pdfQuote, setPdfQuote] = useState(null);
   const [categories, setCategories] = useLocalStorage('bmp_categories', INITIAL_CATEGORIES);
+  const [subCategories, setSubCategories] = useState({});  // sku -> subcat string, Firebase-synced
   const [theme, setTheme] = useLocalStorage('bmp_theme', 'light');
   const [mobileTab, setMobileTab] = useState('quotes');
   const [mobileView, setMobileView] = useState('list'); // 'list' | 'detail' for quotes
@@ -743,6 +744,16 @@ export default function SalesHub() {
     return () => unsub();
   }, []);
 
+  // ── Firebase: sync subCategories ──────────────────────────────────────────
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "config", "subCategories"), (snap) => {
+      if (snap.exists() && snap.data().map) {
+        setSubCategories(snap.data().map);
+      }
+    }, err => console.warn("SubCategories sync error:", err));
+    return () => unsub();
+  }, []);
+
   const currentProducts = productCurrency==="CAD" ? productsCAD : productsUSD;
   function setCurrentProducts(updater) {
     if (productCurrency === "CAD") {
@@ -759,6 +770,13 @@ export default function SalesHub() {
     setCategories(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
       setDoc(doc(db, "config", "categories"), {map: next}).catch(console.error);
+      return next;
+    });
+  }
+  function setCurrentSubCategories(updater) {
+    setSubCategories(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      setDoc(doc(db, "config", "subCategories"), {map: next}).catch(console.error);
       return next;
     });
   }
@@ -1070,10 +1088,11 @@ export default function SalesHub() {
           {activeTab==="products"&&<ProductsTab products={filteredProducts} setProducts={setCurrentProducts}
             currency={productCurrency} setCurrency={setProductCurrency} search={productSearch} setSearch={setProductSearch}
             categories={categories} setCategories={setCurrentCategories}
+            subCategories={subCategories} setSubCategories={setCurrentSubCategories}
             exchangeRate={exchangeRate} setExchangeRate={setExchangeRate} T={T}/>}
           {activeTab==="loadcalc"&&<LoadCalcTab T={T}/>}
-          {activeTab==="pipeline"&&<PipelineTab quotes={quotes} setQuotes={setQuotes} T={T} loginName={loginName} setActiveQuote={setActiveQuote} setActiveTab={setActiveTab}/>}
-          {activeTab==="leads"&&loginName!=="John"&&<LeadTrackingTab leads={leads} setLeads={setLeads} adSpend={adSpend} setAdSpend={setAdSpend} quotes={quotes} T={T} loginName={loginName}/>}
+          {activeTab==="pipeline"&&<PipelineTab quotes={quotes} setQuotes={setQuotes} T={T} loginName={loginName} setActiveQuote={setActiveQuote} setActiveTab={setActiveTab} leads={leads} setLeads={setLeads}/>}
+          {activeTab==="leads"&&loginName!=="John"&&<LeadTrackingTab leads={leads} setLeads={setLeads} adSpend={adSpend} setAdSpend={setAdSpend} quotes={quotes} setQuotes={setQuotes} T={T} loginName={loginName}/>}
           {activeTab==="leads"&&loginName==="John"&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:T.muted,fontSize:13}}>Lead Tracking is not available for your account.</div>}
         </div>
       </div>
@@ -2151,19 +2170,23 @@ function ProductEditRow({row,setRow,onSave,onCancel}) {
   );
 }
 
-function ProductsTab({products,setProducts,currency,setCurrency,search,setSearch,categories,setCategories,exchangeRate,setExchangeRate,T}) {
+function ProductsTab({products,setProducts,currency,setCurrency,search,setSearch,categories,setCategories,subCategories,setSubCategories,exchangeRate,setExchangeRate,T}) {
   const [editing,      setEditing]      = useState(null);
   const [sortF,        setSortF]        = useState("sku");
   const [sortD,        setSortD]        = useState(1);
   const [importResult, setImportResult] = useState(null);
   const [sampleCSVOpen,setSampleCSVOpen]= useState(false);
-  const [selected,     setSelected]     = useState(new Set());   // selected SKUs
-  const [catModal,     setCatModal]     = useState(false);       // assign category modal
-  const [catInput,     setCatInput]     = useState("");          // typed category name
-  const [collapsed,    setCollapsed]    = useState(new Set());   // collapsed category names
-  const [viewMode,     setViewMode]     = useState("grouped");   // "grouped" | "flat"
-  const [addModal,     setAddModal]     = useState(false);       // add new product modal
+  const [selected,     setSelected]     = useState(new Set());
+  const [catModal,     setCatModal]     = useState(false);
+  const [catInput,     setCatInput]     = useState("");
+  const [collapsed,    setCollapsed]    = useState(new Set());
+  const [viewMode,     setViewMode]     = useState("grouped");
+  const [addModal,     setAddModal]     = useState(false);
   const [newProduct,   setNewProduct]   = useState({sku:"",product:"",description:"",pkg:"",pallet:"",truckQty:"",price:"",palletPrice:"",prepaid:"",prepaidPallet:"",truckPrice:""});
+  const [filterCat,    setFilterCat]    = useState("All");   // active category filter chip
+  const [filterSub,    setFilterSub]    = useState("All");   // active sub-category filter chip
+  const [dragSku,      setDragSku]      = useState(null);    // sku being dragged
+  const [dropTarget,   setDropTarget]   = useState(null);    // "cat::X" or "sub::X::Y"
 
   const SAMPLE_CSV = `SKU,Product,Product Description,Truck Volume,Package Volume,Pallet Volume,Price Per,Pallet Price Per,Prepaid Price Per,Prepaid Pallet Price Per,Truck Price Per,category
 TBC1250T2IND,Turbidity Curtain,12.5x50 Turbidity Curtain Type 2 IND,,1,8,$1210.00,,,,,Turbidity Curtain
@@ -2180,27 +2203,71 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
     } catch(e) { return ["Uncategorized"]; }
   }, [categories]);
 
+  // Sub-categories per category: {cat: [subcat, ...]}
+  const subCatsByCat = useMemo(()=>{
+    const map = {};
+    (products||[]).forEach(p=>{
+      const cat = (categories||{})[p.sku]||"Uncategorized";
+      const sub = (subCategories||{})[p.sku];
+      if (sub) {
+        if (!map[cat]) map[cat]=new Set();
+        map[cat].add(sub);
+      }
+    });
+    const result = {};
+    Object.keys(map).forEach(k=>{ result[k]=Array.from(map[k]).sort(); });
+    return result;
+  },[products,categories,subCategories]);
+
+  // Sub-categories visible under active category filter
+  const availableSubCats = useMemo(()=>{
+    if (filterCat==="All") {
+      const all = new Set();
+      Object.values(subCatsByCat).forEach(subs=>subs.forEach(s=>all.add(s)));
+      return Array.from(all).sort();
+    }
+    return subCatsByCat[filterCat]||[];
+  },[filterCat,subCatsByCat]);
+
   // Sort helper
   function sortProducts(arr) {
     return [...arr].sort((a,b)=>String(a[sortF]??"").localeCompare(String(b[sortF]??""),undefined,{numeric:true})*sortD);
   }
 
-  // Group products by category
+  // Group products by category → sub-category
   const grouped = useMemo(()=>{
     try {
       const map = {};
-      (allCategories||[]).forEach(cat => { map[cat] = []; });
+      (allCategories||[]).forEach(cat => { map[cat] = {}; });
       (products||[]).forEach(p => {
         const cat = (categories||{})[p.sku] || "Uncategorized";
-        if (!map[cat]) map[cat] = [];
-        map[cat].push(p);
+        const sub = (subCategories||{})[p.sku] || "__none__";
+        if (!map[cat]) map[cat] = {};
+        if (!map[cat][sub]) map[cat][sub] = [];
+        map[cat][sub].push(p);
       });
-      Object.keys(map).forEach(k => { map[k] = sortProducts(map[k]); });
+      // Sort within each group
+      Object.keys(map).forEach(cat=>{
+        Object.keys(map[cat]).forEach(sub=>{
+          map[cat][sub] = sortProducts(map[cat][sub]);
+        });
+      });
       return map;
-    } catch(e) { return {"Uncategorized": products||[]}; }
-  }, [products, categories, sortF, sortD, allCategories]);
+    } catch(e) { return {"Uncategorized":{"__none__": products||[]}}; }
+  }, [products, categories, subCategories, sortF, sortD, allCategories]);
 
   const flatSorted = useMemo(()=>{ try { return sortProducts(products||[]); } catch(e) { return products||[]; } }, [products, sortF, sortD]);
+
+  // Apply search + category/subcat filters to flat list
+  const filteredFlat = useMemo(()=>{
+    const q=search.toLowerCase();
+    return flatSorted.filter(p=>{
+      if(q && !p.sku.toLowerCase().includes(q) && !p.product.toLowerCase().includes(q) && !(p.description||"").toLowerCase().includes(q)) return false;
+      if(filterCat!=="All" && (categories||{})[p.sku]!==filterCat) return false;
+      if(filterSub!=="All" && (subCategories||{})[p.sku]!==filterSub) return false;
+      return true;
+    });
+  },[flatSorted,search,filterCat,filterSub,categories,subCategories]);
 
   function hs(f){if(sortF===f)setSortD(d=>-d);else{setSortF(f);setSortD(1);}}
   const Th=({l,f,style={}})=><th onClick={()=>hs(f)} style={{cursor:"pointer",userSelect:"none",...style}}>{l}{sortF===f?(sortD===1?" ↑":" ↓"):""}</th>;
@@ -2244,6 +2311,45 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
       Object.keys(n).forEach(k=>{ if(n[k]===cat) delete n[k]; });
       return n;
     });
+  }
+
+  // Sub-category helpers
+  function assignSubCategory(sku, sub) {
+    if (!sub) {
+      setSubCategories(prev=>{ const n={...prev}; delete n[sku]; return n; });
+    } else {
+      setSubCategories(prev=>({...prev,[sku]:sub}));
+    }
+  }
+  function removeSubCategoryAll(cat, sub) {
+    setSubCategories(prev=>{
+      const n={...prev};
+      Object.keys(n).forEach(k=>{
+        if(n[k]===sub && (categories||{})[k]===cat) delete n[k];
+      });
+      return n;
+    });
+  }
+
+  // Drag handlers
+  function onDragStart(e, sku) { setDragSku(sku); e.dataTransfer.effectAllowed="move"; }
+  function onDragEnd()         { setDragSku(null); setDropTarget(null); }
+  function onDragOver(e, target) { e.preventDefault(); e.dataTransfer.dropEffect="move"; setDropTarget(target); }
+  function onDragLeave()       { setDropTarget(null); }
+  function onDrop(e, target)   {
+    e.preventDefault();
+    if (!dragSku) return;
+    // target format: "cat::CategoryName" or "sub::CategoryName::SubCatName"
+    const parts = target.split("::");
+    if (parts[0]==="cat") {
+      setCategories(prev=>({...prev,[dragSku]:parts[1]}));
+      // Clear sub-cat when moving to a new top-level category
+      setSubCategories(prev=>{ const n={...prev}; delete n[dragSku]; return n; });
+    } else if (parts[0]==="sub") {
+      setCategories(prev=>({...prev,[dragSku]:parts[1]}));
+      setSubCategories(prev=>({...prev,[dragSku]:parts[2]}));
+    }
+    setDragSku(null); setDropTarget(null);
   }
 
   function handleImport(e) {
@@ -2311,9 +2417,10 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
   }
 
   // ── Row renderer (shared for flat + grouped) ─────────────────────────────
-  const ProductRow = ({p}) => {
+  const ProductRow = ({p, draggable:isDraggable, onDragStart, onDragEnd, style:rowStyle={}}) => {
     const isSelected = selected.has(p.sku);
     const cat = categories[p.sku];
+    const sub = (subCategories||{})[p.sku];
     return editing?.sku===p.sku
       ? <ProductEditRow key={p.sku} row={editing} setRow={setEditing}
           onSave={()=>{
@@ -2330,14 +2437,18 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
             setEditing(null);
           }}
           onCancel={()=>setEditing(null)}/>
-      : <tr key={p.sku} style={{background:isSelected?(T===DARK?"#1a1a14":"#f0ede4"):T.cardBg}}>
+      : <tr key={p.sku} draggable={isDraggable} onDragStart={onDragStart} onDragEnd={onDragEnd}
+          style={{background:isSelected?(T===DARK?"#1a1a14":"#f0ede4"):T.cardBg, ...rowStyle}}>
           <td style={{padding:"4px 8px",width:32}}>
             <input type="checkbox" checked={isSelected} onChange={()=>toggleSelect(p.sku)}
               style={{cursor:"pointer",accentColor:"#c8a96e",width:13,height:13}}/>
           </td>
           <td style={{fontFamily:"monospace",fontSize:11,color:T.accent,whiteSpace:"nowrap"}}>{p.sku}</td>
           <td style={{fontSize:11,fontWeight:500,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.product}</td>
-          <td style={{fontSize:11,color:T.muted,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.description}</td>
+          <td style={{fontSize:11,color:T.muted,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+            {p.description}
+            {sub&&<span style={{marginLeft:6,fontSize:9,background:T.tableHead,color:T.accent,padding:"1px 5px",borderRadius:3}}>{sub}</span>}
+          </td>
           <td style={{fontSize:11,fontFamily:"monospace",color:T.tableHeadText,textAlign:"right"}}>{p.pkg||"—"}</td>
           <td style={{fontSize:11,fontFamily:"monospace",color:T.tableHeadText,textAlign:"right"}}>{p.pallet||"—"}</td>
           <td style={{fontSize:11,fontFamily:"monospace",textAlign:"right",color:parsePrice(p.price)>0?T.subtext:T.muted}}>{fmtCur(p.price)}</td>
@@ -2349,6 +2460,7 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
           <td>
             <div style={{display:"flex",gap:4}}>
               <button className="btn" style={{fontSize:10,padding:"2px 8px"}} onClick={()=>setEditing({...p, _origSku:p.sku})}>Edit</button>
+              {sub && <button className="btn" style={{fontSize:9,padding:"2px 6px",color:T.accent}} title={`Sub-cat: ${sub}`} onClick={()=>assignSubCategory(p.sku,null)}>↳{sub} ✕</button>}
               {cat && <button className="btn-del" style={{fontSize:9,padding:"2px 6px"}} title={`Remove from "${cat}"`} onClick={()=>removeCategory(p.sku)}>✕</button>}
             </div>
           </td>
@@ -2375,17 +2487,6 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
       <th>Actions</th>
     </tr>
   );
-
-  const filteredFlat = useMemo(()=>{
-    try {
-      if (!search) return flatSorted||[];
-      const q=search.toLowerCase();
-      return (flatSorted||[]).filter(p=>
-        (p.sku||"").toLowerCase().includes(q)||
-        (p.product||"").toLowerCase().includes(q)||
-        (p.description||"").toLowerCase().includes(q));
-    } catch(e) { return flatSorted||[]; }
-  },[flatSorted, search]);
 
   // Safety guard
   if (!T || !products) return null;
@@ -2590,38 +2691,159 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
         <button className="btn" style={{fontSize:10,padding:"4px 10px",whiteSpace:"nowrap"}} onClick={()=>setSampleCSVOpen(true)}>↓ Sample CSV</button>
       </div>
 
+      {/* Category + Sub-category filter chips */}
+      <div style={{padding:"6px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",flexWrap:"wrap",gap:4,alignItems:"center",background:T.tableHead}}>
+        <span style={{fontSize:9,color:T.muted,letterSpacing:".08em",textTransform:"uppercase",marginRight:4}}>Filter:</span>
+        {["All",...allCategories.filter(c=>c!=="Uncategorized")].map(cat=>(
+          <button key={cat} onClick={()=>{setFilterCat(cat);setFilterSub("All");}}
+            style={{fontSize:10,padding:"2px 10px",borderRadius:10,cursor:"pointer",whiteSpace:"nowrap",
+              background:filterCat===cat?T.accent:T.btnBg,
+              color:filterCat===cat?"#fff":T.btnText,
+              border:filterCat===cat?"none":`1px solid ${T.btnBorder}`}}>
+            {cat}
+          </button>
+        ))}
+        {availableSubCats.length>0&&(
+          <>
+            <span style={{fontSize:9,color:T.border,margin:"0 4px"}}>│</span>
+            {["All",...availableSubCats].map(sub=>(
+              <button key={sub} onClick={()=>setFilterSub(sub)}
+                style={{fontSize:10,padding:"2px 10px",borderRadius:10,cursor:"pointer",whiteSpace:"nowrap",
+                  background:filterSub===sub?T.accentMuted||"#3a5a3a":T.tableHead,
+                  color:filterSub===sub?T.accent:T.muted,
+                  border:`1px solid ${filterSub===sub?T.accent:T.border}`}}>
+                ↳ {sub}
+              </button>
+            ))}
+          </>
+        )}
+      </div>
+
       {/* Table */}
       <div style={{flex:1,overflowY:"auto"}}>
         <table className="data-table">
           <thead>{tableHeaders}</thead>
           <tbody>
             {viewMode==="flat"
-              ? filteredFlat.map(p=><ProductRow key={p.sku} p={p}/>)
+              ? filteredFlat.map(p=>(
+                  <ProductRow key={p.sku} p={p}
+                    draggable onDragStart={e=>onDragStart(e,p.sku)} onDragEnd={onDragEnd}/>
+                ))
               : allCategories.map(cat=>{
-                  const rows = grouped[cat]||[];
-                  if(rows.length===0) return null;
-                  // Filter by search
+                  const catGroups = grouped[cat]||{};
+                  // All products in this cat, flattened
+                  const allCatProducts = Object.values(catGroups).flat();
+                  if(allCatProducts.length===0) return null;
+                  // Apply filters
                   const q=search.toLowerCase();
-                  const visible = q ? rows.filter(p=>p.sku.toLowerCase().includes(q)||p.product.toLowerCase().includes(q)||p.description.toLowerCase().includes(q)) : rows;
-                  if(visible.length===0) return null;
+                  const catVisible = allCatProducts.filter(p=>{
+                    if(q && !(p.sku||"").toLowerCase().includes(q) && !(p.product||"").toLowerCase().includes(q) && !(p.description||"").toLowerCase().includes(q)) return false;
+                    if(filterCat!=="All" && filterCat!==cat) return false;
+                    if(filterSub!=="All" && (subCategories||{})[p.sku]!==filterSub) return false;
+                    return true;
+                  });
+                  if(catVisible.length===0) return null;
+                  if(filterCat!=="All" && filterCat!==cat) return null;
+
                   const isCollapsed = collapsed.has(cat);
+                  const subNames = subCatsByCat[cat]||[];
+                  const dropTargetId = `cat::${cat}`;
+                  const isDrop = dropTarget===dropTargetId;
+
                   return [
-                    // Category header row
-                    <tr key={`cat-${cat}`} style={{background:T.tableHead,cursor:"pointer"}} onClick={()=>toggleCollapse(cat)}>
+                    // ── Category header ────────────────────────────────────
+                    <tr key={`cat-${cat}`}
+                      style={{background:isDrop?"rgba(200,169,110,.18)":T.tableHead, cursor:"pointer",
+                        outline:isDrop?`2px dashed ${T.accent}`:"none", transition:"background .1s"}}
+                      onClick={()=>toggleCollapse(cat)}
+                      onDragOver={e=>onDragOver(e,dropTargetId)}
+                      onDragLeave={onDragLeave}
+                      onDrop={e=>onDrop(e,dropTargetId)}>
                       <td colSpan={12} style={{padding:"7px 12px",userSelect:"none"}}>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
                           <span style={{fontSize:12,color:T.accent,transition:"transform .15s",display:"inline-block",transform:isCollapsed?"rotate(-90deg)":"rotate(0deg)"}}>▾</span>
                           <span style={{fontSize:11,fontWeight:600,color:T.subtext,letterSpacing:".04em"}}>{cat}</span>
-                          <span style={{fontSize:9,color:T.muted,marginLeft:2}}>({visible.length})</span>
+                          <span style={{fontSize:9,color:T.muted,marginLeft:2}}>({catVisible.length})</span>
+                          {isDrop&&<span style={{fontSize:9,color:T.accent,marginLeft:4}}>Drop to assign category</span>}
                           {cat!=="Uncategorized"&&(
-                            <button className="btn-del" style={{marginLeft:"auto",fontSize:9,padding:"1px 8px"}}
-                              onClick={e=>{e.stopPropagation();removeCategoryAll(cat);}}>Remove category</button>
+                            <div style={{marginLeft:"auto",display:"flex",gap:6}} onClick={e=>e.stopPropagation()}>
+                              {/* Add sub-category button */}
+                              <button className="btn" style={{fontSize:9,padding:"1px 8px"}}
+                                onClick={e=>{
+                                  e.stopPropagation();
+                                  const name = window.prompt(`New sub-category name under "${cat}":`);
+                                  if(name?.trim()) {
+                                    // Assign to all selected, or just note for drag-drop use
+                                    if(selected.size>0){
+                                      const skusInCat=[...selected].filter(s=>(categories||{})[s]===cat);
+                                      skusInCat.forEach(s=>assignSubCategory(s,name.trim()));
+                                      setSelected(new Set());
+                                    } else {
+                                      alert(`Sub-category "${name.trim()}" created under "${cat}". Select products then drag them onto it, or use the sub-category dropdown in each product's edit row.`);
+                                    }
+                                  }
+                                }}>＋ Sub-cat</button>
+                              <button className="btn-del" style={{fontSize:9,padding:"1px 8px"}}
+                                onClick={e=>{e.stopPropagation();removeCategoryAll(cat);}}>Remove category</button>
+                            </div>
                           )}
                         </div>
                       </td>
                     </tr>,
-                    // Product rows
-                    ...(!isCollapsed ? visible.map(p=><ProductRow key={p.sku} p={p}/>) : [])
+
+                    // ── Sub-category folders (inside this cat) ────────────
+                    ...(!isCollapsed ? subNames.filter(sub=>{
+                      if(filterSub!=="All" && filterSub!==sub) return false;
+                      return true;
+                    }).map(sub=>{
+                      const subProds = (catGroups[sub]||[]).filter(p=>{
+                        const q=search.toLowerCase();
+                        if(q && !(p.sku||"").toLowerCase().includes(q) && !(p.product||"").toLowerCase().includes(q) && !(p.description||"").toLowerCase().includes(q)) return false;
+                        return true;
+                      });
+                      if(subProds.length===0 && dropTarget!==`sub::${cat}::${sub}`) return null;
+                      const subCollapsed = collapsed.has(`${cat}::${sub}`);
+                      const subDropId = `sub::${cat}::${sub}`;
+                      const isSubDrop = dropTarget===subDropId;
+                      return [
+                        <tr key={`sub-${cat}-${sub}`}
+                          style={{background:isSubDrop?"rgba(200,169,110,.12)":T.bg, cursor:"pointer",
+                            outline:isSubDrop?`2px dashed ${T.accent}`:"none"}}
+                          onClick={()=>{const k=`${cat}::${sub}`;setCollapsed(prev=>{const n=new Set(prev);n.has(k)?n.delete(k):n.add(k);return n;});}}
+                          onDragOver={e=>onDragOver(e,subDropId)}
+                          onDragLeave={onDragLeave}
+                          onDrop={e=>onDrop(e,subDropId)}>
+                          <td colSpan={12} style={{padding:"5px 12px 5px 32px",userSelect:"none"}}>
+                            <div style={{display:"flex",alignItems:"center",gap:6}}>
+                              <span style={{fontSize:10,color:T.muted,transition:"transform .15s",display:"inline-block",transform:subCollapsed?"rotate(-90deg)":"rotate(0deg)"}}>▾</span>
+                              <span style={{fontSize:10,color:T.muted}}>↳</span>
+                              <span style={{fontSize:10,fontWeight:600,color:T.subtext,letterSpacing:".03em"}}>{sub}</span>
+                              <span style={{fontSize:9,color:T.muted}}>({subProds.length})</span>
+                              {isSubDrop&&<span style={{fontSize:9,color:T.accent,marginLeft:4}}>Drop here</span>}
+                              <button className="btn-del" style={{marginLeft:"auto",fontSize:9,padding:"1px 8px"}}
+                                onClick={e=>{e.stopPropagation();removeSubCategoryAll(cat,sub);}}>Remove sub-cat</button>
+                            </div>
+                          </td>
+                        </tr>,
+                        ...(!subCollapsed ? subProds.map(p=>(
+                          <ProductRow key={p.sku} p={p}
+                            draggable onDragStart={e=>onDragStart(e,p.sku)} onDragEnd={onDragEnd}
+                            style={{opacity: dragSku===p.sku ? 0.4 : 1, cursor:"grab"}}/>
+                        )) : [])
+                      ];
+                    }).flat().filter(Boolean) : []),
+
+                    // ── Products with NO sub-category in this cat ─────────
+                    ...(!isCollapsed ? (catGroups["__none__"]||[]).filter(p=>{
+                      const q=search.toLowerCase();
+                      if(q && !(p.sku||"").toLowerCase().includes(q) && !(p.product||"").toLowerCase().includes(q) && !(p.description||"").toLowerCase().includes(q)) return false;
+                      if(filterSub!=="All") return false; // hide when filtering by sub
+                      return true;
+                    }).map(p=>(
+                      <ProductRow key={p.sku} p={p}
+                        draggable onDragStart={e=>onDragStart(e,p.sku)} onDragEnd={onDragEnd}
+                        style={{opacity: dragSku===p.sku ? 0.4 : 1, cursor:"grab"}}/>
+                    )) : [])
                   ];
                 })
             }
@@ -4215,7 +4437,7 @@ function QuoteGroupedList({quotes, activeQuote, setActiveQuote, setDeleteConfirm
 }
 
 // ─── Pipeline Tab ──────────────────────────────────────────────────────────────
-function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActiveTab}) {
+function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActiveTab, leads, setLeads}) {
   const REPS = ["Paul","Mark","Grant","Jeff","John"];
   const savedQuotes = (quotes||[]).filter(q=>q.saved);
   const repsWithQuotes = REPS.filter(r=>savedQuotes.some(q=>q.savedBy===r));
@@ -4289,8 +4511,27 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
     setFollowUpText(s=>({...s,[q.id]:""}));
   }
 
+  // Map pipeline quoteStatus → lead status
+  function pipelineToLeadStatus(qs) {
+    if (qs === 'won')  return 'won';
+    if (qs === 'lost') return 'lost';
+    return 'inprogress';
+  }
+
   function setStatus(q, status){
     updateQuote(q.id, {quoteStatus:status});
+    // Sync to Lead Tracking — match by quoteNumber or company name
+    if (setLeads) {
+      const quoteNum = String(q.id);
+      const company  = (q.company||"").trim().toLowerCase();
+      const leadStatus = pipelineToLeadStatus(status);
+      setLeads(prev => prev.map(l => {
+        const matchByNum  = l.quoteNumber && String(l.quoteNumber).trim() === quoteNum;
+        const matchByComp = !l.quoteNumber && company && (l.company||"").trim().toLowerCase() === company;
+        if (matchByNum || matchByComp) return {...l, status: leadStatus};
+        return l;
+      }));
+    }
   }
 
   const repQuotes = savedQuotes.filter(q=>q.savedBy===activeRep);
@@ -4521,7 +4762,7 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
 }
 
 // ─── Lead Tracking Tab ─────────────────────────────────────────────────────────
-function LeadTrackingTab({leads, setLeads, adSpend, setAdSpend, quotes, T, loginName}) {
+function LeadTrackingTab({leads, setLeads, adSpend, setAdSpend, quotes, setQuotes, T, loginName}) {
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [showMatrix, setShowMatrix] = useState(false);
@@ -4592,19 +4833,54 @@ function LeadTrackingTab({leads, setLeads, adSpend, setAdSpend, quotes, T, login
   // Sorted leads
   const sorted = useMemo(() => {
     return [...yearLeads].sort((a,b) => {
-      let va = a[sortF]||"", vb = b[sortF]||"";
-      if(sortF==='potentialValue'){va=parseFloat(a.potentialValue)||0; vb=parseFloat(b.potentialValue)||0;}
+      let va, vb;
+      if (sortF === 'potentialValue') {
+        va = parseFloat(a.potentialValue)||0;
+        vb = parseFloat(b.potentialValue)||0;
+      } else if (sortF === 'lastContact') {
+        // Parse as real dates so "Jun 4, 2026" sorts correctly; empty dates go to bottom
+        va = a.lastContact ? new Date(a.lastContact).getTime() : 0;
+        vb = b.lastContact ? new Date(b.lastContact).getTime() : 0;
+      } else {
+        va = a[sortF]||"";
+        vb = b[sortF]||"";
+      }
       if(va<vb) return -sortD; if(va>vb) return sortD; return 0;
     });
   }, [yearLeads, sortF, sortD]);
 
-  function hs(f){if(sortF===f)setSortD(d=>-d);else{setSortF(f);setSortD(-1);}}
+  function hs(f){if(sortF===f)setSortD(d=>-d);else{setSortF(f);setSortD(f==='lastContact'?1:-1);}}
   function sortArrow(f){return sortF===f?(sortD===1?'▲':'▼'):''}
 
   function startEdit(l){setEditingId(l.id);setEditRow({...l});}
   function cancelEdit(){setEditingId(null);setEditRow(null);}
+  function leadToPipelineStatus(ls) {
+    if (ls === 'won')  return 'won';
+    if (ls === 'lost') return 'lost';
+    return 'inprogress';
+  }
+
   function saveEdit(){
     setLeads(prev=>prev.map(l=>l.id===editRow.id?editRow:l));
+    // Sync status to matching pipeline quotes
+    if (setQuotes && editRow.status) {
+      const quoteNum  = String(editRow.quoteNumber||"").trim();
+      const company   = (editRow.company||"").trim().toLowerCase();
+      const qStatus   = leadToPipelineStatus(editRow.status);
+      setQuotes(prev => prev.map(q => {
+        const matchByNum  = quoteNum && String(q.id) === quoteNum;
+        const matchByComp = !quoteNum && company && (q.company||"").trim().toLowerCase() === company;
+        if (matchByNum || matchByComp) {
+          // Save to Firebase too
+          const updated = {...q, quoteStatus: qStatus};
+          import('firebase/firestore').then(({doc,setDoc,getFirestore})=>{
+            setDoc(doc(getFirestore(),'quotes',String(q.id)),updated).catch(console.error);
+          }).catch(()=>{});
+          return updated;
+        }
+        return q;
+      }));
+    }
     setEditingId(null); setEditRow(null);
   }
   function deleteLeadRow(id){setLeads(prev=>prev.filter(l=>l.id!==id));}

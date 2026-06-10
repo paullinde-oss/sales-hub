@@ -5114,8 +5114,11 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
       </div>
 
       {/* Bucket sections */}
-      <div style={{flex:1, overflowY:'auto', padding:16}}>
-        {BUCKETS.map(bucket=>{
+      {(()=>{
+        const repQuotes = savedQuotes.filter(q=>q.savedBy===activeRep);
+        return (
+        <div style={{flex:1, overflowY:'auto', padding:16}}>
+          {BUCKETS.map(bucket=>{
           const bQuotes = repQuotes.filter(q=>getQuoteBucket(q)===bucket.key)
             .sort((a,b)=>{
               if (bucket.key==='followed') {
@@ -5156,6 +5159,8 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
           </div>
         )}
       </div>
+        );
+      })()}
     </div>
   );
 }

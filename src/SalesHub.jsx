@@ -2186,6 +2186,7 @@ function DimsTab({dims,setDims,T}) {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }
@@ -4775,6 +4776,7 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
     overdue:true, followup:true, checkin:true, recent:true,
     followed:false, cold:false, won:false, lost:false
   });
+  const [statPeriod, setStatPeriod] = useState('month'); // 'week' | 'month' | 'year'
 
   // Keep activeRep valid if reps change
   useEffect(()=>{
@@ -4789,6 +4791,18 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
     const d = new Date(savedDate);
     if(isNaN(d)) return 0;
     return Math.floor((Date.now()-d.getTime())/(1000*60*60*24));
+  }
+
+  // Get threshold values based on time period
+  function getThresholds() {
+    switch(statPeriod) {
+      case 'week':
+        return { recent: 2, checkin: 7 }; // 0-2d Recent, 2-7d Check In, 7+ Follow Up
+      case 'year':
+        return { recent: 30, checkin: 60 }; // 0-30d Recent, 30-60d Check In, 60+ Follow Up
+      default: // month
+        return { recent: 7, checkin: 14 }; // 0-7d Recent, 7-14d Check In, 14+ Follow Up
+    }
   }
 
   function daysUntilExpiry(q){
@@ -4819,11 +4833,12 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
     const lastAct  = lastActivityDate(q);
     const daysSinceAct = daysSince(lastAct);
     const hasFollowUp  = (q.followUps||[]).length > 0;
-    // If followed up within last 14 days → Followed Up bucket
-    if(hasFollowUp && daysSinceAct < 14) return 'followed';
-    // Age-based on last activity
-    if(daysSinceAct >= 14) return 'followup';
-    if(daysSinceAct >= 7)  return 'checkin';
+    const {recent: recentThresh, checkin: checkinThresh} = getThresholds();
+    // If followed up within last threshold period → Followed Up bucket
+    if(hasFollowUp && daysSinceAct < checkinThresh) return 'followed';
+    // Age-based on last activity, using dynamic thresholds
+    if(daysSinceAct >= checkinThresh) return 'followup';
+    if(daysSinceAct >= recentThresh)  return 'checkin';
     return 'recent';
   }
 
@@ -4882,11 +4897,12 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
     toFreeze.forEach(q=>updateQuote(q.id,{quoteStatus:'cold'}));
   },[savedQuotes.length]);
 
+  const {recent: recentThresh, checkin: checkinThresh} = getThresholds();
   const BUCKETS = [
     {key:'overdue',  label:'Overdue / Expires Soon',          color:'#e8472c', bg:'rgba(232,71,44,.08)',   defaultOpen:true},
-    {key:'followup', label:'Follow Up Now · 14+ days inactive',color:'#f5a623', bg:'rgba(245,166,35,.08)', defaultOpen:true},
-    {key:'checkin',  label:'Check In Soon · 7–14 days',        color:'#f5a623', bg:'rgba(245,166,35,.04)', defaultOpen:true},
-    {key:'recent',   label:'Recent · < 7 days',                color:'#34c77b', bg:'rgba(52,199,123,.06)', defaultOpen:true},
+    {key:'followup', label:`Follow Up Now · ${checkinThresh}+ days inactive`,color:'#f5a623', bg:'rgba(245,166,35,.08)', defaultOpen:true},
+    {key:'checkin',  label:`Check In Soon · ${recentThresh}–${checkinThresh} days`,        color:'#f5a623', bg:'rgba(245,166,35,.04)', defaultOpen:true},
+    {key:'recent',   label:`Recent · < ${recentThresh} days`,                color:'#34c77b', bg:'rgba(52,199,123,.06)', defaultOpen:true},
     {key:'followed', label:'📞 Followed Up · < 14 days ago',   color:T.muted,   bg:'transparent',          defaultOpen:false},
     {key:'cold',     label:'❄️ Cold',                          color:'#4a90d9', bg:'transparent',          defaultOpen:false},
     {key:'won',      label:'✅ Closed - Won',                   color:'#34c77b', bg:'transparent',          defaultOpen:false},
@@ -5012,8 +5028,6 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
       </div>
     );
   }
-
-  const [statPeriod, setStatPeriod] = useState('month'); // 'week' | 'month' | 'year'
 
   // Auto-cold: any inprogress quote saved 60+ days ago → treat as cold in bucket logic
   // (doesn't mutate data, just affects display bucket)
@@ -5144,6 +5158,7 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
       </div>
     </div>
   );
+}
 
 // ─── Lead Tracking Tab ─────────────────────────────────────────────────────────
 function LeadTrackingTab({leads, setLeads, adSpend, setAdSpend, quotes, setQuotes, T, loginName}) {

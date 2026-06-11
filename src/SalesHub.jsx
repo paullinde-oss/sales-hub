@@ -1872,20 +1872,21 @@ const STOCK_SHEETS = {
   calgary: {
     url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQQIjS6Lyxr88Pia5SVFTdiyILWiDvIdbOC3l3e5ukYBZ1maFAB4lZzKs6OXnaHNIgAb7WsGJX9S32N/pub?gid=1213511098&single=true&output=csv",
     label: "Calgary Inventory",
-    skuCol: 0, // col A = Item
-    stockCols: [{col:2, label:"PCS"}, {col:3, label:"Box/Bags"}],
+    skuCol: 0,   // Col A = SKU
+    stockCols: [{col:2, label:"Qty in Stock"}], // Col C = QTY
   },
   curtains: {
     url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQQIjS6Lyxr88Pia5SVFTdiyILWiDvIdbOC3l3e5ukYBZ1maFAB4lZzKs6OXnaHNIgAb7WsGJX9S32N/pub?gid=1696603460&single=true&output=csv",
     label: "Curtain Stock",
-    skuCol: 0, // col A = SKU
-    stockCols: [{col:3, label:"Unfilled @Brooks"}, {col:4, label:"Filled in Stock"}],
+    skuCol: 0,   // Col A = SKU
+    stockCols: [{col:5, label:"In Stock"}], // Col F = in stock (primary)
+    fallbackSheet: "calgary", // if 0/empty, check Calgary (Brooks Curtain Inventory)
   },
   blankets: {
     url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQQIjS6Lyxr88Pia5SVFTdiyILWiDvIdbOC3l3e5ukYBZ1maFAB4lZzKs6OXnaHNIgAb7WsGJX9S32N/pub?gid=496909733&single=true&output=csv",
     label: "Blankets / Wattles",
-    skuCol: 0, // col A = SKU
-    stockCols: [{col:2, label:"Pallets"}, {col:3, label:"Rolls"}, {col:4, label:"Trucks"}],
+    skuCol: 0,   // Col A = SKU
+    stockCols: [{col:2, label:"Pallets"}, {col:3, label:"Rolls"}, {col:4, label:"Trucks"}], // C, D, E
   },
 };
 
@@ -1950,32 +1951,55 @@ function StockDrawer({quote, onClose, T}) {
   // Match quoted SKUs against each sheet
   const matches = useMemo(()=>{
     const out = [];
+    // Normalize: strip BMP- prefix since sheets don't have it
+    const normalize = s => s.replace(/^BMP-?/i,'').trim().toUpperCase();
+
     (quote.lineItems||[]).forEach(li=>{
       const sku = (li.sku||'').trim();
       if (!sku) return;
-      const skuUp = sku.toUpperCase();
+      const skuNorm = normalize(sku);
       let found = false;
-      Object.entries(STOCK_SHEETS).forEach(([key,sheet])=>{
+
+      Object.entries(STOCK_SHEETS).forEach(([key, sheet])=>{
         const sheetData = data[key];
-        if (!sheetData||!sheetData.rows.length) return;
+        if (!sheetData || !sheetData.rows.length) return;
+
         sheetData.rows.forEach(row=>{
-          const rowSku = (row[sheet.skuCol]||'').trim().toUpperCase();
-          // Fuzzy match: strip BMP- prefix for comparison
-          const normalize = s => s.replace(/^BMP-?/i,'');
-          if (rowSku && (rowSku===skuUp || normalize(rowSku)===normalize(skuUp))) {
-            found = true;
-            out.push({
-              sku, qty: li.qty,
-              sheet: sheet.label,
-              stocks: sheet.stockCols.map(sc=>({
-                label: sc.label,
-                value: row[sc.col]??'—',
-                status: stockStatus(row[sc.col]),
-              })),
-            });
+          const rowSku = normalize(row[sheet.skuCol]||'');
+          if (!rowSku || rowSku !== skuNorm) return;
+
+          // For curtains: check if stock value (col F) is empty/zero — if so, try Calgary fallback
+          let stocks = sheet.stockCols.map(sc=>({
+            label: sc.label,
+            value: row[sc.col]??'—',
+            status: stockStatus(row[sc.col]),
+          }));
+
+          // Curtain fallback: if primary stock is 0/empty, check Calgary
+          if (key === 'curtains' && sheet.fallbackSheet) {
+            const primaryVal = parseFloat(String(row[sheet.stockCols[0].col] ?? '0').replace(/[^0-9.\-]/g,''));
+            if (isNaN(primaryVal) || primaryVal <= 0) {
+              const calgaryData = data[sheet.fallbackSheet];
+              if (calgaryData && calgaryData.rows.length) {
+                let calgaryQty = null;
+                calgaryData.rows.forEach(cr=>{
+                  const crSku = normalize(cr[STOCK_SHEETS.calgary.skuCol]||'');
+                  if (crSku === skuNorm) {
+                    calgaryQty = cr[STOCK_SHEETS.calgary.stockCols[0].col] ?? '0';
+                  }
+                });
+                if (calgaryQty !== null) {
+                  stocks.push({label:'Calgary (Brooks)', value: calgaryQty, status: stockStatus(calgaryQty)});
+                }
+              }
+            }
           }
+
+          found = true;
+          out.push({sku, qty: li.qty, sheet: sheet.label, stocks});
         });
       });
+
       if (!found && sku) {
         out.push({sku, qty:li.qty, sheet:'—', stocks:[{label:'Stock', value:'Not found', status:'unknown'}]});
       }

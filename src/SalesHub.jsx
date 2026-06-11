@@ -1871,22 +1871,22 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
 const STOCK_SHEETS = {
   calgary: {
     url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQQIjS6Lyxr88Pia5SVFTdiyILWiDvIdbOC3l3e5ukYBZ1maFAB4lZzKs6OXnaHNIgAb7WsGJX9S32N/pub?gid=1213511098&single=true&output=csv",
-    label: "Calgary Inventory",
-    skuCol: 0,   // Col A = SKU
-    stockCols: [{col:2, label:"Qty in Stock"}], // Col C = QTY
+    label: "Calgary Stock",
+    skuCol: 0,
+    stockCols: [{col:2, label:"Qty in Stock"}],
   },
   curtains: {
     url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQQIjS6Lyxr88Pia5SVFTdiyILWiDvIdbOC3l3e5ukYBZ1maFAB4lZzKs6OXnaHNIgAb7WsGJX9S32N/pub?gid=1696603460&single=true&output=csv",
-    label: "Curtain Stock",
-    skuCol: 0,   // Col A = SKU
-    stockCols: [{col:5, label:"In Stock"}], // Col F = in stock (primary)
-    fallbackSheet: "calgary", // if 0/empty, check Calgary (Brooks Curtain Inventory)
+    label: "Turbidity Curtains",
+    skuCol: 0,
+    stockCols: [{col:5, label:"In Stock"}],
+    fallbackSheet: "calgary",
   },
   blankets: {
     url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQQIjS6Lyxr88Pia5SVFTdiyILWiDvIdbOC3l3e5ukYBZ1maFAB4lZzKs6OXnaHNIgAb7WsGJX9S32N/pub?gid=496909733&single=true&output=csv",
-    label: "Blankets / Wattles",
-    skuCol: 0,   // Col A = SKU
-    stockCols: [{col:2, label:"Pallets"}, {col:3, label:"Rolls"}, {col:4, label:"Trucks"}], // C, D, E
+    label: "ECB/Wattles",
+    skuCol: 0,
+    stockCols: [{col:2, label:"Pallets"}, {col:3, label:"Rolls"}, {col:4, label:"Trucks"}],
   },
 };
 
@@ -1989,7 +1989,7 @@ function StockDrawer({quote, onClose, T}) {
                   }
                 });
                 if (calgaryQty !== null) {
-                  stocks.push({label:'Calgary (Brooks)', value: calgaryQty, status: stockStatus(calgaryQty)});
+                  stocks.push({label:'Calgary Stock', value: calgaryQty, status: stockStatus(calgaryQty)});
                 }
               }
             }

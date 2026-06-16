@@ -568,7 +568,7 @@ const SHIPPING_DATA = {
   }
 };
 
-const PRICE_INCREASE_OPTIONS = [-10,-5,-2,0,2,5,10,15,20,25,30,35,40,50,55,60];
+const PRICE_INCREASE_OPTIONS = [-20,-15,-10,-5,-2,0,2,5,10,15,20,25,30,35,40,50,55,60];
 function fmtCur(val) {
   if (val === "" || val === null || val === undefined) return "—";
   const n = parseFloat(String(val).replace(/[$,]/g,""));
@@ -1600,8 +1600,8 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
                   <div style={{flex:1}}>
                     <div style={{fontSize:9,color:T.tableHeadText,letterSpacing:".08em",marginBottom:4}}>MARKUP %</div>
                     <select value={li.increase||0} onChange={e=>updLI(li.id,"increase",parseInt(e.target.value))}
-                      style={{width:"100%",height:40,fontSize:14,color:li.increase>0?"#c8a96e":"var(--subtext)",background:"var(--input-bg)"}}>
-                      {PRICE_INCREASE_OPTIONS.map(o=><option key={o} value={o}>{o===0?"No markup":`+${o}%`}</option>)}
+                      style={{width:"100%",height:40,fontSize:14,color:li.increase<0?"#e8472c":li.increase>0?"#c8a96e":"var(--subtext)",background:"var(--input-bg)"}}>
+                      {PRICE_INCREASE_OPTIONS.map(o=><option key={o} value={o} style={{color:o<0?"#e8472c":o>0?"#c8a96e":"inherit"}}>{o===0?"No markup":o<0?`${o}%`:`+${o}%`}</option>)}
                     </select>
                   </div>
                   <button onClick={()=>removeLI(li.id)}
@@ -1674,10 +1674,10 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
               </td>
               <td style={{fontWeight:500,fontFamily:"monospace"}}>{fmtCur(lineTotal)}</td>
               <td>
-                {ro?<span>{li.increase||0}%</span>
+                {ro?<span style={{color:li.increase<0?"#e8472c":li.increase>0?"#c8a96e":"inherit"}}>{li.increase||0}%</span>
                   :<select value={li.increase||0} onChange={e=>updLI(li.id,"increase",parseInt(e.target.value))}
-                      style={{width:"100%",fontSize:11,height:25,color:li.increase>0?"#c8a96e":"var(--subtext)",background:"var(--input-bg)"}}>
-                      {PRICE_INCREASE_OPTIONS.map(o=><option key={o} value={o}>{o}%</option>)}
+                      style={{width:"100%",fontSize:11,height:25,color:li.increase<0?"#e8472c":li.increase>0?"#c8a96e":"var(--subtext)",background:"var(--input-bg)"}}>
+                      {PRICE_INCREASE_OPTIONS.map(o=><option key={o} value={o} style={{color:o<0?"#e8472c":o>0?"#c8a96e":"inherit"}}>{o===0?"0%":o<0?`${o}%`:`+${o}%`}</option>)}
                     </select>}
               </td>
               {!ro&&<td>{((quote.lineItems||[])).length>1&&<button className="btn-del" style={{padding:"1px 7px"}} onClick={()=>removeLI(li.id)}>✕</button>}</td>}

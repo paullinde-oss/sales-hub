@@ -1623,7 +1623,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
             <th style={{width:72}}>Qty</th>
             <th style={{width:105}}>Unit Price</th>
             <th style={{width:105}}>Total</th>
-            <th style={{width:110}}>Increase (%)</th>
+            <th style={{width:110}}>Change (%)</th>
             {!ro&&<th style={{width:36}}/>}
           </tr></thead>
           <tbody>{((quote.lineItems||[])).map((li,idx)=>{

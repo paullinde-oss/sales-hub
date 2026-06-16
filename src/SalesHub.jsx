@@ -568,7 +568,7 @@ const SHIPPING_DATA = {
   }
 };
 
-const PRICE_INCREASE_OPTIONS = [0,2,5,10,15,20,25,30,35,40,50,55,60];
+const PRICE_INCREASE_OPTIONS = [-10,-5,-2,0,2,5,10,15,20,25,30,35,40,50,55,60];
 function fmtCur(val) {
   if (val === "" || val === null || val === undefined) return "—";
   const n = parseFloat(String(val).replace(/[$,]/g,""));

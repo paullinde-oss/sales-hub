@@ -848,7 +848,7 @@ export default function SalesHub() {
   function createNewQuote() {
     const q={id:Date.now(),quoteNum:nextQNum(quotes),name:"",company:"",prepaid:false,currency:"CAD",
       lineItems:[{id:Date.now(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}],
-      notes:"",internalNotes:"",validFor:30,quoteStatus:"inprogress",followUps:[],isNewLead:false,leadType:"",leadSource:"",saved:false,savedBy:"",savedDate:""};
+      notes:"",internalNotes:"",validFor:30,quoteStatus:"inprogress",followUps:[],isNewLead:false,leadType:"",leadSource:"",shipTo:{province:"",city:"",address:""},saved:false,savedBy:"",savedDate:""};
     setActiveQuote(q);
   }
   function saveQuote(q) {
@@ -1808,6 +1808,40 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
           <div style={{fontSize:9,color:"var(--accent)",letterSpacing:".1em",textTransform:"uppercase",marginTop:8,marginBottom:4}}>Internal Notes <span style={{color:"var(--muted)",fontWeight:300,textTransform:"none"}}>(not on quote)</span></div>
           <textarea disabled={ro} value={quote.internalNotes||""} onChange={e=>upd("internalNotes",e.target.value)}
             style={{width:"100%",height:48,resize:"vertical",fontSize:11,background:"var(--input-bg)",border:`1px solid ${quote.internalNotes?"var(--accent)":"var(--border)"}`,color:"var(--text)"}} placeholder={`Internal notes by ${quote.savedBy||"you"}…`}/>
+          {/* Ship To Details */}
+          <div style={{marginTop:10,padding:"10px 12px",background:T.tableHead,border:`1px solid ${T.border}`,borderRadius:3}}>
+            <label style={{display:"flex",alignItems:"center",gap:8,cursor:ro?"default":"pointer",userSelect:"none"}}
+              onClick={()=>{ if(!ro) upd("_shipToOpen", !quote._shipToOpen); }}>
+              <input type="checkbox" readOnly disabled={ro} checked={!!quote._shipToOpen}
+                style={{width:14,height:14,cursor:ro?"default":"pointer"}}/>
+              <span style={{fontSize:11,fontWeight:600,color:T.subtext}}>Ship To Details</span>
+              <span style={{fontSize:10,color:T.muted}}>(destination for this order)</span>
+              {(quote.shipTo?.province||quote.shipTo?.city||quote.shipTo?.address)&&(
+                <span style={{fontSize:10,color:T.accent,marginLeft:4}}>
+                  {[quote.shipTo.city,quote.shipTo.province].filter(Boolean).join(", ")}
+                </span>
+              )}
+            </label>
+            {quote._shipToOpen&&(
+              <div style={{display:"flex",gap:8,marginTop:10,alignItems:"flex-end"}}>
+                <div style={{minWidth:120}}>
+                  <div style={{fontSize:9,color:T.muted,letterSpacing:".08em",marginBottom:4}}>PROVINCE / STATE</div>
+                  <input disabled={ro} value={quote.shipTo?.province||""} onChange={e=>upd("shipTo",{...quote.shipTo,province:e.target.value})}
+                    placeholder="e.g. AB" style={{width:"100%",fontSize:12,height:32,background:"var(--input-bg)",border:"1px solid var(--border-light)",color:"var(--text)"}}/>
+                </div>
+                <div style={{minWidth:150}}>
+                  <div style={{fontSize:9,color:T.muted,letterSpacing:".08em",marginBottom:4}}>CITY</div>
+                  <input disabled={ro} value={quote.shipTo?.city||""} onChange={e=>upd("shipTo",{...quote.shipTo,city:e.target.value})}
+                    placeholder="e.g. Calgary" style={{width:"100%",fontSize:12,height:32,background:"var(--input-bg)",border:"1px solid var(--border-light)",color:"var(--text)"}}/>
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:9,color:T.muted,letterSpacing:".08em",marginBottom:4}}>FULL ADDRESS <span style={{fontWeight:300,fontSize:9}}>(if available)</span></div>
+                  <input disabled={ro} value={quote.shipTo?.address||""} onChange={e=>upd("shipTo",{...quote.shipTo,address:e.target.value})}
+                    placeholder="Street address, postal code…" style={{width:"100%",fontSize:12,height:32,background:"var(--input-bg)",border:"1px solid var(--border-light)",color:"var(--text)"}}/>
+                </div>
+              </div>
+            )}
+          </div>
           {/* New Lead flag */}
           <div style={{marginTop:10,padding:"10px 12px",background:T.tableHead,border:`1px solid ${T.border}`,borderRadius:3}}>
             <label style={{display:"flex",alignItems:"center",gap:8,cursor:ro?"default":"pointer",userSelect:"none"}}>

@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback, Component } from "react";
 import { initializeApp } from "firebase/app";
 
-const APP_VERSION = "v4.8 — Jun 2026";
+const APP_VERSION = "v4.9 — Jun 2026";
 const FAVICON_DARK  = "data:image/png;base64,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";
 const FAVICON_LIGHT = "data:image/png;base64,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";
 import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "firebase/firestore";
@@ -653,6 +653,29 @@ function useIsMobile() {
   return isMobile;
 }
 
+// ─── Error Boundary ────────────────────────────────────────────────────────────
+class TabErrorBoundary extends Component {
+  constructor(props){ super(props); this.state={hasError:false, msg:""}; }
+  static getDerivedStateFromError(err){ return {hasError:true, msg:String(err?.message||err)}; }
+  componentDidCatch(err, info){ console.error("Tab crashed:", err, info); }
+  componentDidUpdate(prev){ if(prev.tabKey!==this.props.tabKey && this.state.hasError){ this.setState({hasError:false,msg:""}); } }
+  render(){
+    if(this.state.hasError){
+      return (
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:12,padding:24,textAlign:"center"}}>
+          <div style={{fontSize:14,color:"#e8472c",fontWeight:600}}>Something went wrong loading this tab</div>
+          <div style={{fontSize:11,color:"#888",maxWidth:420,fontFamily:"monospace"}}>{this.state.msg}</div>
+          <button onClick={()=>this.setState({hasError:false,msg:""})}
+            style={{background:"#c8a96e",border:"none",color:"#0a0a0a",padding:"8px 18px",fontSize:11,fontWeight:600,cursor:"pointer",letterSpacing:".04em"}}>
+            Try Again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function SalesHub() {
   const isMobile = useIsMobile();
   const [authed, setAuthed] = useLocalStorage('bmp_authed', false);
@@ -1097,6 +1120,7 @@ export default function SalesHub() {
 
         {/* Content */}
         <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+          <TabErrorBoundary tabKey={activeTab}>
           {activeTab==="quotes"&&<QuotesTab quotes={filteredQuotes} activeQuote={activeQuote} searchQ={searchQ} setSearchQ={setSearchQ}
             productsCAD={productsCAD} productsUSD={effectiveProductsUSD} createNewQuote={createNewQuote}
             setActiveQuote={setActiveQuote} saveQuote={saveQuote} editQuote={q=>setActiveQuote({...q,saved:false})}
@@ -1113,6 +1137,7 @@ export default function SalesHub() {
           {activeTab==="pipeline"&&<PipelineTab quotes={quotes} setQuotes={setQuotes} T={T} loginName={loginName} setActiveQuote={setActiveQuote} setActiveTab={setActiveTab} leads={leads} setLeads={setLeads}/>}
           {activeTab==="leads"&&loginName!=="John"&&<LeadTrackingTab leads={leads} setLeads={setLeads} adSpend={adSpend} setAdSpend={setAdSpend} quotes={quotes} setQuotes={setQuotes} T={T} loginName={loginName}/>}
           {activeTab==="leads"&&loginName==="John"&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:T.muted,fontSize:13}}>Lead Tracking is not available for your account.</div>}
+          </TabErrorBoundary>
         </div>
       </div>
 
@@ -2144,9 +2169,10 @@ function DimsTab({dims,setDims,T}) {
   function hs(f){if(sortF===f)setSortD(d=>-d);else{setSortF(f);setSortD(1);}}
   const Th=({l,f})=><th onClick={()=>hs(f)} style={{cursor:"pointer",userSelect:"none"}}>{l}{sortF===f?(sortD===1?" ↑":" ↓"):""}</th>;
 
-  const types = useMemo(()=>["All",...new Set((dims||[]).map(d=>d.type))],[dims]);
+  const types = useMemo(()=>["All",...new Set((Array.isArray(dims)?dims:[]).filter(d=>d&&typeof d==='object').map(d=>d.type).filter(Boolean))],[dims]);
   const filtered = useMemo(()=>{
-    const base = (dims||[]).filter(d=>{
+    const safe = (Array.isArray(dims)?dims:[]).filter(d=>d&&typeof d==='object');
+    const base = safe.filter(d=>{
       const q=search.toLowerCase();
       const matchS=!q||(d.product||"").toLowerCase().includes(q)||(d.type||"").toLowerCase().includes(q);
       const matchT=filterType==="All"||d.type===filterType;
@@ -2205,7 +2231,7 @@ function DimsTab({dims,setDims,T}) {
           </tr></thead>
           <tbody>
             {filtered.map((row,i)=>{
-              const origIdx=dims.findIndex(d=>d===row);
+              const origIdx=(Array.isArray(dims)?dims:[]).findIndex(d=>d===row);
               return editing?.idx===origIdx
                 ? <DimEditRow key={i} row={editing.data} setRow={d=>setEditing(e=>({...e,data:d}))} onSave={()=>saveEdit(editing.data)} onCancel={()=>setEditing(null)}/>
                 : <tr key={i}>
@@ -2469,7 +2495,7 @@ function ProductEditRow({row,setRow,onSave,onCancel,availableSubCats=[],currentS
 
 function ProductsTab({products,setProducts,currency,setCurrency,search,setSearch,categories,setCategories,subCategories,setSubCategories,subCatDefs,setSubCatDefs,exchangeRate,setExchangeRate,T}) {
   const [editing,      setEditing]      = useState(null);
-  const [sortF,        setSortF]        = useState("sku");
+  const [sortF,        setSortF]        = useState(null);  // null = manual/array order (lets ↑↓ reorder work)
   const [sortD,        setSortD]        = useState(1);
   const [importResult, setImportResult] = useState(null);
   const [sampleCSVOpen,setSampleCSVOpen]= useState(false);
@@ -2491,21 +2517,36 @@ TBC1250T2IND,Turbidity Curtain,12.5x50 Turbidity Curtain Type 2 IND,,1,8,$1210.0
 4CBD2416HF,CB Donut - 24x16 HF,CB Donut High Flow Yellow for 24x16 Grate,,12,192,$60.00,$56.50,$63.00,$61.00,,Catch Basin Protection
 NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,,$85.00,Misc. BMP Products`;
 
-  // All unique category names — ordered by CATEGORY_ORDER, extras appended alphabetically
+  // All unique category names — ordered by saved order (in subCatDefs.__catOrder__) or CATEGORY_ORDER default
   const allCategories = useMemo(()=> {
     try {
       const assigned = new Set(Object.values(categories||{}).filter(Boolean));
-      const ordered = CATEGORY_ORDER.filter(cat => assigned.has(cat));
-      const extras = Array.from(assigned).filter(cat => !CATEGORY_ORDER.includes(cat)).sort();
+      const savedOrder = (subCatDefs||{}).__catOrder__;
+      const baseOrder = Array.isArray(savedOrder) && savedOrder.length ? savedOrder : CATEGORY_ORDER;
+      const ordered = baseOrder.filter(cat => assigned.has(cat));
+      const extras = Array.from(assigned).filter(cat => !baseOrder.includes(cat)).sort();
       return [...ordered, ...extras, "Uncategorized"];
     } catch(e) { return ["Uncategorized"]; }
-  }, [categories]);
+  }, [categories, subCatDefs]);
+
+  // Move a category up/down — persists order to subCatDefs.__catOrder__
+  function moveCategory(cat, dir) {
+    const visible = allCategories.filter(c=>c!=="Uncategorized");
+    const idx = visible.indexOf(cat);
+    if (idx < 0) return;
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= visible.length) return;
+    const reordered = [...visible];
+    [reordered[idx], reordered[newIdx]] = [reordered[newIdx], reordered[idx]];
+    setSubCatDefs(prev => ({...(prev||{}), __catOrder__: reordered}));
+  }
 
   // Sub-categories per category: always show defined ones (in defined order), plus any inferred
   const subCatsByCat = useMemo(()=>{
     const result = {};
     // Start with defined order
     Object.keys(subCatDefs||{}).forEach(cat=>{
+      if (cat==="__catOrder__") return;
       result[cat] = [...(subCatDefs[cat]||[])];
     });
     // Add any assigned-but-not-defined ones (appended, sorted)
@@ -2532,6 +2573,7 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
 
   // Sort helper
   function sortProducts(arr) {
+    if (!sortF) return [...arr]; // manual/array order — enables ↑↓ reordering
     return [...arr].sort((a,b)=>String(a[sortF]??"").localeCompare(String(b[sortF]??""),undefined,{numeric:true})*sortD);
   }
 
@@ -2570,7 +2612,12 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
     });
   },[flatSorted,search,filterCat,filterSub,categories,subCategories]);
 
-  function hs(f){if(sortF===f)setSortD(d=>-d);else{setSortF(f);setSortD(1);}}
+  function hs(f){
+    if(sortF===f){
+      if(sortD===1) setSortD(-1);
+      else { setSortF(null); setSortD(1); } // third click returns to manual order
+    } else { setSortF(f); setSortD(1); }
+  }
   const Th=({l,f,style={}})=><th onClick={()=>hs(f)} style={{cursor:"pointer",userSelect:"none",...style}}>{l}{sortF===f?(sortD===1?" ↑":" ↓"):""}</th>;
 
   function toggleSelect(sku) {
@@ -2780,32 +2827,63 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
   }
 
   // ── Row renderer (shared for flat + grouped) ─────────────────────────────
+  const [copiedSku, setCopiedSku] = useState(null);
   function copyProductTable(p) {
     const cols = [
       {h:"SKU",           v: p.sku},
       {h:"Description",   v: p.description||p.product},
-      {h:"Price/Unit",    v: parsePrice(p.price)>0 ? fmtCur(p.price) : null},
+      {h:"Price/Per",     v: parsePrice(p.price)>0 ? fmtCur(p.price) : null},
       {h:"Pallet Price",  v: parsePrice(p.palletPrice)>0 ? fmtCur(p.palletPrice) : null},
-      {h:"Prepaid Price", v: parsePrice(p.prepaid)>0 ? fmtCur(p.prepaid) : null},
+      {h:"Prepaid/Per",   v: parsePrice(p.prepaid)>0 ? fmtCur(p.prepaid) : null},
+      {h:"Pre. Pallet",   v: parsePrice(p.prepaidPallet)>0 ? fmtCur(p.prepaidPallet) : null},
       {h:"Truck Price",   v: parsePrice(p.truckPrice)>0 ? fmtCur(p.truckPrice) : null},
     ].filter(c => c.v !== null);
 
-    // Build HTML table for Outlook
-    const headerRow = cols.map(c=>`<th style="background:#1a1a1a;color:#fff;padding:6px 10px;border:1px solid #444;font-family:Arial,sans-serif;font-size:11px;white-space:nowrap">${c.h}</th>`).join("");
+    const headerRow = cols.map(c=>`<th style="background:#1a1a1a;color:#ffffff;padding:6px 10px;border:1px solid #444;font-family:Arial,sans-serif;font-size:11px;white-space:nowrap;text-align:left">${c.h}</th>`).join("");
     const dataRow   = cols.map(c=>`<td style="padding:6px 10px;border:1px solid #ccc;font-family:Arial,sans-serif;font-size:11px">${c.v}</td>`).join("");
     const html = `<table style="border-collapse:collapse;font-family:Arial,sans-serif"><thead><tr>${headerRow}</tr></thead><tbody><tr>${dataRow}</tr></tbody></table>`;
+    const text = `${cols.map(c=>c.h).join("\t")}\n${cols.map(c=>c.v).join("\t")}`;
 
-    // Also plain text fallback
-    const headers = cols.map(c=>c.h).join("\t");
-    const values  = cols.map(c=>c.v).join("\t");
-    const text = `${headers}\n${values}`;
+    const showCopied = ()=>{ setCopiedSku(p.sku); setTimeout(()=>setCopiedSku(null), 1500); };
 
+    // Try modern clipboard API with HTML, fall back to writeText, then execCommand
+    if (navigator.clipboard && window.ClipboardItem) {
+      try {
+        const item = new ClipboardItem({
+          "text/html": new Blob([html], {type:"text/html"}),
+          "text/plain": new Blob([text], {type:"text/plain"}),
+        });
+        navigator.clipboard.write([item]).then(showCopied).catch(()=>{
+          navigator.clipboard.writeText(text).then(showCopied).catch(()=>legacyCopy(html, text, showCopied));
+        });
+        return;
+      } catch(e) { /* fall through */ }
+    }
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(showCopied).catch(()=>legacyCopy(html, text, showCopied));
+    } else {
+      legacyCopy(html, text, showCopied);
+    }
+  }
+
+  // Legacy clipboard via hidden contenteditable + execCommand (works for HTML table paste)
+  function legacyCopy(html, text, onDone) {
     try {
-      const blob = new Blob([html], {type:"text/html"});
-      const textBlob = new Blob([text], {type:"text/plain"});
-      navigator.clipboard.write([new ClipboardItem({"text/html":blob,"text/plain":textBlob})]);
-    } catch {
-      navigator.clipboard.writeText(text);
+      const div = document.createElement("div");
+      div.contentEditable = "true";
+      div.innerHTML = html;
+      div.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0";
+      document.body.appendChild(div);
+      const range = document.createRange();
+      range.selectNodeContents(div);
+      const sel = window.getSelection();
+      sel.removeAllRanges(); sel.addRange(range);
+      document.execCommand("copy");
+      sel.removeAllRanges();
+      document.body.removeChild(div);
+      onDone && onDone();
+    } catch(e) {
+      console.error("Copy failed", e);
     }
   }
 
@@ -2854,7 +2932,7 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
               <div style={{display:"flex",gap:3,alignItems:"center"}}>
                 <button className="btn" style={{fontSize:10,padding:"2px 7px"}} title="Move up" onClick={e=>{e.stopPropagation();moveProductInCat(p.sku,-1);}}>↑</button>
                 <button className="btn" style={{fontSize:10,padding:"2px 7px"}} title="Move down" onClick={e=>{e.stopPropagation();moveProductInCat(p.sku,1);}}>↓</button>
-                <button className="btn" style={{fontSize:10,padding:"2px 8px",color:"#4a90d9"}} title="Copy as table for Outlook" onClick={e=>{e.stopPropagation();copyProductTable(p);}}>📋 Copy</button>
+                <button className="btn" style={{fontSize:10,padding:"2px 8px",color:copiedSku===p.sku?"#5a9e5a":"#4a90d9"}} title="Copy as table for Outlook" onClick={e=>{e.stopPropagation();copyProductTable(p);}}>{copiedSku===p.sku?"✓ Copied":"📋 Copy"}</button>
                 <button className="btn" style={{fontSize:10,padding:"2px 8px"}} onClick={e=>{e.stopPropagation();setEditing({...p,_origSku:p.sku});}}>✏ Edit</button>
                 <button className="btn-del" style={{fontSize:10,padding:"2px 7px"}} onClick={e=>{e.stopPropagation();setProducts(ps=>ps.filter(r=>r.sku!==p.sku));}}>✕ Del</button>
               </div>
@@ -3175,7 +3253,12 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
                           <span style={{fontSize:9,color:T.muted,marginLeft:2}}>({catVisible.length})</span>
                           {isDrop&&<span style={{fontSize:9,color:T.accent,marginLeft:4}}>Drop to assign category</span>}
                           {cat!=="Uncategorized"&&(
-                            <div style={{marginLeft:"auto",display:"flex",gap:6}} onClick={e=>e.stopPropagation()}>
+                            <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
+                              {/* Category reorder */}
+                              <button className="btn" style={{fontSize:9,padding:"1px 6px"}} title="Move category up"
+                                onClick={e=>{e.stopPropagation();moveCategory(cat,-1);}}>↑</button>
+                              <button className="btn" style={{fontSize:9,padding:"1px 6px"}} title="Move category down"
+                                onClick={e=>{e.stopPropagation();moveCategory(cat,1);}}>↓</button>
                               {/* Add sub-category button */}
                               <button className="btn" style={{fontSize:9,padding:"1px 8px"}}
                                 onClick={e=>{
@@ -3183,7 +3266,6 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
                                   const name = window.prompt(`New sub-category under "${cat}":`);
                                   if(name?.trim()) {
                                     addSubCatDef(cat, name.trim());
-                                    // If products are selected in this cat, assign them
                                     if(selected.size>0){
                                       const skusInCat=[...selected].filter(s=>(categories||{})[s]===cat);
                                       skusInCat.forEach(s=>assignSubCategory(s,name.trim()));
@@ -3323,16 +3405,18 @@ function PriceListModal({products, categories, subCategories, subCatDefs, curren
     return `$${n.toFixed(2)}`;
   }
 
+  // Build category structure using the SAME order shown in the Products tab
   function buildStructure() {
-    const catOrder = Object.keys(subCatDefs||{});
-    const allCats = [...new Set(Object.values(categories||{}))].filter(Boolean);
-    const ordered = catOrder.filter(c=>allCats.includes(c));
-    const extras  = allCats.filter(c=>!catOrder.includes(c)&&c!=="Uncategorized");
+    const assigned = new Set(Object.values(categories||{}).filter(Boolean));
+    const savedOrder = (subCatDefs||{}).__catOrder__;
+    const baseOrder = Array.isArray(savedOrder) && savedOrder.length ? savedOrder : CATEGORY_ORDER;
+    const ordered = baseOrder.filter(c=>assigned.has(c));
+    const extras  = Array.from(assigned).filter(c=>!baseOrder.includes(c)&&c!=="Uncategorized").sort();
     const finalCats = [...ordered,...extras,"Uncategorized"];
     return finalCats.map(cat=>{
       const catProds = products.filter(p=>((categories||{})[p.sku]||"Uncategorized")===cat&&!excludedSkus.has(p.sku));
       if (!catProds.length) return null;
-      const subs = subCatDefs?.[cat]||[];
+      const subs = (cat==="__catOrder__") ? [] : (subCatDefs?.[cat]||[]);
       if (!subs.length) return {cat,prods:catProds,subs:null};
       const subGroups=[];
       subs.forEach(sub=>{
@@ -3363,9 +3447,9 @@ function PriceListModal({products, categories, subCategories, subCatDefs, curren
       `<th style="padding:6px 8px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#fff;font-weight:700;border:1px solid #2a2a2a;width:110px">SKU</th>`,
       `<th style="padding:6px 8px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#fff;font-weight:700;border:1px solid #2a2a2a">Product Description</th>`,
       ...(c.pkg?[th("Pallet Qty","70px")]:[]),
-      ...(c.price?[th("Price/Unit","85px")]:[]),
+      ...(c.price?[th("Price/Per","85px")]:[]),
       ...(c.palletPrice?[th("Pallet Price","85px")]:[]),
-      ...(c.prepaid?[th("Prepaid","85px")]:[]),
+      ...(c.prepaid?[th("Prepaid/Per","85px")]:[]),
       ...(c.prepaidPallet?[th("Pre. Pallet","85px")]:[]),
       ...(c.truckPrice?[th("Truck Price","85px")]:[]),
     ].join("");
@@ -3391,63 +3475,118 @@ function PriceListModal({products, categories, subCategories, subCatDefs, curren
     </table>`;
   }
 
+  // Dedicated first page: loyalty note + spec link + effective date + per-category notes
+  function buildNotesPage() {
+    const noteBox = (title, items) => `
+      <div style="border:1px solid #ccc;margin-bottom:10px;break-inside:avoid">
+        <div style="background:#1a1a1a;color:#fff;padding:6px 12px;font-size:12px;font-weight:700;letter-spacing:.03em">${title}</div>
+        <div style="padding:8px 14px">
+          <ul style="margin:0;padding-left:18px;font-size:11px;color:#333;line-height:1.7">
+            ${items.map(i=>`<li>${i}</li>`).join("")}
+          </ul>
+        </div>
+      </div>`;
+
+    return `
+    <div style="page-break-after:always;min-height:250mm;display:flex;flex-direction:column">
+      <!-- Header matches the Quote PDF top-left -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8mm;padding-bottom:5mm;border-bottom:2px solid #1a1a1a">
+        <div>
+          <img src="${FAVICON_DARK}" style="height:54px;width:auto;mix-blend-mode:multiply" alt="BMP Supplies"/>
+          <div style="font-size:10px;color:#888;margin-top:5px;letter-spacing:.04em">All-in-one ESC Manufacturer</div>
+          <div style="margin-top:8px;font-size:9.5px;color:#555;line-height:1.8">
+            102 - 19181 34a Ave, Surrey, BC, V3Z 0Z7<br/>
+            604.542.0222 | sales@bmpsupplies.com
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:34px;font-weight:700;color:#1a1a1a;line-height:1">Price List</div>
+          <div style="font-size:16px;color:#666;margin-top:2px">${new Date().getFullYear()}</div>
+          <div style="font-size:11px;color:#888;margin-top:8px">${version}</div>
+          <div style="font-size:11px;color:#888">Effective ${effectiveDate}</div>
+        </div>
+      </div>
+
+      <!-- Loyalty message -->
+      <div style="background:#f7f7f5;border-left:3px solid #1a1a1a;padding:12px 16px;margin-bottom:14px">
+        <div style="font-size:12px;color:#333;line-height:1.7">
+          Thank you for being a valued BMP Supplies distributor. We appreciate your continued partnership.
+          <strong>This price list is intended for your organization only — please do not share it outside your organization.</strong>
+        </div>
+        <div style="font-size:11px;color:#555;margin-top:8px">
+          All product spec sheets are available at our Download Centre:
+          <a href="https://www.bmpsupplies.com/download-centre" style="color:#1a5fa8;text-decoration:underline">https://www.bmpsupplies.com/download-centre</a>
+        </div>
+      </div>
+
+      ${noteBox("Catch Basin Notes", [
+        "Minimum orders of $1,000",
+        "Prices are per individual item",
+        "No split packages",
+      ])}
+
+      ${noteBox("Turbidity Curtain Notes", [
+        "Custom lengths, depths, and materials available, made to specification. For more than one pallet quotes please contact sales@bmpsupplies.com",
+        `Turbidity Curtain Selector tool: <a href="https://www.bmpsupplies.com/turbidity-curtains-selector-tool" style="color:#1a5fa8;text-decoration:underline">https://www.bmpsupplies.com/turbidity-curtains-selector-tool</a>`,
+        `Compare Turbidity Curtain Specs: <a href="https://www.bmpsupplies.com/turbidity-curtains-compare" style="color:#1a5fa8;text-decoration:underline">https://www.bmpsupplies.com/turbidity-curtains-compare</a>`,
+      ])}
+
+      ${noteBox("Erosion Control Blankets", [
+        "This pricing is for single FTL or LTL orders only. For multiple truck loads please reach out to sales@bmpsupplies.com",
+        "To receive FTL pricing at least half the truck must be filled with Erosion Control Blankets",
+      ])}
+
+      ${noteBox("Truckload (FTL) Quantities", [
+        "ECB's — 8' Wide Rolls — 24 Pallets per truckload (600 rolls total)",
+        "Wattles — 9\" Diam Logs — 26 Pallets per truckload (364 logs total)",
+      ])}
+    </div>`;
+  }
+
   function buildHTML() {
     const structure = buildStructure();
     let catSections = "";
     structure.forEach(({cat,prods,subs})=>{
       catSections += `<div style="margin-bottom:18px;page-break-inside:avoid">
-        <div style="background:#1a1a1a;color:#fff;text-align:center;padding:8px 12px;font-size:14px;font-weight:700;font-family:Raleway,'Helvetica Neue',Arial,sans-serif;letter-spacing:.04em">${cat}</div>`;
+        <div style="background:#1a1a1a;color:#fff;text-align:center;padding:8px 12px;font-size:14px;font-weight:700;letter-spacing:.04em">${cat}</div>`;
       if (prods) {
         catSections += buildProductTable(prods);
       } else {
         subs.forEach(({sub,prods:sp})=>{
-          if (sub) catSections += `<div style="background:#444;color:#fff;padding:5px 10px;font-size:11px;font-weight:700;font-family:'Helvetica Neue',Arial,sans-serif;letter-spacing:.03em">${sub}</div>`;
+          if (sub) catSections += `<div style="background:#444;color:#fff;padding:5px 10px;font-size:11px;font-weight:700;letter-spacing:.03em">${sub}</div>`;
           catSections += buildProductTable(sp);
         });
       }
       catSections += `</div>`;
     });
 
+    const footerText = `BMP Supplies&nbsp;&nbsp;|&nbsp;&nbsp;Price List ${new Date().getFullYear()} - ${version}&nbsp;&nbsp;|&nbsp;&nbsp;bmpsupplies.com`;
+
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
 <title>BMP Supplies Price List ${version}</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;600;700&display=swap');
   *{margin:0;padding:0;box-sizing:border-box;}
   html,body{background:#fff;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#1a1a1a;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-  @page{size:8.5in 11in;margin:10mm 10mm 8mm 10mm;}
-  @media print{.no-print{display:none!important;}}
+  @page{size:8.5in 11in;margin:12mm 12mm 16mm 12mm;}
+  @media print{
+    .no-print{display:none!important;}
+    .print-footer{position:fixed;bottom:6mm;left:0;right:0;text-align:center;font-size:8px;color:#999;}
+    .page-counter::after{counter-increment:page;content:" | Page " counter(page);}
+  }
+  a{color:#1a5fa8;}
 </style></head><body>
 <div class="no-print" style="position:fixed;top:0;left:0;right:0;background:#1a1a1a;padding:8px 16px;display:flex;gap:10px;z-index:999">
   <button onclick="window.print()" style="background:#c8a96e;color:#0a0a0a;border:none;padding:8px 20px;font-size:12px;font-weight:700;cursor:pointer">🖨 Print / Save as PDF</button>
   <button onclick="window.close()" style="background:#333;color:#ccc;border:none;padding:8px 14px;font-size:12px;cursor:pointer">Close</button>
 </div>
-<div style="padding-top:44px;padding:44px 0 0 0">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8mm;padding-bottom:4mm;border-bottom:2px solid #1a1a1a">
-    <div>
-      <div style="display:flex;align-items:center;gap:0">
-        <div style="display:flex;flex-direction:column;gap:2px;margin-right:8px">
-          <div style="height:4px;width:36px;background:#1a1a1a"></div>
-          <div style="height:4px;width:36px;background:#1a1a1a"></div>
-          <div style="height:4px;width:36px;background:#1a1a1a"></div>
-        </div>
-        <div>
-          <div style="font-size:22px;font-weight:700;font-family:Raleway,sans-serif;line-height:1.1">BMP<br/>SUPPLIES</div>
-        </div>
-      </div>
-      <div style="font-size:9px;color:#888;margin-top:4px;letter-spacing:.04em">All-in-one ESC Manufacturer</div>
-    </div>
-    <div style="text-align:right">
-      <div style="font-size:26px;font-weight:300;font-family:Raleway,sans-serif;color:#1a1a1a">Price List - ${new Date().getFullYear()}</div>
-      <div style="font-size:10px;color:#888;margin-top:3px">${version}</div>
-      <div style="font-size:10px;color:#888">Effective ${effectiveDate}</div>
-      <div style="font-size:10px;color:#888">bmpsupplies.com</div>
-    </div>
-  </div>
+<div style="padding-top:44px">
+  ${buildNotesPage()}
   ${catSections}
-  <div style="margin-top:12mm;padding-top:3mm;border-top:1px solid #ddd;text-align:center;font-size:8px;color:#aaa">
-    Prices subject to change without notice &nbsp;|&nbsp; All prices in ${currency} &nbsp;|&nbsp; Tax not included &nbsp;|&nbsp; bmpsupplies.com &nbsp;|&nbsp; sales@bmpsupplies.com &nbsp;|&nbsp; 604.542.0222
+  <div style="margin-top:10mm;padding-top:3mm;border-top:1px solid #ddd;text-align:center;font-size:8px;color:#aaa">
+    Prices subject to change without notice &nbsp;|&nbsp; All prices in ${currency} &nbsp;|&nbsp; Tax not included &nbsp;|&nbsp; sales@bmpsupplies.com &nbsp;|&nbsp; 604.542.0222
   </div>
 </div>
+<div class="print-footer page-counter">${footerText}</div>
 </body></html>`;
   }
 
@@ -3525,6 +3664,7 @@ function PriceListModal({products, categories, subCategories, subCatDefs, curren
     </div>
   );
 }
+
 
 function PDFField({label, value, onChange, placeholder="", type="text"}) {
   return (

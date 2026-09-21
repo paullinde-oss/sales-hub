@@ -410,65 +410,8 @@ const INITIAL_LEADS = [
 ];
 
 // ─── DIMS Data from CSV ────────────────────────────────────────────────────────
-const INITIAL_DIMS = [
-  { product:"DDS2424", type:"BMP Box", pieces:15, L:'20"', W:'16"', H:'15"', weight:"16.2", indWeight:"" },
-  { product:"SSC1821HF", type:"BMP Box", pieces:15, L:'20"', W:'16"', H:'15"', weight:"16.2", indWeight:"" },
-  { product:"DGD2836", type:"BMP Box", pieces:15, L:'20"', W:'16"', H:'15"', weight:"16.8", indWeight:"" },
-  { product:"4CBD2416HF", type:"BMP Bag", pieces:12, L:'36"', W:'14"', H:'20"', weight:"12", indWeight:"" },
-  { product:"4CBD2416LF", type:"BMP Bag", pieces:12, L:'36"', W:'14"', H:'20"', weight:"12", indWeight:"" },
-  { product:"BOM0510-O", type:"BMP Bag", pieces:4, L:'24"', W:'24"', H:'19"', weight:"19", indWeight:"" },
-  { product:"SPG1206G", type:"BMP Bag", pieces:6, L:'10"', W:'10"', H:'12"', weight:"22.2", indWeight:"" },
-  { product:"4CBD2416LF", type:"Pallet", pieces:192, L:'40"', W:'48"', H:'80"', weight:"240", indWeight:"" },
-  { product:"4CBD2424HF", type:"Pallet", pieces:192, L:'40"', W:'48"', H:'80"', weight:"215", indWeight:"" },
-  { product:"4CBD3628HF", type:"Pallet", pieces:192, L:'40"', W:'48"', H:'80"', weight:"285", indWeight:"" },
-  { product:"CIF6048", type:"Pallet", pieces:48, L:'40"', W:'38"', H:'50"', weight:"400", indWeight:"" },
-  { product:"CBW8009", type:"Pallet", pieces:30, L:'40"', W:'48"', H:'72"', weight:"650", indWeight:"" },
-  { product:"ESC1202", type:"Pallet", pieces:"", L:'40"', W:'48"', H:'80"', weight:"", indWeight:"" },
-  { product:"ECS0905", type:"Pallet", pieces:"", L:'40"', W:'48"', H:'86"', weight:"700", indWeight:"" },
-  { product:"SPB1206G", type:"Pallet", pieces:270, L:'40"', W:'48"', H:'85"', weight:"1070", indWeight:"" },
-  { product:"BOM0510-O", type:"Pallet", pieces:64, L:'40"', W:'48"', H:'78"', weight:"320", indWeight:"" },
-  { product:"TBC2.550T1IND", type:"Pallet", pieces:10, L:'48"', W:'96"', H:'85"', weight:"850", indWeight:"" },
-  { product:"TBC0550T1IND", type:"Pallet", pieces:12, L:'48"', W:'96"', H:'96"', weight:"910", indWeight:"" },
-  { product:"TBC7550T1IND", type:"Pallet", pieces:12, L:'48"', W:'96"', H:'96"', weight:"1050", indWeight:"" },
-  { product:"TBC1050T1IND", type:"Pallet", pieces:12, L:'48"', W:'96"', H:'96"', weight:"1200", indWeight:"120" },
-  { product:"TBC1250T1IND", type:"Pallet", pieces:11, L:'48"', W:'96"', H:'92"', weight:"1180", indWeight:"" },
-  { product:"TBC1550T1IND", type:"Pallet", pieces:9, L:'48"', W:'96"', H:'96"', weight:"1100", indWeight:"" },
-  { product:"TBC0550T1DOT", type:"Pallet", pieces:12, L:'48"', W:'96"', H:'92"', weight:"1100", indWeight:"110" },
-  { product:"TBC7550T1DOT", type:"Pallet", pieces:11, L:'48"', W:'96"', H:'94"', weight:"1250", indWeight:"114" },
-  { product:"TBC1050T1DOT", type:"Pallet", pieces:11, L:'48"', W:'96"', H:'96"', weight:"1490", indWeight:"" },
-  { product:"TBC1250T1DOT", type:"Pallet", pieces:11, L:'48"', W:'96"', H:'94"', weight:"1350", indWeight:"" },
-  { product:"TBC1550T1DOT", type:"Pallet", pieces:10, L:'48"', W:'96"', H:'96"', weight:"1400", indWeight:"" },
-  { product:"TBC3050T1DOT", type:"Pallet", pieces:8, L:'48"', W:'96"', H:'98"', weight:"2227", indWeight:"" },
-  { product:"TBC0550T2DOT", type:"Pallet", pieces:10, L:'48"', W:'96"', H:'96"', weight:"1250", indWeight:"121" },
-  { product:"TBC7550T2DOT", type:"Pallet", pieces:9, L:'48"', W:'96"', H:'92"', weight:"1170", indWeight:"130" },
-  { product:"TBC1050T2DOT", type:"Pallet", pieces:9, L:'48"', W:'96"', H:'96"', weight:"1288", indWeight:"161" },
-  { product:"TBC1250T2DOT", type:"Pallet", pieces:8, L:'48"', W:'96"', H:'96"', weight:"1407", indWeight:"201" },
-  { product:"TBC1550T2DOT", type:"Pallet", pieces:8, L:'48"', W:'96"', H:'102"', weight:"1512", indWeight:"216" },
-  { product:"TBC2050T2DOT", type:"Pallet", pieces:7, L:'48"', W:'96"', H:'100"', weight:"", indWeight:"" },
-  { product:"TBC2550T2DOT", type:"Pallet", pieces:7, L:'48"', W:'96"', H:'100"', weight:"", indWeight:"" },
-  { product:"TBC3050T2DOT", type:"Pallet", pieces:6, L:'48"', W:'96"', H:'100"', weight:"", indWeight:"141" },
-  { product:"TBC0550T3DOT", type:"Pallet", pieces:9, L:'48"', W:'96"', H:'96"', weight:"1275", indWeight:"181" },
-  { product:"TBC7550T3DOT", type:"Pallet", pieces:9, L:'48"', W:'96"', H:'92"', weight:"1350", indWeight:"221" },
-  { product:"TBC1050T3DOT", type:"Pallet", pieces:8, L:'48"', W:'96"', H:'96"', weight:"1450", indWeight:"250" },
-  { product:"TBC1250T3DOT", type:"Pallet", pieces:7, L:'48"', W:'96"', H:'96"', weight:"1550", indWeight:"" },
-  { product:"TBC1550T3DOT", type:"Pallet", pieces:7, L:'48"', W:'96"', H:'102"', weight:"1752", indWeight:"" },
-  { product:"TBC2050T3DOT", type:"Pallet", pieces:6, L:'48"', W:'96"', H:'100"', weight:"", indWeight:"" },
-  { product:"TBC0550T2IND", type:"Pallet", pieces:9, L:'48"', W:'96"', H:'96"', weight:"1200", indWeight:"" },
-  { product:"TBC7550T2IND", type:"Pallet", pieces:9, L:'48"', W:'96"', H:'92"', weight:"1100", indWeight:"" },
-  { product:"TBC1050T2IND", type:"Pallet", pieces:8, L:'48"', W:'96"', H:'98"', weight:"1250", indWeight:"" },
-  { product:"TBC1250T2IND", type:"Pallet", pieces:8, L:'48"', W:'96"', H:'99"', weight:"1400", indWeight:"" },
-  { product:"TBC1550T2IND", type:"Pallet", pieces:7, L:'48"', W:'96"', H:'96"', weight:"", indWeight:"" },
-  { product:"OCB1250", type:"Pallet", pieces:16, L:'48"', W:'96"', H:'92"', weight:"", indWeight:"" },
-  { product:"OCB1850", type:"Pallet", pieces:16, L:'48"', W:'96"', H:'98"', weight:"", indWeight:"" },
-  { product:"BMPSTK", type:"Box", pieces:1, L:'34"', W:'13"', H:'9"', weight:"20 lbs", indWeight:"" },
-  { product:"Wattle Stakes", type:"Bundle", pieces:48, L:'48"', W:'48"', H:'36"', weight:"600", indWeight:"" },
-  { product:"Blanket Stakes Box", type:"Box", pieces:1, L:'34"', W:'13"', H:'9"', weight:"20 lbs", indWeight:"" },
-  { product:"Blanket Stakes Pallet", type:"Pallet", pieces:"", L:'48"', W:'40"', H:'85"', weight:"850 lbs", indWeight:"" },
-  { product:'Metal Blanket 6"', type:"Box", pieces:1, L:"", W:"", H:"", weight:"40 lbs", indWeight:"" },
-  { product:"Wattles", type:"Pallet", pieces:"", L:'48"', W:'40"', H:'108"', weight:"550 lbs", indWeight:"" },
-  { product:"8' Roll ECB", type:"Pallet", pieces:"", L:'48"', W:'96"', H:'52"', weight:"1300 lbs", indWeight:"" },
-  { product:"16' Roll ECB", type:"Pallet", pieces:"", L:'49"', W:'192"', H:'55"', weight:"2200 lbs", indWeight:"" },
-];
+// DIMS now sync live from the Google Sheet on tab open — see fetchDimsFromSheet below.
+const INITIAL_DIMS = [];
 
 // ─── Shipping chart data matching the spreadsheet exactly ─────────────────────
 const SHIPPING_DATA = {
@@ -1076,6 +1019,8 @@ export default function SalesHub() {
         .pill{display:inline-block;padding:2px 7px;border-radius:1px;font-size:9px;letter-spacing:.06em;text-transform:uppercase;font-weight:500}
         .pill-saved{background:#182018;color:#5a9e5a;border:1px solid #253525}
         .pill-open{background:#201e10;color:#9e8e40;border:1px solid #352e10}
+        .pill-error{background:#201414;color:#c86a5a;border:1px solid #3a2020}
+        .pill-sync{background:#101c20;color:#5a9ec8;border:1px solid #203040}
         .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;z-index:100}
         .modal{background:var(--card-bg);border:1px solid var(--border-mid);border-radius:3px;padding:22px;max-width:580px;width:92%;max-height:80vh;overflow-y:auto;color:var(--text);box-shadow:0 4px 24px rgba(0,0,0,.12)}
         .warn-toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#1e1808;border:1px solid #3a2e08;color:#c8a030;font-size:11px;padding:6px 14px;white-space:nowrap;z-index:500;cursor:pointer;border-radius:2px;box-shadow:0 2px 12px rgba(0,0,0,.4);}
@@ -2300,80 +2245,230 @@ function StockLevelsTab({T}) {
   );
 }
 
-// ─── DIMS Tab ──────────────────────────────────────────────────────────────────
+// ─── DIMS Tab — synced from Google Sheets ───────────────────────────────────────
+const DIMS_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQQIjS6Lyxr88Pia5SVFTdiyILWiDvIdbOC3l3e5ukYBZ1maFAB4lZzKs6OXnaHNIgAb7WsGJX9S32N/pub?gid=1913010425&single=true&output=csv";
+
+// Reuses the CSV parser already defined above (used by the Stock Levels sheet fetches)
+// so parsing stays consistent across every Google Sheets integration in this file.
+
+// "PACKAGE - one bag, box, roll or bundle (30)" → "PACKAGE"; "PALLET (94)" → "PALLET"
+function shortSection(full) {
+  const noCount = full.replace(/\s*\(\d+\)\s*$/, "").trim();
+  const dashIdx = noCount.indexOf(" - ");
+  return dashIdx > -1 ? noCount.slice(0, dashIdx).trim() : noCount;
+}
+
+// Fetches the published "DIMS" tab and reconstructs rows + their section dividers.
+// Row 1 = sheet title, Row 2 = column headers, then data rows interspersed with
+// full-width section-header rows (e.g. "PALLET (94)") that only have column A filled.
+async function fetchDimsFromSheet() {
+  const url = DIMS_SHEET_CSV_URL + (DIMS_SHEET_CSV_URL.includes("?") ? "&" : "?") + "ts=" + Date.now();
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Sheet returned ${res.status}`);
+  const text = await res.text();
+  const table = parseCSV(text);
+  const rows = [];
+  let section = "";
+  for (let i = 2; i < table.length; i++) {
+    const r = table[i];
+    if (!r || !r.length) continue;
+    const c0 = (r[0]||"").trim();
+    const restEmpty = r.slice(1,10).every(v=>!v || !String(v).trim());
+    if (!c0 && restEmpty) continue; // fully blank spacer row
+    if (c0 && restEmpty) { section = shortSection(c0); continue; } // section divider row
+    rows.push({
+      sku: c0,
+      productName: (r[1]||"").trim(),
+      type: (r[2]||"").trim(),
+      pieces: (r[3]||"").trim(),
+      L: (r[4]||"").trim(),
+      W: (r[5]||"").trim(),
+      H: (r[6]||"").trim(),
+      weight: (r[7]||"").trim(),
+      confirmedBy: (r[8]||"").trim(),
+      source: (r[9]||"").trim(),
+      section,
+    });
+  }
+  if (!rows.length) throw new Error("Sheet returned no rows — check the tab/gid is still published");
+  return rows;
+}
+
+// Builds tab-separated + HTML table clipboard payloads so a paste into Outlook (or
+// Word/Excel) lands as an actual formatted table, with a plain-text fallback for
+// anywhere that doesn't accept rich HTML paste.
+function buildDimsClipboard(rows) {
+  const headers = ["SKU","Product Name","Type","Pieces","L","W","H","Weight","Confirmed By","Source"];
+  const dataRows = rows.map(r=>[r.sku,r.productName,r.type,r.pieces,r.L,r.W,r.H,r.weight,r.confirmedBy,r.source]);
+  const all = [headers, ...dataRows];
+  const plain = all.map(r=>r.join("\t")).join("\n");
+  const esc = s => String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const html = `<table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:12px;">`
+    + all.map((r,ri)=>`<tr>${r.map(c=>{
+        const tag = ri===0 ? "th" : "td";
+        const style = ri===0 ? "border:1px solid #999;padding:4px 8px;background:#222;color:#fff;text-align:left;" : "border:1px solid #999;padding:4px 8px;";
+        return `<${tag} style="${style}">${esc(c)}</${tag}>`;
+      }).join("")}</tr>`).join("")
+    + `</table>`;
+  return { plain, html };
+}
+
+async function copyToClipboard(plain, html) {
+  try {
+    if (navigator.clipboard && window.ClipboardItem) {
+      await navigator.clipboard.write([new window.ClipboardItem({
+        "text/plain": new Blob([plain], {type:"text/plain"}),
+        "text/html": new Blob([html], {type:"text/html"}),
+      })]);
+      return true;
+    }
+  } catch(e) { /* fall through to plain-text fallback below */ }
+  try { await navigator.clipboard.writeText(plain); return true; } catch(e) { return false; }
+}
+
 function DimsTab({dims,setDims,T}) {
   const [editing,setEditing] = useState(null);
   const [adding,setAdding] = useState(false);
-  const [newRow,setNewRow] = useState({product:"",type:"Pallet",pieces:"",L:"",W:"",H:"",weight:"",indWeight:""});
+  const [newRow,setNewRow] = useState({sku:"",productName:"",type:"",pieces:"",L:"",W:"",H:"",weight:"",confirmedBy:"",source:"",section:""});
   const [search,setSearch] = useState("");
   const [filterType,setFilterType] = useState("All");
-  const [sortF, setSortF] = useState("product");
+  const [filterSection,setFilterSection] = useState("All");
+  const [sortF, setSortF] = useState("sku");
   const [sortD, setSortD] = useState(1);
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState(null);
+  const [lastSynced, setLastSynced] = useLocalStorage('bmp_dims_last_synced', null);
+  const [copyFlash, setCopyFlash] = useState({}); // key -> bool, transient "Copied" indicator
+
+  function flashCopied(key) {
+    setCopyFlash(f=>({...f,[key]:true}));
+    setTimeout(()=>setCopyFlash(f=>({...f,[key]:false})), 1400);
+  }
+
+  const syncFromSheet = useCallback(() => {
+    setSyncing(true); setSyncError(null);
+    fetchDimsFromSheet()
+      .then(rows => { setDims(rows); setLastSynced(new Date().toISOString()); })
+      .catch(err => setSyncError(err?.message || String(err)))
+      .finally(() => setSyncing(false));
+  }, [setDims, setLastSynced]);
+
+  // Auto-sync every time this tab is opened, so it's connected & up to date on entry.
+  useEffect(() => { syncFromSheet(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Legacy data from before the Google Sheet sync (old shape had no `sku` field) —
+  // show a clear prompt instead of a garbled table until the first sync completes.
+  const isLegacyShape = Array.isArray(dims) && dims.length>0 && dims[0] && dims[0].sku===undefined && dims[0].product!==undefined;
 
   function hs(f){if(sortF===f)setSortD(d=>-d);else{setSortF(f);setSortD(1);}}
-  const Th=({l,f})=><th onClick={()=>hs(f)} style={{cursor:"pointer",userSelect:"none"}}>{l}{sortF===f?(sortD===1?" ↑":" ↓"):""}</th>;
+  const Th=({l,f})=><th onClick={()=>hs(f)} style={{cursor:"pointer",userSelect:"none",whiteSpace:"nowrap"}}>{l}{sortF===f?(sortD===1?" ↑":" ↓"):""}</th>;
 
   const types = useMemo(()=>["All",...new Set((Array.isArray(dims)?dims:[]).filter(d=>d&&typeof d==='object').map(d=>d.type).filter(Boolean))],[dims]);
+  const sections = useMemo(()=>["All",...new Set((Array.isArray(dims)?dims:[]).filter(d=>d&&typeof d==='object').map(d=>d.section).filter(Boolean))],[dims]);
   const filtered = useMemo(()=>{
     const safe = (Array.isArray(dims)?dims:[]).filter(d=>d&&typeof d==='object');
     const base = safe.filter(d=>{
       const q=search.toLowerCase();
-      const matchS=!q||(d.product||"").toLowerCase().includes(q)||(d.type||"").toLowerCase().includes(q);
+      const matchS=!q||(d.sku||"").toLowerCase().includes(q)||(d.productName||"").toLowerCase().includes(q)||(d.type||"").toLowerCase().includes(q);
       const matchT=filterType==="All"||d.type===filterType;
-      return matchS&&matchT;
+      const matchSec=filterSection==="All"||d.section===filterSection;
+      return matchS&&matchT&&matchSec;
     });
     return [...base].sort((a,b)=>{
       const av=String(a[sortF]??""), bv=String(b[sortF]??"");
       return av.localeCompare(bv,undefined,{numeric:true})*sortD;
     });
-  },[dims,search,filterType,sortF,sortD]);
+  },[dims,search,filterType,filterSection,sortF,sortD]);
 
   function handleImport(e) {
     const file=e.target.files[0]; if(!file)return;
     const reader=new FileReader();
     reader.onload=ev=>{
-      const lines=ev.target.result.split("\n").filter(l=>l.trim());
-      const rows=lines.slice(1).map(line=>{
-        const cols=line.split(",").map(c=>c.replace(/^"|"$/g,"").replace(/""/g,'"').trim());
-        return {product:cols[0]||"",type:cols[1]||"",pieces:cols[2]||"",L:cols[3]||"",W:cols[4]||"",H:cols[5]||"",weight:cols[6]||"",indWeight:cols[7]||""};
-      }).filter(r=>r.product);
+      const table=parseCSV(ev.target.result).filter(r=>r.length && r.some(c=>c&&c.trim()));
+      const rows=table.slice(1).map(cols=>({
+        sku:(cols[0]||"").trim(), productName:(cols[1]||"").trim(), type:(cols[2]||"").trim(),
+        pieces:(cols[3]||"").trim(), L:(cols[4]||"").trim(), W:(cols[5]||"").trim(), H:(cols[6]||"").trim(),
+        weight:(cols[7]||"").trim(), confirmedBy:(cols[8]||"").trim(), source:(cols[9]||"").trim(), section:"",
+      })).filter(r=>r.sku);
       setDims(rows);
     };
     reader.readAsText(file);
     e.target.value="";
   }
 
-  function saveNew(){setDims(d=>[...d,{...newRow}]);setNewRow({product:"",type:"Pallet",pieces:"",L:"",W:"",H:"",weight:"",indWeight:""});setAdding(false);}
+  function saveNew(){setDims(d=>[...d,{...newRow}]);setNewRow({sku:"",productName:"",type:"",pieces:"",L:"",W:"",H:"",weight:"",confirmedBy:"",source:"",section:""});setAdding(false);}
   function saveEdit(row){setDims(d=>d.map((r,i)=>i===editing.idx?row:r));setEditing(null);}
   function removeRow(idx){setDims(d=>d.filter((_,i)=>i!==idx));}
+
+  async function copyRow(row) {
+    const {plain, html} = buildDimsClipboard([row]);
+    if (await copyToClipboard(plain, html)) flashCopied(row.sku);
+  }
+  async function copyVisible() {
+    if (!filtered.length) return;
+    const {plain, html} = buildDimsClipboard(filtered);
+    if (await copyToClipboard(plain, html)) flashCopied("__all__");
+  }
+
+  const syncedLabel = lastSynced ? new Date(lastSynced).toLocaleString() : null;
 
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
       <div style={{padding:"10px 14px",borderBottom:"1px solid #181818",display:"flex",alignItems:"center",gap:10,background:"#090909",flexWrap:"wrap"}}>
         <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".12em",color:"#555"}}>DIMS — Package Dimensions</div>
+        {syncing
+          ? <span className="pill pill-sync">Syncing…</span>
+          : syncError
+            ? <span className="pill pill-error" title={syncError}>⚠ Sync failed</span>
+            : <span className="pill pill-saved">Synced</span>}
+        {syncedLabel && !syncing && <span style={{fontSize:9,color:T.muted}}>as of {syncedLabel}</span>}
         <datalist id="dim-type-suggestions">
-          {["Pallet","BMP Box","BMP Bag","Box","Bundle","Other"].map(t=><option key={t} value={t}/>)}
+          {["Pallet","BMP Box","BMP Bag","Box","Bundle","Package","Other"].map(t=><option key={t} value={t}/>)}
         </datalist>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…" style={{height:26,fontSize:11,width:160}}/>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search SKU, name, type…" style={{height:26,fontSize:11,width:190}}/>
+        <select value={filterSection} onChange={e=>setFilterSection(e.target.value)}
+          style={{height:26,fontSize:11,background:T.inputBg||"#1a1a18",color:T.subtext,border:`1px solid ${T.border}`,padding:"0 6px"}}>
+          {sections.map(s=><option key={s}>{s}</option>)}
+        </select>
         <select value={filterType} onChange={e=>setFilterType(e.target.value)}
           style={{height:26,fontSize:11,background:T.inputBg||"#1a1a18",color:T.subtext,border:`1px solid ${T.border}`,padding:"0 6px"}}>
           {types.map(t=><option key={t}>{t}</option>)}
         </select>
         <div style={{flex:1}}/>
-        <label className="btn" style={{fontSize:10,padding:"4px 10px",cursor:"pointer"}}>
+        <button className="btn" style={{fontSize:10,padding:"4px 10px"}} onClick={syncFromSheet} disabled={syncing}>
+          {syncing?"Refreshing…":"↻ Refresh from Sheet"}
+        </button>
+        <button className="btn" style={{fontSize:10,padding:"4px 10px",position:"relative"}} onClick={copyVisible}>
+          📋 Copy Visible ({filtered.length})
+          {copyFlash.__all__&&<span style={{position:"absolute",left:"50%",transform:"translateX(-50%)",top:-22,background:"#1a3a1a",border:"1px solid #2a6a2a",color:"#5ace5a",fontSize:9,padding:"2px 6px",borderRadius:2,whiteSpace:"nowrap",pointerEvents:"none"}}>✓ Copied</span>}
+        </button>
+        <label className="btn" style={{fontSize:10,padding:"4px 10px",cursor:"pointer"}} title="Manual fallback — the next sheet refresh will overwrite this">
           ↑ Import CSV<input type="file" accept=".csv" style={{display:"none"}} onChange={handleImport}/>
         </label>
         <button className="btn" style={{fontSize:10,padding:"4px 10px"}} onClick={()=>setAdding(true)}>+ Add Row</button>
       </div>
-      <div style={{flex:1,overflowY:"auto"}}>
+      {syncError&&(
+        <div style={{padding:"7px 14px",background:"#1a1010",borderBottom:"1px solid #2a1818",color:"#c86a5a",fontSize:11,display:"flex",alignItems:"center",gap:10}}>
+          <span>⚠ Couldn't refresh from Google Sheets ({syncError}). Showing the last data loaded{syncedLabel?` (as of ${syncedLabel})`:""}.</span>
+          <button className="btn" style={{fontSize:10,padding:"2px 8px"}} onClick={syncFromSheet}>Retry</button>
+        </div>
+      )}
+      {isLegacyShape&&(
+        <div style={{padding:"7px 14px",background:"#1e1808",borderBottom:"1px solid #3a2e08",color:"#c8a030",fontSize:11}}>
+          This is older locally-saved DIMS data. Click "↻ Refresh from Sheet" above to load the current version.
+        </div>
+      )}
+      <div style={{flex:1,overflow:"auto"}}>
         <table className="data-table">
           <thead><tr>
-            <Th l="Product" f="product"/>
+            <Th l="SKU" f="sku"/>
+            <Th l="Product Name" f="productName"/>
             <Th l="Type" f="type"/>
             <Th l="Pieces" f="pieces"/>
             <Th l="L" f="L"/><Th l="W" f="W"/><Th l="H" f="H"/>
             <Th l="Weight" f="weight"/>
-            <Th l="Ind. Weight" f="indWeight"/>
+            <Th l="Confirmed" f="confirmedBy"/>
+            <Th l="Source" f="source"/>
             <th>Actions</th>
           </tr></thead>
           <tbody>
@@ -2382,17 +2477,21 @@ function DimsTab({dims,setDims,T}) {
               return editing?.idx===origIdx
                 ? <DimEditRow key={i} row={editing.data} setRow={d=>setEditing(e=>({...e,data: typeof d==="function" ? d(e.data) : d}))} onSave={()=>saveEdit(editing.data)} onCancel={()=>setEditing(null)}/>
                 : <tr key={i}>
-                    <td style={{color:T.accent,fontFamily:"monospace",fontSize:11}}>{row.product}</td>
-                    <td><span style={{fontSize:10,color:T.muted,letterSpacing:".04em"}}>{row.type}</span></td>
+                    <td style={{color:T.accent,fontFamily:"monospace",fontSize:11,whiteSpace:"nowrap"}}>{row.sku}</td>
+                    <td style={{fontSize:11}}>{row.productName}</td>
+                    <td><span style={{fontSize:10,color:T.muted,letterSpacing:".04em"}}>{row.type||"—"}</span></td>
                     <td style={{color:"#888"}}>{row.pieces||"—"}</td>
                     <td style={{fontFamily:"monospace",fontSize:11}}>{row.L||"—"}</td>
                     <td style={{fontFamily:"monospace",fontSize:11}}>{row.W||"—"}</td>
                     <td style={{fontFamily:"monospace",fontSize:11}}>{row.H||"—"}</td>
                     <td style={{fontFamily:"monospace",fontSize:11}}>{row.weight||"—"}</td>
-                    <td style={{fontFamily:"monospace",fontSize:11,color:"#666"}}>{row.indWeight||"—"}</td>
-                    <td style={{display:"flex",gap:5}}>
+                    <td>{row.confirmedBy?<span className="pill pill-saved">{row.confirmedBy}</span>:<span style={{color:"#555"}}>—</span>}</td>
+                    <td style={{fontSize:10,color:"#666",maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={row.source}>{row.source||"—"}</td>
+                    <td style={{display:"flex",gap:5,position:"relative"}}>
+                      <button className="btn" style={{fontSize:10,padding:"2px 8px"}} onClick={()=>copyRow(row)} title="Copy row for pasting into Outlook">📋</button>
                       <button className="btn" style={{fontSize:10,padding:"2px 8px"}} onClick={()=>setEditing({idx:origIdx,data:{...row}})}>Edit</button>
                       <button className="btn-del" onClick={()=>removeRow(origIdx)}>✕</button>
+                      {copyFlash[row.sku]&&<span style={{position:"absolute",left:0,top:-20,background:"#1a3a1a",border:"1px solid #2a6a2a",color:"#5ace5a",fontSize:9,padding:"2px 6px",borderRadius:2,whiteSpace:"nowrap",pointerEvents:"none"}}>✓ Copied</span>}
                     </td>
                   </tr>;
             })}
@@ -2408,12 +2507,14 @@ function DimEditRow({row,setRow,onSave,onCancel}) {
   const f=(k)=>({value:row[k]??"",onChange:e=>setRow(r=>({...r,[k]:e.target.value})),style:{width:"100%",fontSize:11,height:24}});
   return (
     <tr style={{background:"#161614"}}>
-      <td><input {...f("product")}/></td>
+      <td><input {...f("sku")} placeholder="SKU" style={{width:"100%",fontSize:11,height:24,fontFamily:"monospace"}}/></td>
+      <td><input {...f("productName")} placeholder="Product name"/></td>
       <td><input {...f("type")} placeholder="Type…" list="dim-type-suggestions"/></td>
       <td><input {...f("pieces")}/></td>
       <td><input {...f("L")}/></td><td><input {...f("W")}/></td><td><input {...f("H")}/></td>
       <td><input {...f("weight")}/></td>
-      <td><input {...f("indWeight")}/></td>
+      <td><input {...f("confirmedBy")} placeholder="Confirmed by"/></td>
+      <td><input {...f("source")} placeholder="Source"/></td>
       <td style={{display:"flex",gap:4}}>
         <button className="btn-gold" style={{padding:"3px 10px",fontSize:10}} onClick={onSave}>✓</button>
         <button className="btn" style={{fontSize:10}} onClick={onCancel}>✕</button>

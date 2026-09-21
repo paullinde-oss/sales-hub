@@ -873,7 +873,7 @@ export default function SalesHub() {
   function createNewQuote() {
     const q={id:Date.now(),quoteNum:nextQNum(quotes),name:"",company:"",prepaid:false,currency:"CAD",
       lineItems:[{id:Date.now(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}],
-      notes:"",internalNotes:"",validFor:30,quoteStatus:"inprogress",followUps:[],isNewLead:false,leadType:"",leadSource:"",shipTo:{province:"",city:"",address:""},saved:false,savedBy:"",savedDate:""};
+      notes:"",internalNotes:"",validFor:30,quoteStatus:"inprogress",followUps:[],isNewLead:false,leadType:"",leadSource:"",shipTo:{address:""},saved:false,savedBy:"",savedDate:""};
     setActiveQuote(q);
   }
   function saveQuote(q) {
@@ -1499,7 +1499,10 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
         u.description=""; u.basePrice=0; u.unitPrice=0; u.priceTier=undefined;
       }
       if(field==="sku"||field==="description"){
-        const prod=field==="sku"?(products||[]).find(p=>p.sku===val):(products||[]).find(p=>p.description===val);
+        const needle=String(val||"").trim().toLowerCase();
+        const prod=field==="sku"
+          ?(products||[]).find(p=>String(p.sku||"").trim().toLowerCase()===needle)
+          :(products||[]).find(p=>String(p.description||"").trim().toLowerCase()===needle);
         if(prod){
           if(field==="sku")u.description=prod.description;else u.sku=prod.sku;
           const tier=getPriceTier(prod,u.qty,q.prepaid);
@@ -1620,7 +1623,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
                         onChange={e=>updLI(li.id,"description",e.target.value)}
                         placeholder="Product description…"
                         style={{width:"100%",fontSize:15,height:44,padding:"0 10px",borderRadius:3}}/> 
-                      <datalist id={`dl-m-${li.id}`}>{(productsCAD||[]).map(p=><option key={p.sku} value={p.description}/>)}</datalist>
+                      <datalist id={`dl-m-${li.id}`}>{(products||[]).map(p=><option key={p.sku} value={p.description}/>)}</datalist>
                     </>
                   }
                 </div>
@@ -1633,7 +1636,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
                         onChange={e=>updLI(li.id,"sku",e.target.value)}
                         placeholder="SKU…"
                         style={{width:"100%",fontSize:14,height:40,padding:"0 10px",borderRadius:3,fontFamily:"monospace"}}/>
-                      <datalist id={`sl-m-${li.id}`}>{(productsCAD||[]).map(p=><option key={p.sku} value={p.sku}/>)}</datalist>
+                      <datalist id={`sl-m-${li.id}`}>{(products||[]).map(p=><option key={p.sku} value={p.sku}/>)}</datalist>
                     </>
                   }
                 </div>
@@ -1695,17 +1698,15 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
             return <tr key={li.id}>
               <td>
                 {ro?<span style={{fontSize:11}}>{li.sku||"—"}</span>
-                  :<><input list={`sl-${idx}`} value={li.sku} onChange={e=>updLI(li.id,"sku",e.target.value)}
+                  :<><input list={`sl-${li.id}`} value={li.sku} onChange={e=>updLI(li.id,"sku",e.target.value)}
                       style={{width:"100%",fontSize:11,height:25}} placeholder="SKU"/>
-                    <datalist id={`sl-${idx}`}>{(productsCAD||[]).map(p=><option key={p.sku} value={p.sku}/>)}</datalist>
-                    <datalist id={`sl-${idx}`}>{(productsCAD||[]).map(p=><option key={p.sku} value={p.sku}/>)}</datalist></>}
+                    <datalist id={`sl-${li.id}`}>{(products||[]).map(p=><option key={p.sku} value={p.sku}/>)}</datalist></>}
               </td>
               <td>
                 {ro?<span style={{fontSize:11}}>{li.description}</span>
-                  :<><input list={`dl-${idx}`} value={li.description} onChange={e=>updLI(li.id,"description",e.target.value)}
+                  :<><input list={`dl-${li.id}`} value={li.description} onChange={e=>updLI(li.id,"description",e.target.value)}
                       style={{width:"100%",fontSize:11,height:25}} placeholder="Product description"/>
-                    <datalist id={`dl-${idx}`}>{(productsCAD||[]).map(p=><option key={p.sku} value={p.description}/>)}</datalist>
-                    <datalist id={`dl-${idx}`}>{(productsCAD||[]).map(p=><option key={p.sku} value={p.description}/>)}</datalist></>}
+                    <datalist id={`dl-${li.id}`}>{(products||[]).map(p=><option key={p.sku} value={p.description}/>)}</datalist></>}
               </td>
               <td style={{position:"relative"}}>
                 {ro?<span>{li.qty}</span>
@@ -1880,24 +1881,14 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
                 style={{width:14,height:14,cursor:ro?"default":"pointer"}}/>
               <span style={{fontSize:11,fontWeight:600,color:T.subtext}}>Ship To Details</span>
               <span style={{fontSize:10,color:T.muted}}>(destination for this order)</span>
-              {(quote.shipTo?.province||quote.shipTo?.city||quote.shipTo?.address)&&(
+              {quote.shipTo?.address&&(
                 <span style={{fontSize:10,color:T.accent,marginLeft:4}}>
-                  {[quote.shipTo.city,quote.shipTo.province].filter(Boolean).join(", ")}
+                  {quote.shipTo.address}
                 </span>
               )}
             </label>
             {quote._shipToOpen&&(
               <div style={{display:"flex",gap:8,marginTop:10,alignItems:"flex-end"}}>
-                <div style={{minWidth:120}}>
-                  <div style={{fontSize:9,color:T.muted,letterSpacing:".08em",marginBottom:4}}>PROVINCE / STATE</div>
-                  <input disabled={ro} value={quote.shipTo?.province||""} onChange={e=>upd("shipTo",{...quote.shipTo,province:e.target.value})}
-                    placeholder="e.g. AB" style={{width:"100%",fontSize:12,height:32,background:"var(--input-bg)",border:"1px solid var(--border-light)",color:"var(--text)"}}/>
-                </div>
-                <div style={{minWidth:150}}>
-                  <div style={{fontSize:9,color:T.muted,letterSpacing:".08em",marginBottom:4}}>CITY</div>
-                  <input disabled={ro} value={quote.shipTo?.city||""} onChange={e=>upd("shipTo",{...quote.shipTo,city:e.target.value})}
-                    placeholder="e.g. Calgary" style={{width:"100%",fontSize:12,height:32,background:"var(--input-bg)",border:"1px solid var(--border-light)",color:"var(--text)"}}/>
-                </div>
                 <div style={{flex:1}}>
                   <div style={{fontSize:9,color:T.muted,letterSpacing:".08em",marginBottom:4}}>FULL ADDRESS <span style={{fontWeight:300,fontSize:9}}>(if available)</span></div>
                   <input disabled={ro} value={quote.shipTo?.address||""} onChange={e=>upd("shipTo",{...quote.shipTo,address:e.target.value})}
@@ -2360,6 +2351,9 @@ function DimsTab({dims,setDims,T}) {
     <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
       <div style={{padding:"10px 14px",borderBottom:"1px solid #181818",display:"flex",alignItems:"center",gap:10,background:"#090909",flexWrap:"wrap"}}>
         <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".12em",color:"#555"}}>DIMS — Package Dimensions</div>
+        <datalist id="dim-type-suggestions">
+          {["Pallet","BMP Box","BMP Bag","Box","Bundle","Other"].map(t=><option key={t} value={t}/>)}
+        </datalist>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…" style={{height:26,fontSize:11,width:160}}/>
         <select value={filterType} onChange={e=>setFilterType(e.target.value)}
           style={{height:26,fontSize:11,background:T.inputBg||"#1a1a18",color:T.subtext,border:`1px solid ${T.border}`,padding:"0 6px"}}>
@@ -2415,12 +2409,7 @@ function DimEditRow({row,setRow,onSave,onCancel}) {
   return (
     <tr style={{background:"#161614"}}>
       <td><input {...f("product")}/></td>
-      <td>
-        <select value={row.type||"Pallet"} onChange={e=>setRow(r=>({...r,type:e.target.value}))}
-          style={{width:"100%",fontSize:11,height:24,background:"var(--input-bg,#1a1a18)",color:"var(--text,#e8e8e8)",border:"1px solid var(--border-light,#2a2a2a)"}}>
-          {["Pallet","BMP Box","BMP Bag","Box","Bundle","Other"].map(t=><option key={t}>{t}</option>)}
-        </select>
-      </td>
+      <td><input {...f("type")} placeholder="Type…" list="dim-type-suggestions"/></td>
       <td><input {...f("pieces")}/></td>
       <td><input {...f("L")}/></td><td><input {...f("W")}/></td><td><input {...f("H")}/></td>
       <td><input {...f("weight")}/></td>

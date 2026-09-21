@@ -2380,7 +2380,7 @@ function DimsTab({dims,setDims,T}) {
             {filtered.map((row,i)=>{
               const origIdx=(Array.isArray(dims)?dims:[]).findIndex(d=>d===row);
               return editing?.idx===origIdx
-                ? <DimEditRow key={i} row={editing.data} setRow={d=>setEditing(e=>({...e,data:d}))} onSave={()=>saveEdit(editing.data)} onCancel={()=>setEditing(null)}/>
+                ? <DimEditRow key={i} row={editing.data} setRow={d=>setEditing(e=>({...e,data: typeof d==="function" ? d(e.data) : d}))} onSave={()=>saveEdit(editing.data)} onCancel={()=>setEditing(null)}/>
                 : <tr key={i}>
                     <td style={{color:T.accent,fontFamily:"monospace",fontSize:11}}>{row.product}</td>
                     <td><span style={{fontSize:10,color:T.muted,letterSpacing:".04em"}}>{row.type}</span></td>

@@ -693,6 +693,18 @@ export default function SalesHub() {
     return () => unsub();
   }, []);
 
+  // Keep an already-open quote's status field current if it changes elsewhere
+  // (Pipeline's dropdown, or a Lead Tracking edit synced back to this quote),
+  // without touching any other in-progress local edits in the open form.
+  useEffect(() => {
+    if (!activeQuote || !activeQuote.saved) return;
+    const match = quotes.find(q => String(q.id)===String(activeQuote.id));
+    if (match && match.quoteStatus && match.quoteStatus !== activeQuote.quoteStatus) {
+      setActiveQuote(prev => (prev && String(prev.id)===String(activeQuote.id))
+        ? {...prev, quoteStatus: match.quoteStatus} : prev);
+    }
+  }, [quotes]);
+
   // ── Firebase: sync products CAD ───────────────────────────────────────────
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "config", "productsCAD"), (snap) => {
@@ -932,6 +944,28 @@ export default function SalesHub() {
       });
     }
   }
+  // Change a quote's status from the Quote Form itself. Persists to Firestore and,
+  // like Pipeline's own status dropdown, keeps the matching Lead Tracking entry in
+  // sync — matched by quote number (e.g. "BMP44152"), falling back to company name.
+  function updateQuoteStatus(quote, status) {
+    setQuotes(prev => {
+      const next = prev.map(q => q.id===quote.id ? {...q, quoteStatus: status} : q);
+      const updated = next.find(q => q.id===quote.id) || {...quote, quoteStatus: status};
+      setDoc(doc(db, "quotes", String(quote.id)), updated)
+        .catch(err => console.error("Firebase save error:", err));
+      return next;
+    });
+    const quoteNum = String(quote.quoteNum||"").trim();
+    const company  = (quote.company||quote.name||"").trim().toLowerCase();
+    if (quoteNum || company) {
+      setLeads(prev => prev.map(l => {
+        const matchByNum  = quoteNum && String(l.quoteNumber||"").trim() === quoteNum;
+        const matchByComp = !quoteNum && company && (l.company||"").trim().toLowerCase() === company;
+        if (matchByNum || matchByComp) return {...l, status};
+        return l;
+      }));
+    }
+  }
   function deleteQuote(id) {
     // Delete from Firebase
     deleteDoc(doc(db, "quotes", String(id)))
@@ -1056,6 +1090,7 @@ export default function SalesHub() {
       productsCAD={productsCAD} productsUSD={productsUSD} effectiveProductsUSD={effectiveProductsUSD}
       openEmailModal={openEmailModal} generatePDF={generatePDF}
       dims={dims} setDims={setDims}
+      onQuoteStatusChange={updateQuoteStatus}
       loginName={loginName} setAuthed={setAuthed} setLoginName={setLoginName}
     />
   );
@@ -1143,7 +1178,7 @@ export default function SalesHub() {
           {activeTab==="quotes"&&<QuotesTab quotes={filteredQuotes} activeQuote={activeQuote} searchQ={searchQ} setSearchQ={setSearchQ}
             productsCAD={productsCAD} productsUSD={effectiveProductsUSD} createNewQuote={createNewQuote}
             setActiveQuote={setActiveQuote} saveQuote={saveQuote} editQuote={q=>setActiveQuote({...q,saved:false})}
-            openEmailModal={openEmailModal} generatePDF={generatePDF} deleteConfirm={deleteConfirm} setDeleteConfirm={setDeleteConfirm} deleteQuote={deleteQuote} duplicateQuote={duplicateQuote} quoteSort={quoteSort} setQuoteSort={setQuoteSort} closeConfirm={closeConfirm} setCloseConfirm={setCloseConfirm} exchangeRate={exchangeRate} T={T}/>}
+            openEmailModal={openEmailModal} generatePDF={generatePDF} deleteConfirm={deleteConfirm} setDeleteConfirm={setDeleteConfirm} deleteQuote={deleteQuote} duplicateQuote={duplicateQuote} quoteSort={quoteSort} setQuoteSort={setQuoteSort} closeConfirm={closeConfirm} setCloseConfirm={setCloseConfirm} exchangeRate={exchangeRate} onQuoteStatusChange={updateQuoteStatus} T={T}/>}
           {activeTab==="dims"&&<DimsTab dims={dims} setDims={setDims} T={T}/>}
           {activeTab==="shipping"&&<ShippingTab T={T}/>}
           {activeTab==="products"&&<ProductsTab products={filteredProducts} setProducts={setCurrentProducts}
@@ -1352,7 +1387,7 @@ function exportQuotesCSV(quotes) {
 }
 
 // ─── Quotes Tab ────────────────────────────────────────────────────────────────
-function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUSD,effectiveProductsUSD,createNewQuote,setActiveQuote,saveQuote,editQuote,openEmailModal,generatePDF,deleteConfirm,setDeleteConfirm,deleteQuote,duplicateQuote,quoteSort,setQuoteSort,closeConfirm,setCloseConfirm,exchangeRate,T}) {
+function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUSD,effectiveProductsUSD,createNewQuote,setActiveQuote,saveQuote,editQuote,openEmailModal,generatePDF,deleteConfirm,setDeleteConfirm,deleteQuote,duplicateQuote,quoteSort,setQuoteSort,closeConfirm,setCloseConfirm,exchangeRate,onQuoteStatusChange,T}) {
   return (
     <div style={{display:"flex",height:"100%",overflow:"hidden"}}>
       {/* Left panel */}
@@ -1414,6 +1449,7 @@ function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUS
           : <QuoteForm quote={activeQuote} setQuote={setActiveQuote} productsCAD={productsCAD} productsUSD={effectiveProductsUSD}
               onSave={saveQuote} onEdit={editQuote} onEmail={openEmailModal} onPDF={generatePDF}
               onClose={()=>{ if(activeQuote&&!activeQuote.saved){setCloseConfirm(activeQuote);}else{setActiveQuote(null);} }} onNewQuote={()=>{setActiveQuote(null);setTimeout(createNewQuote,50);}}
+              onStatusChange={onQuoteStatusChange}
               exchangeRate={exchangeRate} T={T}/>
         }
       </div>
@@ -1422,7 +1458,7 @@ function QuotesTab({quotes,activeQuote,searchQ,setSearchQ,productsCAD,productsUS
 }
 
 // ─── Quote Form ────────────────────────────────────────────────────────────────
-function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail,onPDF,onClose,onNewQuote,isMobile,exchangeRate=0.73,T}) {
+function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail,onPDF,onClose,onNewQuote,onStatusChange,isMobile,exchangeRate=0.73,T}) {
   // Compute load warnings live from line items
   const loadWarnings = useMemo(() => {
     try {
@@ -1551,6 +1587,17 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
       return u;
     })}));
   }
+  const QUOTE_STATUS_OPTIONS = [
+    {v:'inprogress', l:'In Progress'},
+    {v:'cold',       l:'❄️ Cold'},
+    {v:'won',        l:'✅ Closed - Won'},
+    {v:'lost',       l:'❌ Closed - Lost'},
+  ];
+  function changeStatus(val){
+    upd('quoteStatus', val);
+    // Only an already-saved quote has a Pipeline/Lead Tracking counterpart to sync.
+    if (quote.saved && onStatusChange) onStatusChange(quote, val);
+  }
   function addLI(){setQuote(q=>({...q,lineItems:[...(q.lineItems||[]),{id:Date.now(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}]}));}
   function removeLI(id){setQuote(q=>({...q,lineItems:(q.lineItems||[]).filter(li=>li.id!==id)}));setQtyWarnings(w=>{const n={...w};delete n[id];return n;});}
 
@@ -1615,7 +1662,13 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
             <option>No</option><option>Yes</option>
           </select>
         </div>
-        <div/>
+        <div style={{display:"flex",alignItems:"center",padding:"4px 12px",gap:8}}>
+          <span style={{fontSize:10,color:"#666"}}>Status</span>
+          <select value={quote.quoteStatus||"inprogress"} onChange={e=>changeStatus(e.target.value)}
+            style={{background:"var(--input-bg)",border:"1px solid var(--border-light)",color:"var(--text)",fontSize:11,padding:"2px 6px"}}>
+            {QUOTE_STATUS_OPTIONS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+          </select>
+        </div>
       </div>
 
       {/* Line items */}
@@ -5129,6 +5182,7 @@ function MobileLayout({
   productsCAD, productsUSD, effectiveProductsUSD,
   openEmailModal, generatePDF,
   dims, setDims,
+  onQuoteStatusChange,
   loginName, setAuthed, setLoginName,
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -5173,6 +5227,7 @@ function MobileLayout({
             onEmail={openEmailModal} onPDF={generatePDF}
             onClose={()=>{ if(!activeQuote.saved){setCloseConfirm(activeQuote);}else{setActiveQuote(null);} }}
             onNewQuote={()=>{setActiveQuote(null); setTimeout(createNewQuote,50);}}
+            onStatusChange={onQuoteStatusChange}
             isMobile={true} T={T}/>
         </div>
         {/* Confirm modals */}
@@ -5826,6 +5881,7 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
   function pipelineToLeadStatus(qs) {
     if (qs === 'won')  return 'won';
     if (qs === 'lost') return 'lost';
+    if (qs === 'cold') return 'cold';
     return 'inprogress';
   }
 
@@ -6255,6 +6311,7 @@ function LeadTrackingTab({leads, setLeads, adSpend, setAdSpend, quotes, setQuote
   function leadToPipelineStatus(ls) {
     if (ls === 'won')  return 'won';
     if (ls === 'lost') return 'lost';
+    if (ls === 'cold') return 'cold';
     return 'inprogress';
   }
 

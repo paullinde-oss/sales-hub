@@ -513,6 +513,17 @@ const SHIPPING_DATA = {
   }
 };
 
+// Monotonically increasing id source for line items. Plain `Date.now()` calls
+// made in quick succession (e.g. adding a line item right after creating a new
+// quote) can return the SAME millisecond, giving two line items the same id.
+// Since each row's <tr key={li.id}> and its SKU/description <datalist id=...>
+// are derived from that id, a collision makes React treat both rows as the
+// same element — the second row's SKU/description autocomplete stops working.
+// Seeding from Date.now() then always incrementing guarantees every id here is
+// unique for the life of the page, however fast items are added.
+let __nextLineItemId = Date.now();
+function newLineItemId() { return ++__nextLineItemId; }
+
 const PRICE_INCREASE_OPTIONS = [-20,-15,-10,-5,-2,0,2,5,10,15,20,25,30,35,40,50,55,60];
 function fmtCur(val) {
   if (val === "" || val === null || val === undefined) return "—";
@@ -898,7 +909,7 @@ export default function SalesHub() {
 
   function createNewQuote() {
     const q={id:Date.now(),quoteNum:nextQNum(quotes),name:"",company:"",prepaid:false,currency:"CAD",
-      lineItems:[{id:Date.now(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}],
+      lineItems:[{id:newLineItemId(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}],
       notes:"",internalNotes:"",validFor:30,quoteStatus:"inprogress",followUps:[],isNewLead:false,leadType:"",leadSource:"",shipTo:{address:""},saved:false,savedBy:"",savedDate:""};
     setActiveQuote(q);
   }
@@ -980,7 +991,7 @@ export default function SalesHub() {
     // Normalize each line item to ensure all fields exist
     const srcItems = Array.isArray(q.lineItems) && q.lineItems.length > 0 ? q.lineItems : [];
     const newItems = srcItems.map((li, i) => ({
-      id: Date.now() + i + Math.random(),
+      id: newLineItemId(),
       sku:         li.sku         || "",
       description: li.description || "",
       qty:         parseInt(li.qty)         || 1,
@@ -989,7 +1000,7 @@ export default function SalesHub() {
       basePrice:   parseFloat(li.basePrice) || 0,
       priceTier:   li.priceTier || "unit",
     }));
-    if (newItems.length === 0) newItems.push({id:Date.now(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0,priceTier:"unit"});
+    if (newItems.length === 0) newItems.push({id:newLineItemId(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0,priceTier:"unit"});
     const duped = {
       id:            newId,
       quoteNum:      newNum,
@@ -1598,7 +1609,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
     // Only an already-saved quote has a Pipeline/Lead Tracking counterpart to sync.
     if (quote.saved && onStatusChange) onStatusChange(quote, val);
   }
-  function addLI(){setQuote(q=>({...q,lineItems:[...(q.lineItems||[]),{id:Date.now(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}]}));}
+  function addLI(){setQuote(q=>({...q,lineItems:[...(q.lineItems||[]),{id:newLineItemId(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}]}));}
   function removeLI(id){setQuote(q=>({...q,lineItems:(q.lineItems||[]).filter(li=>li.id!==id)}));setQtyWarnings(w=>{const n={...w};delete n[id];return n;});}
 
   const total=((quote.lineItems||[])).reduce((s,li)=>s+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0);

@@ -871,11 +871,17 @@ export default function SalesHub() {
       return "";
     };
     try {
-      return (productsUSD||[]).map((usdP) => {
-        const cadP = (productsCAD||[]).find(p => p.sku === usdP.sku);
-        if (!cadP) return usdP;
+      // Base the list on productsCAD — the complete, Firebase-synced catalog every
+      // device shares — so every SKU always appears in USD too, even ones this
+      // browser's local USD overrides have never seen. Only price fields ever come
+      // from productsUSD (a manual override), and only when one is actually set;
+      // everything else (sku, description, pkg, pallet, truckQty…) always reflects
+      // the live CAD product so packaging/description details can't go stale.
+      const usdBySku = new Map((productsUSD||[]).map(p => [p.sku, p]));
+      return (productsCAD||[]).map((cadP) => {
+        const usdP = usdBySku.get(cadP.sku) || {};
         return {
-          ...usdP,
+          ...cadP,
           price:         conv(usdP.price,         cadP.price,         exchangeRate),
           palletPrice:   conv(usdP.palletPrice,   cadP.palletPrice,   exchangeRate),
           prepaid:       conv(usdP.prepaid,       cadP.prepaid,       exchangeRate),
@@ -883,7 +889,7 @@ export default function SalesHub() {
           truckPrice:    conv(usdP.truckPrice,    cadP.truckPrice,    exchangeRate),
         };
       });
-    } catch(e) { return productsUSD; }
+    } catch(e) { return productsCAD; }
   }, [productsUSD, productsCAD, exchangeRate]);
 
   const filteredQuotes = useMemo(()=>quotes.filter(q=>{

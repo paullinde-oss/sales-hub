@@ -3,11 +3,11 @@
 // by day / week / month / fiscal year, by customer account, SKU, rep and location.
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { collection, doc, onSnapshot, setDoc, deleteDoc, deleteField } from "firebase/firestore";
-import { DEFAULT_ACCOUNTS, REPS, SALES_REP, normName, matchAccount } from "./accounts";
+import { DEFAULT_ACCOUNTS, REPS, SALES_REP, normName, matchAccount, SUGGESTED_WEBSITES } from "./accounts";
 import { isDropboxConnected, startDropboxAuth, disconnectDropbox, redirectUri, browseFolder, accountInfo } from "./dropbox";
 import { syncOrders } from "./sync";
 import { writeOrder, removeOrder, listenOrders, buildPacks } from "./orderStore";
-import { useLogos, syncLogos, resizeImage, saveLogo, removeLogo } from "./logos";
+import { useLogos, resizeImage, saveLogo, removeLogo, logoDevUrl, domainOf } from "./logos";
 import { yearCompare, openYearEndReport } from "./yearEndReport";
 import { QuoteWinRateReport, OpenPipelineReport, QuoteToOrderReport, LeadReport, SalesForecastReport, ReorderReport, ProductTrendsReport } from "./pipelineReports";
 import {
@@ -27,7 +27,6 @@ const DEFAULT_SETTINGS = {
     "/Brooks Division/Brooks BOL/Brooks Order Confirmations",
     "/Calgary BOL/Calgary Order Confirmations",
   ],
-  logoFolder: "/Documents/Marketing/Customer Logos",
   quoteLinks: {},
   dismissedMatches: {},
   lastSync: null,
@@ -46,7 +45,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
   const ownOnly = user?.salesScope === "own";
   const isAdmin = !!user?.admin;
   const canSync = !ownOnly;
-  const logos = useLogos(db);
+  const uploadedLogos = useLogos(db);
   const [rawOrders, setRawOrders] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [stored, setStored] = useState(null);
@@ -92,6 +91,12 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
   useEffect(() => onSnapshot(doc(db, "config", "salesSyncIssues"), s => setIssues(s.exists() ? (s.data().files || {}) : {})), [db]);
 
   const settings = useMemo(() => ({ ...DEFAULT_SETTINGS, ...(stored || {}) }), [stored]);
+  // Each account's logo: an uploaded one if there is one, otherwise logo.dev from its website
+  const logos = useMemo(() => {
+    const m = {};
+    if (settings.logoDevKey) settings.accounts.forEach(a => { const url = logoDevUrl(a.website, settings.logoDevKey); if (url) m[a.name] = { key: a.name, dataUrl: url, source: "logo.dev" }; });
+    return { ...m, ...uploadedLogos };
+  }, [settings.accounts, settings.logoDevKey, uploadedLogos]);
   const saveSettings = useCallback(patch => setDoc(doc(db, "config", "salesSettings"), patch, { merge: true }).catch(e => alert("Couldn't save settings: " + e.message)), [db]);
   const orders = useMemo(() => enrichOrders(rawOrders, settings).filter(o => !ownOnly || o.cust.rep === loginName).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.orderNo < b.orderNo ? 1 : -1)), [rawOrders, settings, ownOnly, loginName]);
   const opts = useMemo(() => ({ includeFreight, usdToCad: Number(settings.usdToCad) || 1.37, mode: currencyMode }), [includeFreight, settings.usdToCad, currencyMode]);
@@ -119,20 +124,15 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
       if (Object.keys(r.listing).length) await setDoc(doc(db, "config", "salesSyncFiles"), { numbers: r.listing, at: new Date().toISOString() });
       if (Object.keys(r.issues).length || Object.keys(r.resolved).length)
         await setDoc(doc(db, "config", "salesSyncIssues"), { files: { ...r.issues, ...Object.fromEntries(Object.keys(r.resolved).map(id => [id, deleteField()])) } }, { merge: true });
-      let logoNote = "";
-      try {
-        const lr = await syncLogos({ db, folder: settings.logoFolder, accounts: settings.accounts, aliases: settings.aliases, customerKeys: [...new Set(orders.map(o => o.cust.key))], logos, onProgress: setSync });
-        if (lr.added) logoNote = ` ${lr.added} customer logo${lr.added > 1 ? "s" : ""} added.`;
-      } catch (e) { logoNote = ` (Couldn't read the logo folder: ${String(e.message).slice(0, 120)})`; }
       const lastSync = { at: new Date().toISOString(), by: loginName || "", added: r.added, updated: r.updated, errors: r.errors.length, scanned: r.scanned };
       await saveSettings({ lastSync, issuesTracked: true, parserVersion: PARSER_VERSION, syncedSince: settings.since });
-      setSyncMsg({ ok: !r.errors.length, text: `Synced ${r.scanned} PDFs — ${r.added} new, ${r.updated} updated${r.removed.length ? `, ${r.removed.length} out-of-range or duplicate removed` : ""}${r.errors.length ? `, ${r.errors.length} couldn't be read` : ""}.${logoNote}`, errors: r.errors });
+      setSyncMsg({ ok: !r.errors.length, text: `Synced ${r.scanned} PDFs — ${r.added} new, ${r.updated} updated${r.removed.length ? `, ${r.removed.length} out-of-range or duplicate removed` : ""}${r.errors.length ? `, ${r.errors.length} couldn't be read` : ""}.`, errors: r.errors });
     } catch (e) {
       setConnected(isDropboxConnected());
       setSyncMsg({ ok: false, text: String(e.message || e) });
     }
     setSync(null);
-  }, [sync, rawOrders, orders, logos, settings, seen, issues, db, loginName, saveSettings]);
+  }, [sync, rawOrders, settings, seen, issues, db, loginName, saveSettings]);
 
   // Auto-sync once a day-ish for whoever has Dropbox connected
   useEffect(() => {
@@ -662,7 +662,7 @@ function AccountsView({ T, orders, settings, opts, currencyMode, openAccount, lo
                 <td style={{ fontWeight: 500 }}>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                     <span style={{ width: 34, height: 22, background: logos[r.key] ? "#fff" : "transparent", borderRadius: 2, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      {logos[r.key] && <img src={logos[r.key].dataUrl} alt="" style={{ maxWidth: 32, maxHeight: 20, objectFit: "contain" }} />}
+                      {logos[r.key] && <img src={logos[r.key].dataUrl} alt="" onError={e => { e.currentTarget.style.visibility = "hidden"; }} style={{ maxWidth: 32, maxHeight: 20, objectFit: "contain" }} />}
                     </span>{r.name}
                   </span>
                 </td>
@@ -725,17 +725,17 @@ function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMo
     openAccount(target);
   };
   const [edit, setEdit] = useState(null); // { name, rep, type, terms } while editing
-  const startEdit = () => setEdit({ name, rep: acct?.rep || "Unassigned", type: custType, terms: (acct?.terms || []).join(", ") });
+  const startEdit = () => setEdit({ name, rep: acct?.rep || "Unassigned", type: custType, terms: (acct?.terms || []).join(", "), website: acct?.website || "" });
   const saveEdit = async () => {
     const nm = edit.name.trim();
     if (!nm) return alert("The account needs a name.");
     if (nm !== name && settings.accounts.some(a => a.name.toLowerCase() === nm.toLowerCase())) return alert(`There's already an account called "${nm}". Use "Assign to an account" to merge into it.`);
     const terms = edit.terms.split(",").map(t => t.trim()).filter(Boolean);
     if (acct) {
-      await saveAccounts({ db, settings, saveSettings, logos, accounts: settings.accounts.map(a => a.name === accountKey ? { ...a, name: nm, rep: edit.rep, type: edit.type, terms } : a), renames: [[accountKey, nm]] });
+      await saveAccounts({ db, settings, saveSettings, logos, accounts: settings.accounts.map(a => a.name === accountKey ? { ...a, name: nm, rep: edit.rep, type: edit.type, terms, website: domainOf(edit.website) } : a), renames: [[accountKey, nm]] });
     } else {
       // Not on the list yet: create the account and point this customer's OC names at it
-      await saveSettings({ accounts: [...settings.accounts, { name: nm, rep: edit.rep, type: edit.type, terms }], aliases: { ...settings.aliases, ...Object.fromEntries(raws.map(r => [normName(r).trim(), nm])) } });
+      await saveSettings({ accounts: [...settings.accounts, { name: nm, rep: edit.rep, type: edit.type, terms, website: domainOf(edit.website) }], aliases: { ...settings.aliases, ...Object.fromEntries(raws.map(r => [normName(r).trim(), nm])) } });
       const l = logos[accountKey];
       if (l && !logos[nm]) { await saveLogo(db, nm, l.dataUrl, l.source); await removeLogo(db, accountKey); }
     }
@@ -797,15 +797,16 @@ function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMo
         <button className="btn" onClick={back}>← All accounts</button>
         <div onClick={() => editable && fileRef.current?.click()} title={editable ? (logo ? "Click to replace the logo" : "Click to add a logo (PNG or JPG)") : ""}
           style={{ width: 84, height: 56, border: `1px ${logo ? "solid" : "dashed"} ${T.borderLight}`, borderRadius: 4, background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: editable ? "pointer" : "default", overflow: "hidden", flexShrink: 0 }}>
-          {logo ? <img src={logo.dataUrl} alt="" style={{ maxWidth: "92%", maxHeight: "88%", objectFit: "contain" }} /> : <span style={{ fontSize: 10, color: "#999", textAlign: "center" }}>{editable ? "+ Add logo" : name.slice(0, 2).toUpperCase()}</span>}
+          {logo ? <img src={logo.dataUrl} alt="" onError={e => { e.currentTarget.style.visibility = "hidden"; }} style={{ maxWidth: "92%", maxHeight: "88%", objectFit: "contain" }} /> : <span style={{ fontSize: 10, color: "#999", textAlign: "center" }}>{editable ? "+ Add logo" : name.slice(0, 2).toUpperCase()}</span>}
         </div>
         <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" style={{ display: "none" }} onChange={upload} />
         <div>
           <div style={{ fontSize: 20, fontWeight: 600, color: T.text }}>{name}</div>
           <div style={{ fontSize: 11, color: T.tableHeadText }}>
             {custType} · {acct?.rep || "Unassigned"}
-            {logo && editable && <> · <a style={{ cursor: "pointer", textDecoration: "underline" }} onClick={() => confirm("Remove this logo?") && removeLogo(db, accountKey)}>remove logo</a></>}
-            {logo?.source === "dropbox" && <> · logo from Dropbox</>}
+            {acct?.website && <> · <a href={`https://${domainOf(acct.website)}`} target="_blank" rel="noreferrer" style={{ color: T.tableHeadText }}>{domainOf(acct.website)}</a></>}
+            {logo?.source === "manual" && editable && <> · <a style={{ cursor: "pointer", textDecoration: "underline" }} onClick={() => confirm("Remove the uploaded logo?" + (acct?.website && settings.logoDevKey ? " The logo.dev logo will show instead." : "")) && removeLogo(db, accountKey)}>remove uploaded logo</a></>}
+            {logo?.source === "logo.dev" && <> · logo from logo.dev</>}
           </div>
         </div>
         {editable && <button className="btn" onClick={startEdit}>✎ Edit account</button>}
@@ -850,13 +851,16 @@ function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMo
 
       {edit && (
         <Card T={T} title={acct ? "Edit account" : "Create account for this customer"}>
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 3fr", gap: 10, alignItems: "end" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1.6fr 2.4fr", gap: 10, alignItems: "end" }}>
             <label style={{ fontSize: 10, color: T.tableHeadText, textTransform: "uppercase", letterSpacing: ".06em" }}>Account name
               <input value={edit.name} onChange={e => setEdit({ ...edit, name: e.target.value })} style={{ display: "block", width: "100%", height: 28, fontSize: 12, marginTop: 4 }} /></label>
             <label style={{ fontSize: 10, color: T.tableHeadText, textTransform: "uppercase", letterSpacing: ".06em" }}>Held by
               <select value={edit.rep} onChange={e => setEdit({ ...edit, rep: e.target.value })} style={{ display: "block", width: "100%", height: 28, fontSize: 12, marginTop: 4 }}>{REPS.map(r => <option key={r}>{r}</option>)}</select></label>
             <label style={{ fontSize: 10, color: T.tableHeadText, textTransform: "uppercase", letterSpacing: ".06em" }}>Type
               <select value={edit.type} onChange={e => setEdit({ ...edit, type: e.target.value })} style={{ display: "block", width: "100%", height: 28, fontSize: 12, marginTop: 4 }}><option>Distributor</option><option>End User</option></select></label>
+            <label style={{ fontSize: 10, color: T.tableHeadText, textTransform: "uppercase", letterSpacing: ".06em" }}>Website (for the logo)
+              <input value={edit.website} onChange={e => setEdit({ ...edit, website: e.target.value })} placeholder="e.g. whitecap.com" style={{ display: "block", width: "100%", height: 28, fontSize: 12, marginTop: 4 }} />
+              {edit.website && settings.logoDevKey && <img src={logoDevUrl(edit.website, settings.logoDevKey, 64)} alt="" style={{ height: 28, marginTop: 4, background: "#fff", borderRadius: 2 }} onError={e => { e.currentTarget.style.display = "none"; }} />}</label>
             <label style={{ fontSize: 10, color: T.tableHeadText, textTransform: "uppercase", letterSpacing: ".06em" }}>Also matches these names on OCs (comma separated)
               <input value={edit.terms} onChange={e => setEdit({ ...edit, terms: e.target.value })} placeholder="e.g. emco corporation, emco waterworks" style={{ display: "block", width: "100%", height: 28, fontSize: 12, marginTop: 4 }} /></label>
           </div>
@@ -1235,19 +1239,21 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
   const withOrig = list => list.map(a => ({ ...a, _orig: a.name }));
   const [accts, setAccts] = useState(withOrig(settings.accounts));
   const [dirty, setDirty] = useState(false);
-  const [logoFolder, setLogoFolder] = useState(settings.logoFolder || "");
+  const [logoKey, setLogoKey] = useState(settings.logoDevKey || "");
+  const [siteMsg, setSiteMsg] = useState("");
   const [picker, setPicker] = useState(null); // "oc" | "logo" while the folder browser is open
-  const [logoRun, setLogoRun] = useState(null); // { busy, text, unmatched }
-  const runLogos = async () => {
-    setLogoRun({ busy: true, text: "Reading the logo folder…" });
-    try {
-      const r = await syncLogos({ db, folder: logoFolder.trim() || settings.logoFolder, accounts: settings.accounts, aliases: settings.aliases,
-        customerKeys: [...new Set(orders.map(o => o.cust.key))], logos,
-        onProgress: p => setLogoRun({ busy: true, text: `Reading logos… ${p.done}/${p.total}` }) });
-      setLogoRun({ busy: false, text: `${r.added} logo${r.added === 1 ? "" : "s"} added, ${r.skipped} already up to date${r.unmatched.length ? `, ${r.unmatched.length} file${r.unmatched.length === 1 ? "" : "s"} didn't match a customer` : ""}.`, unmatched: r.unmatched });
-    } catch (e) {
-      setLogoRun({ busy: false, text: /not_found/.test(e.message) ? "Logo folder not found — use 📁 Browse to pick it." : "Couldn't read the logo folder: " + String(e.message).slice(0, 160) });
-    }
+  // Fill in websites we're confident of for accounts that don't have one yet
+  const suggestSites = () => {
+    const filled = [];
+    const next = settings.accounts.map(a => {
+      if (a.website || !SUGGESTED_WEBSITES[a.name]) return a;
+      filled.push(`${a.name} → ${SUGGESTED_WEBSITES[a.name]}`);
+      return { ...a, website: SUGGESTED_WEBSITES[a.name] };
+    });
+    if (!filled.length) return setSiteMsg("No suggestions left — every account I know a website for already has one.");
+    if (!confirm(`Add these websites?\n\n${filled.join("\n")}\n\nYou can change any of them under Customer accounts below or on the customer's page.`)) return;
+    saveSettings({ accounts: next }); setDirty(false);
+    setSiteMsg(`Added ${filled.length} websites. Check the logos on the Accounts tab.`);
   };
   useEffect(() => { if (!dirty) setAccts(withOrig(settings.accounts)); }, [settings.accounts, dirty]);
 
@@ -1284,17 +1290,7 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
           <div><div style={lbl}>Order confirmation folders (one per line, path inside Dropbox)</div>
             <textarea value={folders} onChange={e => setFolders(e.target.value)} rows={3} style={{ width: "100%", fontSize: 12 }} />
             {connected && <button className="btn" style={{ marginTop: 4 }} onClick={() => setPicker("oc")}>📁 Browse Dropbox to add a folder…</button>}
-            <div style={{ ...lbl, marginTop: 10 }}>Customer logo folder (file names matched to customer names)</div>
-            <div style={{ display: "flex", gap: 6 }}>
-              <input value={logoFolder} onChange={e => setLogoFolder(e.target.value)} style={{ flex: 1, height: 28, fontSize: 12 }} />
-              {connected && <button className="btn" onClick={() => setPicker("logo")}>📁 Browse…</button>}
-              {connected && <button className="btn" disabled={logoRun?.busy} onClick={runLogos}>Sync logos now</button>}
             </div>
-            {logoRun && <div style={{ fontSize: 11, color: T.subtext, marginTop: 6, lineHeight: 1.5 }}>
-              {logoRun.text}
-              {logoRun.unmatched?.length > 0 && <details style={{ marginTop: 2 }}><summary style={{ cursor: "pointer" }}>Files that didn't match — rename the file to the customer's account name, or upload the logo on the customer's page</summary>
-                <div style={{ color: T.tableHeadText }}>{logoRun.unmatched.join(" · ")}</div></details>}
-            </div>}</div>
           <div><div style={lbl}>Read orders dated on or after</div>
             <input type="date" value={since} onChange={e => setSince(e.target.value)} style={{ height: 28, fontSize: 12 }} />
             <div style={{ fontSize: 10, color: T.tableHeadText, marginTop: 4 }}>Quick pick (saves right away):</div>
@@ -1310,23 +1306,34 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
             <input type="number" step="0.0001" value={rate} onChange={e => setRate(e.target.value)} style={{ height: 28, fontSize: 12, width: 100 }} /></div>
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
-          <button className="btn" onClick={() => saveSettings({ folders: folders.split("\n").map(s => s.trim()).filter(Boolean), logoFolder: logoFolder.trim(), since, usdToCad: Number(rate) || 1.37 })}>Save</button>
+          <button className="btn" onClick={() => saveSettings({ folders: folders.split("\n").map(s => s.trim()).filter(Boolean), since, usdToCad: Number(rate) || 1.37 })}>Save</button>
           <span style={{ fontSize: 11, color: T.tableHeadText }}>{orders.length} orders on file · {seenCount} PDFs read so far</span>
           <div style={{ flex: 1 }} />
           <button className="btn-del" onClick={() => { if (confirm("Re-read every PDF on the next Refresh? Corrections you've made are kept.")) setDoc(doc(db, "config", "salesSyncSeen"), { files: {} }); }}>Re-read all PDFs on next refresh</button>
         </div>
       </Card>
 
-      {picker && <FolderPicker T={T} title={picker === "oc" ? "Pick an Order Confirmations folder" : "Pick the Customer Logos folder"}
+      {picker && <FolderPicker T={T} title="Pick an Order Confirmations folder"
         onClose={() => setPicker(null)}
         onPick={path => {
           // picked folders are saved straight away so the next Refresh uses them
-          if (picker === "oc") {
-            const list = [...folders.split("\n").map(x => x.trim()).filter(Boolean), path].filter((x, i, a) => a.indexOf(x) === i);
-            setFolders(list.join("\n")); saveSettings({ folders: list });
-          } else { setLogoFolder(path); saveSettings({ logoFolder: path }); }
+          const list = [...folders.split("\n").map(x => x.trim()).filter(Boolean), path].filter((x, i, a) => a.indexOf(x) === i);
+          setFolders(list.join("\n")); saveSettings({ folders: list });
           setPicker(null);
         }} />}
+
+      <Card T={T} title="Customer logos (logo.dev)">
+        <div style={{ fontSize: 11, color: T.tableHeadText, marginBottom: 8, lineHeight: 1.5 }}>
+          Logos load from <a href="https://logo.dev" target="_blank" rel="noreferrer" style={{ color: T.gold }}>logo.dev</a> using each account's <b>Website</b> (set it under Customer accounts below or with Edit account on the customer's page).
+          Paste your logo.dev <b>publishable key</b> (starts with pk_). A logo uploaded on a customer's page always takes priority.
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <input value={logoKey} onChange={e => setLogoKey(e.target.value.trim())} placeholder="pk_…" style={{ height: 28, fontSize: 12, width: 280 }} />
+          <button className="btn" onClick={() => { if (logoKey && !/^pk_/.test(logoKey)) return alert("That doesn't look like a publishable key — it should start with pk_. (Never paste the secret sk_ key here.)"); saveSettings({ logoDevKey: logoKey }); setSiteMsg("Key saved."); }}>Save key</button>
+          <button className="btn" onClick={suggestSites}>Suggest websites for known distributors</button>
+          <span style={{ fontSize: 11, color: T.subtext }}>{settings.accounts.filter(a => a.website).length} of {settings.accounts.length} accounts have a website{siteMsg ? ` · ${siteMsg}` : ""}</span>
+        </div>
+      </Card>
 
       <Card T={T} title={`Missing order numbers (${gaps.length})`} right={
         Object.keys(issues).length > 0 && <button className="btn" onClick={() => setDoc(doc(db, "config", "salesSyncSeen"), { files: Object.fromEntries(Object.keys(issues).map(id => [id, deleteField()])) }, { merge: true }).then(() => alert("Those PDFs will be tried again on the next Refresh."))}>Retry problem PDFs on next refresh</button>}>
@@ -1362,12 +1369,13 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
       </div>}>
         <div style={{ fontSize: 11, color: T.tableHeadText, marginBottom: 8 }}>"Also matches" are other spellings that appear on OCs (comma separated). The longest match wins, so "Core and Main Earth Savers" goes to Earth Savers, not Core and Main.</div>
         <table className="data-table">
-          <thead><tr><th>Account</th><th>Held by</th><th>Type</th><th>Also matches</th><th></th></tr></thead>
+          <thead><tr><th>Account</th><th>Held by</th><th>Type</th><th>Website (for logo)</th><th>Also matches</th><th></th></tr></thead>
           <tbody>{accts.map((a, i) => (
             <tr key={i}>
               <td><input value={a.name} onChange={e => upd(i, { name: e.target.value })} style={{ width: "100%", height: 24, fontSize: 12 }} /></td>
               <td><select value={a.rep} onChange={e => upd(i, { rep: e.target.value })} style={{ height: 24, fontSize: 11 }}>{REPS.map(r => <option key={r}>{r}</option>)}</select></td>
               <td><select value={a.type} onChange={e => upd(i, { type: e.target.value })} style={{ height: 24, fontSize: 11 }}><option>Distributor</option><option>End User</option></select></td>
+              <td><input value={a.website || ""} placeholder="e.g. whitecap.com" onChange={e => upd(i, { website: e.target.value })} style={{ width: 150, height: 24, fontSize: 11 }} /></td>
               <td><input value={(a.terms || []).join(", ")} onChange={e => upd(i, { terms: e.target.value.split(",").map(s => s.trim()).filter(Boolean) })} style={{ width: "100%", height: 24, fontSize: 11 }} /></td>
               <td><button className="btn-del" onClick={() => { setDirty(true); setAccts(accts.filter((_, j) => j !== i)); }}>×</button></td>
             </tr>))}</tbody>

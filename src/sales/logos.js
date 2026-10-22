@@ -1,19 +1,17 @@
 // ─── Customer logos ──────────────────────────────────────────────────────────
 // Kept in Firestore "customerLogos" as small data-URL images (resized to ≤320px)
 // so they show everywhere without extra storage setup. Sources:
-//   • Dropbox "Customer Logos" folder — file name matched to the customer name
-//   • Manual upload on the customer's page (never overwritten by the Dropbox sync)
+//   • Manual upload on the customer's page
+// (Logos from logo.dev aren't stored here — see logoDevUrl below.)
 import { useEffect, useState } from "react";
 import { collection, doc, onSnapshot, setDoc, deleteDoc } from "firebase/firestore";
-import { listFiles, downloadFile } from "./dropbox";
-import { matchAccount, normName } from "./accounts";
 
 export const logoDocId = key => encodeURIComponent(key).slice(0, 700);
 
 export function useLogos(db) {
   const [logos, setLogos] = useState({});
   useEffect(() => onSnapshot(collection(db, "customerLogos"),
-    s => setLogos(Object.fromEntries(s.docs.map(d => [d.data().key, d.data()]))),
+    s => setLogos(Object.fromEntries(s.docs.map(d => d.data()).filter(d => d.source !== "dropbox").map(d => [d.key, d]))), // old Dropbox logos are no longer used
     e => console.warn("logo read error", e)), [db]);
   return logos;
 }
@@ -43,28 +41,12 @@ export async function saveLogo(db, key, dataUrl, source, extra = {}) {
 }
 export const removeLogo = (db, key) => deleteDoc(doc(db, "customerLogos", logoDocId(key)));
 
-// Pull logos from the Dropbox folder for customers that don't have a manual one
-export async function syncLogos({ db, folder, accounts, aliases, customerKeys, logos, onProgress = () => {} }) {
-  if (!folder) return { added: 0, skipped: 0, unmatched: [] };
-  const files = await listFiles(folder, /\.(png|jpe?g|webp|gif)$/i);
-  const known = new Map(customerKeys.map(k => [normName(k).trim(), k]));
-  const res = { added: 0, skipped: 0, unmatched: [] };
-  let i = 0;
-  for (const f of files) {
-    onProgress({ stage: "Customer logos…", done: ++i, total: files.length });
-    const base = f.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").replace(/\blogo\b/ig, "").trim();
-    const acct = matchAccount(base, accounts, aliases);
-    const key = acct ? acct.name : known.get(normName(base).trim());
-    if (!key) { res.unmatched.push(f.name); continue; }
-    const cur = logos[key];
-    if (cur && (cur.source === "manual" || cur.file?.rev === f.rev)) { res.skipped++; continue; }
-    try {
-      const bytes = await downloadFile(f);
-      const type = /png$/i.test(f.name) ? "image/png" : /webp$/i.test(f.name) ? "image/webp" : /gif$/i.test(f.name) ? "image/gif" : "image/jpeg";
-      const dataUrl = await resizeImage(new Blob([bytes], { type }));
-      await saveLogo(db, key, dataUrl, "dropbox", { file: { id: f.id, rev: f.rev, name: f.name } });
-      res.added++;
-    } catch (e) { res.unmatched.push(`${f.name} (${e.message})`); }
-  }
-  return res;
-}
+// ─── logo.dev ────────────────────────────────────────────────────────────────
+// Logos are loaded straight from logo.dev's CDN using the account's website and
+// the publishable key (pk_…) saved in Sales Summary → Settings. Uploaded logos win.
+export const domainOf = url => String(url || "").trim().toLowerCase()
+  .replace(/^[a-z]+:\/\//, "").replace(/^www\./, "").split(/[/?#\s]/)[0];
+export const logoDevUrl = (website, key, size = 200) => {
+  const d = domainOf(website);
+  return d && key ? `https://img.logo.dev/${encodeURIComponent(d)}?token=${encodeURIComponent(key)}&size=${size}&format=png&retina=true` : "";
+};

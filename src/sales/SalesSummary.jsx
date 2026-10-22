@@ -33,7 +33,7 @@ const DEFAULT_SETTINGS = {
 const AUTO_SYNC_HOURS = 12;
 // Bump when the PDF reading changes in a way that should fix orders already synced:
 // the next Refresh then re-reads every PDF in the date range (corrections are kept)
-const PARSER_VERSION = 3;
+const PARSER_VERSION = 3; // (problem PDFs listed under Missing order numbers are always retried)
 const VIEWS = [
   ["dashboard", "Dashboard"], ["orders", "Orders"], ["accounts", "Accounts"],
   ["reports", "Reports"], ["quotes", "Quote Matches"], ["settings", "Settings"],
@@ -100,7 +100,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
       const reread = (settings.parserVersion || 0) < PARSER_VERSION;
       // Start date moved earlier since the last sync: PDFs skipped as "too old" back then get another look
       const sinceMovedBack = !settings.syncedSince || settings.since < settings.syncedSince;
-      const retry = id => reread || badDate.has(id) || ((!settings.issuesTracked || sinceMovedBack) && !orderFiles.has(id));
+      const retry = id => reread || badDate.has(id) || !!issues[id] || ((!settings.issuesTracked || sinceMovedBack) && !orderFiles.has(id));
       const r = await syncOrders({ db, folders: settings.folders, since: settings.since, seen: Object.fromEntries(Object.entries(seen).filter(([id]) => !retry(id))), existing, loginName, onProgress: setSync, onSeen: saveSeen });
       if (Object.keys(r.seen).length) await saveSeen(r.seen);
       if (Object.keys(r.listing).length) await setDoc(doc(db, "config", "salesSyncFiles"), { numbers: r.listing, at: new Date().toISOString() });
@@ -119,7 +119,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
       setSyncMsg({ ok: false, text: String(e.message || e) });
     }
     setSync(null);
-  }, [sync, rawOrders, orders, logos, settings, seen, db, loginName, saveSettings]);
+  }, [sync, rawOrders, orders, logos, settings, seen, issues, db, loginName, saveSettings]);
 
   // Auto-sync once a day-ish for whoever has Dropbox connected
   useEffect(() => {

@@ -177,6 +177,29 @@ function parseBOLLayout(rows) {
   return o;
 }
 
+// Anything else saved as an OC (a customer's PO, a Square invoice…): take what we can from the
+// file name ("OC - CAL15821 - Cross Country - August 18, 2025 - PO# PO29052.pdf") and the
+// pre-tax Subtotal, and flag it so it can be checked under Corrections.
+function parseOtherLayout(rows, fileName) {
+  const parts = String(fileName).replace(/\.pdf$/i, "").split(/\s+-\s+/).map(s => s.trim());
+  const at = parts.findIndex(p => orderNoFrom(p));
+  const customer = at >= 0 && parts[at + 1] && !parseLongDate(parts[at + 1]) ? parts[at + 1] : "";
+  const po = (parts.find(p => /^PO\s*#?/i.test(p)) || "").replace(/^PO\s*#?\s*/i, "");
+  let subtotal = null;
+  for (const r of rows) {
+    if (/^Sub\s*-?\s*total/i.test(r.items[0]?.str || "") || /\bSub\s*-?\s*total\b/i.test(r.text)) {
+      const m = r.items.map(c => c.str).filter(isMoney);
+      if (m.length) { subtotal = money(m[m.length - 1]); break; }
+    }
+  }
+  return {
+    format: "other", orderNo: "", date: "", po, pallets: null, freightTerms: "",
+    customer, shipTo: "", lines: [], charges: [],
+    total: subtotal, hasPricing: subtotal != null,
+    otherNote: "Not a BMP order confirmation (customer PO or invoice) — total is the pre-tax Subtotal and there are no product lines. Check or fix it under Corrections.",
+  };
+}
+
 // "City, PROV A1A 1A1" / "City, ST 12345" → { city, region, country }
 export function parseAddress(addr) {
   const s = String(addr || "");
@@ -205,6 +228,7 @@ export async function parseOrderPdf(pdfjsLib, data, fileName = "") {
   let o;
   if (/ORDER\s+CONF(IR|RI)MATION/i.test(all) || /Total Before Tax/i.test(all)) o = parseOCLayout(rows);
   else if (/BILL OF LADING/i.test(all)) o = parseBOLLayout(rows);
+  else if (orderNoFrom(fileName)) o = parseOtherLayout(rows, fileName);
   else return null;
 
   // The file name's number wins if the PDF disagrees, so two files can't overwrite one order
@@ -223,13 +247,15 @@ export async function parseOrderPdf(pdfjsLib, data, fileName = "") {
   o.productTotal = round2(o.lines.reduce((s, l) => s + (l.amount || 0), 0));
   o.freight = round2(o.charges.filter(c => /freight|shipping|delivery/i.test(c.label)).reduce((s, c) => s + (c.amount || 0), 0));
   o.otherCharges = round2(o.charges.filter(c => !/freight|shipping|delivery/i.test(c.label)).reduce((s, c) => s + (c.amount || 0), 0));
+  if (o.format === "other") o.productTotal = o.total || 0; // no lines: the subtotal is the product total
   if (o.total == null) o.total = round2(o.productTotal + o.freight + o.otherCharges);
   o.warnings = [];
   if (nameNo && docNo && nameNo !== docNo) o.warnings.push(`The OC says ${docNo} but the file is named ${nameNo}`);
   if (!o.orderNo) o.warnings.push("No order number found");
   if (!o.date) o.warnings.push("No order date found");
   if (!o.customer) o.warnings.push("No customer found");
-  if (!o.lines.length) o.warnings.push("No line items found");
+  if (o.otherNote) { o.warnings.push(o.otherNote); delete o.otherNote; }
+  else if (!o.lines.length) o.warnings.push("No line items found");
   if (o.hasPricing && Math.abs(o.productTotal + o.freight + o.otherCharges - o.total) > 0.05)
     o.warnings.push(`Line items + charges (${(o.productTotal + o.freight + o.otherCharges).toFixed(2)}) don't add up to Total Before Tax (${o.total.toFixed(2)})`);
   if (!o.hasPricing) o.warnings.push("Bill of lading — no pricing on this document");

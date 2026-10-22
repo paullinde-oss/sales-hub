@@ -123,3 +123,28 @@ export async function downloadFile(file) {
   if (!r.ok) throw new Error(`Couldn't download ${file.name} (${r.status})`);
   return new Uint8Array(await r.arrayBuffer());
 }
+
+// One level of a folder, for the folder picker in Settings. Returns { folders, files, useRoot }
+// — tries the team root first, then the personal home, like listFiles.
+export async function browseFolder(folderPath) {
+  const path = folderPath.replace(/\\/g, "/").replace(/\/+$/, "");
+  const run = async useRoot => {
+    let r = await rpc("files/list_folder", { path, limit: 2000 }, useRoot);
+    const all = [...r.entries];
+    while (r.has_more) { r = await rpc("files/list_folder/continue", { cursor: r.cursor }, useRoot); all.push(...r.entries); }
+    return all;
+  };
+  let entries, useRoot = true;
+  try { entries = await run(true); }
+  catch (e) { if (e.status !== 409) throw e; useRoot = false; entries = await run(false); }
+  const byName = (a, b) => a.name.localeCompare(b.name);
+  return {
+    useRoot,
+    folders: entries.filter(e => e[".tag"] === "folder").map(e => ({ name: e.name, path: e.path_display })).sort(byName),
+    files: entries.filter(e => e[".tag"] === "file").length,
+  };
+}
+
+export async function accountInfo() {
+  try { return await rpc("users/get_current_account", null, false); } catch { return null; }
+}

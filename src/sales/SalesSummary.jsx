@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { collection, doc, onSnapshot, setDoc, deleteDoc, deleteField } from "firebase/firestore";
 import { DEFAULT_ACCOUNTS, REPS, SALES_REP, normName } from "./accounts";
-import { isDropboxConnected, startDropboxAuth, disconnectDropbox, redirectUri } from "./dropbox";
+import { isDropboxConnected, startDropboxAuth, disconnectDropbox, redirectUri, browseFolder, accountInfo } from "./dropbox";
 import { syncOrders } from "./sync";
 import { useLogos, syncLogos, resizeImage, saveLogo, removeLogo } from "./logos";
 import { yearCompare, openYearEndReport } from "./yearEndReport";
@@ -1071,6 +1071,7 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
   const [accts, setAccts] = useState(withOrig(settings.accounts));
   const [dirty, setDirty] = useState(false);
   const [logoFolder, setLogoFolder] = useState(settings.logoFolder || "");
+  const [picker, setPicker] = useState(null); // "oc" | "logo" while the folder browser is open
   useEffect(() => { if (!dirty) setAccts(withOrig(settings.accounts)); }, [settings.accounts, dirty]);
 
   const unmatched = useMemo(() => {
@@ -1105,8 +1106,12 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 14 }}>
           <div><div style={lbl}>Order confirmation folders (one per line, path inside Dropbox)</div>
             <textarea value={folders} onChange={e => setFolders(e.target.value)} rows={3} style={{ width: "100%", fontSize: 12 }} />
-            <div style={{ ...lbl, marginTop: 8 }}>Customer logo folder (file names matched to customer names)</div>
-            <input value={logoFolder} onChange={e => setLogoFolder(e.target.value)} style={{ width: "100%", height: 28, fontSize: 12 }} /></div>
+            {connected && <button className="btn" style={{ marginTop: 4 }} onClick={() => setPicker("oc")}>📁 Browse Dropbox to add a folder…</button>}
+            <div style={{ ...lbl, marginTop: 10 }}>Customer logo folder (file names matched to customer names)</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <input value={logoFolder} onChange={e => setLogoFolder(e.target.value)} style={{ flex: 1, height: 28, fontSize: 12 }} />
+              {connected && <button className="btn" onClick={() => setPicker("logo")}>📁 Browse…</button>}
+            </div></div>
           <div><div style={lbl}>Read orders dated on or after</div>
             <input type="date" value={since} onChange={e => setSince(e.target.value)} style={{ height: 28, fontSize: 12 }} />
             <div style={{ fontSize: 10, color: T.tableHeadText, marginTop: 4 }}>Dec 1, 2025 = start of FY2026</div></div>
@@ -1120,6 +1125,17 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
           <button className="btn-del" onClick={() => { if (confirm("Re-read every PDF on the next Refresh? Corrections you've made are kept.")) setDoc(doc(db, "config", "salesSyncSeen"), { files: {} }); }}>Re-read all PDFs on next refresh</button>
         </div>
       </Card>
+
+      {picker && <FolderPicker T={T} title={picker === "oc" ? "Pick an Order Confirmations folder" : "Pick the Customer Logos folder"}
+        onClose={() => setPicker(null)}
+        onPick={path => {
+          // picked folders are saved straight away so the next Refresh uses them
+          if (picker === "oc") {
+            const list = [...folders.split("\n").map(x => x.trim()).filter(Boolean), path].filter((x, i, a) => a.indexOf(x) === i);
+            setFolders(list.join("\n")); saveSettings({ folders: list });
+          } else { setLogoFolder(path); saveSettings({ logoFolder: path }); }
+          setPicker(null);
+        }} />}
 
       {unmatched.length > 0 && (
         <Card T={T} title={`Customers not on any account list (${unmatched.length})`}>
@@ -1148,6 +1164,51 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
         </table>
       </Card>
 
+    </div>
+  );
+}
+
+// Browse the folders the hub can see in Dropbox and pick one
+function FolderPicker({ T, title, onPick, onClose }) {
+  const [path, setPath] = useState("");
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState("");
+  const [who, setWho] = useState(null);
+  useEffect(() => { accountInfo().then(setWho); }, []);
+  useEffect(() => {
+    let live = true;
+    setData(null); setErr("");
+    browseFolder(path).then(d => live && setData(d)).catch(e => live && setErr(String(e.message).slice(0, 200)));
+    return () => { live = false; };
+  }, [path]);
+  const parts = path.split("/").filter(Boolean);
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 620 }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{title}</div>
+        {who && <div style={{ fontSize: 11, color: T.tableHeadText, marginBottom: 10 }}>Signed in to Dropbox as {who.name?.display_name} ({who.email}){who.team ? ` · team: ${who.team.name}` : ""}</div>}
+        <div style={{ fontSize: 12, marginBottom: 8, display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+          <a style={{ cursor: "pointer", color: T.gold }} onClick={() => setPath("")}>Dropbox</a>
+          {parts.map((p, i) => <span key={i}> / <a style={{ cursor: "pointer", color: T.gold }} onClick={() => setPath("/" + parts.slice(0, i + 1).join("/"))}>{p}</a></span>)}
+        </div>
+        <div style={{ border: `1px solid ${T.border}`, borderRadius: 2, height: 320, overflowY: "auto", background: T.panelBg }}>
+          {err ? <div style={{ padding: 12, fontSize: 12, color: "#c86a5a" }}>{err}</div>
+            : !data ? <div style={{ padding: 12, fontSize: 12, color: T.tableHeadText }}>Loading…</div>
+            : !data.folders.length ? <div style={{ padding: 12, fontSize: 12, color: T.tableHeadText, lineHeight: 1.5 }}>
+                No folders here{data.files ? ` (${data.files} files)` : ""}.
+                {!path && <><br /><br />If you expected to see your Dropbox folders, the Dropbox app is probably set to <b>App folder</b> access. In dropbox.com/developers/apps, create the app again with <b>Full Dropbox</b> access, tick files.metadata.read and files.content.read, add the same redirect URIs, and send me the new App key.</>}
+              </div>
+            : data.folders.map(f => (
+              <div key={f.path} onClick={() => setPath(f.path)} style={{ padding: "7px 12px", fontSize: 12, cursor: "pointer", borderBottom: `1px solid ${T.border}` }}
+                onMouseOver={e => e.currentTarget.style.background = T.rowHover} onMouseOut={e => e.currentTarget.style.background = "transparent"}>📁 {f.name}</div>
+            ))}
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
+          <span style={{ fontSize: 11, color: T.tableHeadText, flex: 1 }}>{data && path ? `${data.folders.length} folders · ${data.files} files in this folder` : ""}</span>
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11, opacity: path ? 1 : .5 }} disabled={!path} onClick={() => onPick(path)}>Use this folder</button>
+        </div>
+      </div>
     </div>
   );
 }

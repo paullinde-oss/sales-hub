@@ -33,17 +33,23 @@ function obviouslyTooOld(file, since) {
  */
 export async function syncOrders({ db, folders, since, seen = {}, existing = {}, loginName, onProgress = () => {} }) {
   onProgress({ stage: "Listing Dropbox folders…", done: 0, total: 0 });
+  // A missing folder shouldn't stop the others from syncing — report it and carry on
   let files = [];
+  const folderErrors = [];
   for (const f of folders.filter(Boolean)) {
     try { files.push(...await listPdfs(f)); }
-    catch (e) { throw new Error(`Couldn't open "${f}" in Dropbox. Check the folder path in Settings. (${String(e.message).slice(0, 160)})`); }
+    catch (e) { folderErrors.push({ file: f, error: /not_found/.test(e.message) ? "Folder not found — use Browse in Sales Summary → Settings to pick it" : String(e.message).slice(0, 160) }); }
+  }
+  if (folderErrors.length && !files.length) {
+    const e = new Error(`Couldn't open ${folderErrors.map(x => `"${x.file}"`).join(" or ")} in Dropbox. Go to Sales Summary → Settings and use "Browse Dropbox" to pick the right folder.`);
+    throw e;
   }
   const todo = files
     .filter(f => seen[f.id] !== f.rev && !obviouslyTooOld(f, since))
     // oldest first so a revised OC overwrites the earlier version
     .sort((a, b) => (a.modified < b.modified ? -1 : 1));
 
-  const res = { added: 0, updated: 0, skipped: 0, errors: [], seen: {}, scanned: files.length };
+  const res = { added: 0, updated: 0, skipped: 0, errors: [...folderErrors], seen: {}, scanned: files.length };
   if (!todo.length) { onProgress({ stage: "Up to date", done: 0, total: 0 }); return res; }
 
   const pdfjs = await loadPdfjs();

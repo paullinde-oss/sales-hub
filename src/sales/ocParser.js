@@ -75,7 +75,7 @@ function parseOCLayout(rows) {
     date: parseLongDate(valueAfter(rows, /^Date of Order:?/i)),
     po: valueAfter(rows, /^Purchase Order #:?/i),
     pallets: parseInt(valueAfter(rows, /^Total Pallets:?/i)) || parseInt(valueAfter(rows, /^Number of Packages:?/i)) || null,
-    freightTerms: valueAfter(rows, /^Freight Terms:?/i),
+    freightTerms: valueAfter(rows, /^Freight Terms:?/i) || valueAfter(rows, /^Fr(ei|ie)ght Charges:?/i), // older OCs: "Frieght Charges"
     customer: valueAfter(rows, /^Sold To:?/i),
     shipTo: valueAfter(rows, /^Ship To:?/i),
     lines: [], charges: [], total: null, hasPricing: true,
@@ -88,7 +88,7 @@ function parseOCLayout(rows) {
 
   for (let i = (hi >= 0 ? hi + 1 : 0); i < rows.length; i++) {
     const r = rows[i];
-    if (/TERMS\s*&\s*CONDITIONS/i.test(r.text)) break;
+    if (/TERMS\s*&\s*CONDITIONS/i.test(r.text) || /^Disclaimer:?$/i.test(r.items[0]?.str || "")) break; // older OCs say "Disclaimer:"
     const cells = r.items.map(c => c.str).filter(s => s !== "$");
     if (/Total Before Tax/i.test(r.text)) {
       const m = cells.filter(isMoney); o.total = m.length ? money(m[m.length - 1]) : null;

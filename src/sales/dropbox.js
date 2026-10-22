@@ -2,7 +2,7 @@
 // Each person who syncs connects their own Dropbox once; the refresh token is
 // kept only in that browser's localStorage, never in Firestore or the repo.
 
-export const DROPBOX_APP_KEY = "r3savrbntlaxnne";
+export const DROPBOX_APP_KEY = "jj5ihvnmzm11hfj"; // "BMP Sales Hub Connector" app (Full Dropbox)
 const LS_REFRESH = "bmp_dropbox_refresh";
 const LS_ACCESS = "bmp_dropbox_access";
 const SS_VERIFIER = "bmp_dropbox_verifier";

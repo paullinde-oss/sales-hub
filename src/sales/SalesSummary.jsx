@@ -657,6 +657,18 @@ function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMo
     setEdit(null);
     if (nm !== accountKey) openAccount(nm);
   };
+  // Fold this account into another: its names/spellings move over so its OCs count there from now on
+  const mergeInto = async target => {
+    const tgt = settings.accounts.find(a => a.name === target);
+    if (!tgt || !acct) return;
+    if (!confirm(`Merge "${name}" into "${target}"?\n\nAll of ${name}'s orders will count toward ${target}, and "${name}" will be removed from the account list.`)) return;
+    const terms = [...new Set([...(tgt.terms || []), acct.name, ...(acct.terms || [])])];
+    const aliases = Object.fromEntries(Object.entries(settings.aliases || {}).map(([k, v]) => [k, v === acct.name ? target : v]));
+    await saveSettings({ accounts: settings.accounts.filter(a => a.name !== acct.name).map(a => a.name === target ? { ...a, terms } : a), aliases });
+    const l = logos[acct.name];
+    if (l) { if (!logos[target]) await saveLogo(db, target, l.dataUrl, l.source); await removeLogo(db, acct.name); }
+    openAccount(target);
+  };
   const upload = async e => {
     const f = e.target.files?.[0]; e.target.value = "";
     if (!f) return;
@@ -701,6 +713,12 @@ function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMo
           <select value={custType} onChange={e => setType(e.target.value)} style={{ height: 26, fontSize: 11 }}>
             <option>Distributor</option><option>End User</option>
           </select>
+          {acct && (
+            <select value="" onChange={e => mergeInto(e.target.value)} style={{ height: 26, fontSize: 11 }} title="Combine this account with another one">
+              <option value="">Merge into…</option>
+              {[...settings.accounts].filter(a => a.name !== acct.name).sort((x, y) => x.name.localeCompare(y.name)).map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
+            </select>
+          )}
           {unmatched && (
             <select value="" onChange={e => assignTo(e.target.value)} style={{ height: 26, fontSize: 11 }}>
               <option value="">Assign to an account…</option>

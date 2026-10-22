@@ -3,7 +3,7 @@
 // by day / week / month / fiscal year, by customer account, SKU, rep and location.
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { collection, doc, onSnapshot, setDoc, deleteDoc, deleteField } from "firebase/firestore";
-import { DEFAULT_ACCOUNTS, REPS, SALES_REP, normName, matchAccount, SUGGESTED_WEBSITES } from "./accounts";
+import { DEFAULT_ACCOUNTS, REPS, SALES_REP, normName, matchAccount } from "./accounts";
 import { isDropboxConnected, startDropboxAuth, disconnectDropbox, redirectUri, browseFolder, accountInfo } from "./dropbox";
 import { syncOrders } from "./sync";
 import { writeOrder, removeOrder, listenOrders, buildPacks } from "./orderStore";
@@ -1241,19 +1241,6 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
   const [logoKey, setLogoKey] = useState(settings.logoDevKey || "");
   const [siteMsg, setSiteMsg] = useState("");
   const [picker, setPicker] = useState(null); // "oc" | "logo" while the folder browser is open
-  // Fill in websites we're confident of for accounts that don't have one yet
-  const suggestSites = () => {
-    const filled = [];
-    const next = settings.accounts.map(a => {
-      if (a.website || !SUGGESTED_WEBSITES[a.name]) return a;
-      filled.push(`${a.name} → ${SUGGESTED_WEBSITES[a.name]}`);
-      return { ...a, website: SUGGESTED_WEBSITES[a.name] };
-    });
-    if (!filled.length) return setSiteMsg("No suggestions left — every account I know a website for already has one.");
-    if (!confirm(`Add these websites?\n\n${filled.join("\n")}\n\nYou can change any of them under Customer accounts below or on the customer's page.`)) return;
-    saveSettings({ accounts: next }); setDirty(false);
-    setSiteMsg(`Added ${filled.length} websites. Check the logos on the Accounts tab.`);
-  };
   useEffect(() => { if (!dirty) setAccts(withOrig(settings.accounts)); }, [settings.accounts, dirty]);
 
   const unmatched = useMemo(() => {
@@ -1329,7 +1316,6 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <input value={logoKey} onChange={e => setLogoKey(e.target.value.trim())} placeholder="pk_…" style={{ height: 28, fontSize: 12, width: 280 }} />
           <button className="btn" onClick={() => { if (logoKey && !/^pk_/.test(logoKey)) return alert("That doesn't look like a publishable key — it should start with pk_. (Never paste the secret sk_ key here.)"); saveSettings({ logoDevKey: logoKey }); setSiteMsg("Key saved."); }}>Save key</button>
-          <button className="btn" onClick={suggestSites}>Suggest websites for known distributors</button>
           <span style={{ fontSize: 11, color: T.subtext }}>{settings.accounts.filter(a => a.website).length} of {settings.accounts.length} accounts have a website{siteMsg ? ` · ${siteMsg}` : ""}</span>
         </div>
       </Card>

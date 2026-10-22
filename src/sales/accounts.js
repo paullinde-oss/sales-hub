@@ -99,25 +99,3 @@ export function customerOf(order, accounts, aliases, custTypes = {}) {
   return { key, name: raw, rep: "Unassigned", type: custTypes[key] || "End User", matched: false };
 }
 
-// Websites suggested for logos (Settings → "Suggest websites"). Only applied to accounts
-// that don't have a website yet, and shown first so they can be checked.
-export const SUGGESTED_WEBSITES = {
-  "White Cap": "whitecap.com",
-  "Wolseley": "wolseley.ca",
-  "EMCO": "emcoltd.com",
-  "Core and Main": "coreandmain.com",
-  "Ferguson Waterworks": "ferguson.com",
-  "Andrew Sheret": "sheret.com",
-  "Layfield": "layfieldgroup.com",
-  "Titan Environmental": "titanenviro.com",
-  "Cross Country": "cccsr.ca",
-  "Wesco Distribution (Formerly Hazmasters)": "wesco.com",
-  "City of Calgary": "calgary.ca",
-  "Brogan Safety": "brogansafety.com",
-  "Beaver Plastics": "beaverplastics.com",
-  "Hanes Geo (USA)": "hanesgeo.com",
-  "Terrafix": "terrafixgeo.com",
-  "Reed and Graham": "rginc.com",
-  "Bunzl": "bunzl.ca",
-  "ACF West (USA)": "acfenvironmental.com",
-};

@@ -16,7 +16,7 @@ const isInt = s => /^-?[\d,]+(\.\d+)?$/.test(String(s).trim());
 
 // "October 14, 2026" / "Friday, October 9, 2026" → "2026-10-14"
 export function parseLongDate(s) {
-  const m = String(s || "").toLowerCase().match(/(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2}),?\s+(\d{4})/);
+  const m = String(s || "").toLowerCase().match(/(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})[,.]?\s+(\d{4})/); // "June 9. 2025" happens too
   if (!m) return "";
   const mo = MONTHS.indexOf(m[1]) + 1;
   // A blank date in Leon's template prints as "January 0, 1900" — treat it as missing
@@ -209,10 +209,9 @@ export async function parseOrderPdf(pdfjsLib, data, fileName = "") {
   // The file name's number wins if the PDF disagrees, so two files can't overwrite one order
   const nameNo = orderNoFrom(fileName), docNo = o.orderNo;
   if (nameNo) o.orderNo = nameNo;
-  if (!o.date) {
-    const m = String(fileName).match(/(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}/i);
-    if (m) o.date = parseLongDate(m[0]);
-  }
+  // Keep the file name's date too — sync decides between them when they disagree
+  o.nameDate = parseLongDate(String(fileName));
+  if (!o.date) o.date = o.nameDate;
   o.location = o.orderNo.slice(0, 3);
   const addr = parseAddress(o.shipTo);
   o.city = addr.city; o.region = addr.region; o.country = addr.country;

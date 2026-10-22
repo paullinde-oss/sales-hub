@@ -31,6 +31,9 @@ const DEFAULT_SETTINGS = {
   lastSync: null,
 };
 const AUTO_SYNC_HOURS = 12;
+// Bump when the PDF reading changes in a way that should fix orders already synced:
+// the next Refresh then re-reads every PDF in the date range (corrections are kept)
+const PARSER_VERSION = 3;
 const VIEWS = [
   ["dashboard", "Dashboard"], ["orders", "Orders"], ["accounts", "Accounts"],
   ["reports", "Reports"], ["quotes", "Quote Matches"], ["settings", "Settings"],
@@ -71,6 +74,8 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
   useEffect(() => onSnapshot(doc(db, "config", "salesSettings"), s => setStored(s.exists() ? s.data() : {}), () => setStored({})), [db]);
   useEffect(() => onSnapshot(doc(db, "config", "salesSyncSeen"), s => setSeen(s.exists() ? (s.data().files || {}) : {})), [db]);
   const [issues, setIssues] = useState({});
+  const [listing, setListing] = useState(null); // { BRO10301: "2025-06-02", … } every numbered PDF in the folders
+  useEffect(() => onSnapshot(doc(db, "config", "salesSyncFiles"), s => setListing(s.exists() ? (s.data().numbers || {}) : null)), [db]);
   useEffect(() => onSnapshot(doc(db, "config", "salesSyncIssues"), s => setIssues(s.exists() ? (s.data().files || {}) : {})), [db]);
 
   const settings = useMemo(() => ({ ...DEFAULT_SETTINGS, ...(stored || {}) }), [stored]);
@@ -92,9 +97,11 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
       const saveSeen = batch => setDoc(doc(db, "config", "salesSyncSeen"), { files: batch }, { merge: true });
       // One-time: PDFs skipped before problem files were tracked get one more look, so gaps show a real reason
       const orderFiles = new Set(rawOrders.map(o => o.file?.id).filter(Boolean));
-      const retry = id => badDate.has(id) || (!settings.issuesTracked && !orderFiles.has(id));
+      const reread = (settings.parserVersion || 0) < PARSER_VERSION;
+      const retry = id => reread || badDate.has(id) || (!settings.issuesTracked && !orderFiles.has(id));
       const r = await syncOrders({ db, folders: settings.folders, since: settings.since, seen: Object.fromEntries(Object.entries(seen).filter(([id]) => !retry(id))), existing, loginName, onProgress: setSync, onSeen: saveSeen });
       if (Object.keys(r.seen).length) await saveSeen(r.seen);
+      if (Object.keys(r.listing).length) await setDoc(doc(db, "config", "salesSyncFiles"), { numbers: r.listing, at: new Date().toISOString() });
       if (Object.keys(r.issues).length || Object.keys(r.resolved).length)
         await setDoc(doc(db, "config", "salesSyncIssues"), { files: { ...r.issues, ...Object.fromEntries(Object.keys(r.resolved).map(id => [id, deleteField()])) } }, { merge: true });
       let logoNote = "";
@@ -103,8 +110,8 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
         if (lr.added) logoNote = ` ${lr.added} customer logo${lr.added > 1 ? "s" : ""} added.`;
       } catch (e) { logoNote = ` (Couldn't read the logo folder: ${String(e.message).slice(0, 120)})`; }
       const lastSync = { at: new Date().toISOString(), by: loginName || "", added: r.added, updated: r.updated, errors: r.errors.length, scanned: r.scanned };
-      await saveSettings({ lastSync, issuesTracked: true });
-      setSyncMsg({ ok: !r.errors.length, text: `Synced ${r.scanned} PDFs — ${r.added} new, ${r.updated} updated${r.errors.length ? `, ${r.errors.length} couldn't be read` : ""}.${logoNote}`, errors: r.errors });
+      await saveSettings({ lastSync, issuesTracked: true, parserVersion: PARSER_VERSION });
+      setSyncMsg({ ok: !r.errors.length, text: `Synced ${r.scanned} PDFs — ${r.added} new, ${r.updated} updated${r.removed.length ? `, ${r.removed.length} out-of-range or duplicate removed` : ""}${r.errors.length ? `, ${r.errors.length} couldn't be read` : ""}.${logoNote}`, errors: r.errors });
     } catch (e) {
       setConnected(isDropboxConnected());
       setSyncMsg({ ok: false, text: String(e.message || e) });
@@ -121,7 +128,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
   }, [stored, connected, runSync]);
 
   const openAccount = key => { setAccountKey(key); setView("accounts"); };
-  const gaps = useMemo(() => findGaps(rawOrders, issues, settings), [rawOrders, issues, settings]);
+  const gaps = useMemo(() => findGaps(rawOrders, issues, settings, listing), [rawOrders, issues, settings, listing]);
   const ctx = { T, db, orders, settings, saveSettings, opts, currencyMode, openAccount, loginName, logos, bmpLogo, ownOnly };
   const views = VIEWS.filter(([id]) => id !== "settings" || isAdmin);
 
@@ -1258,12 +1265,14 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
 }
 
 // BRO/CAL numbers missing between the first and latest order on file, with the likeliest reason
-function findGaps(rawOrders, issues, settings) {
+function findGaps(rawOrders, issues, settings, listing) {
   const voided = settings.voidNumbers || {};
+  const since = settings.since || "";
   const issueList = Object.values(issues || {});
   const out = [];
   for (const prefix of ["BRO", "CAL"]) {
-    const have = new Map(rawOrders.filter(o => o.orderNo?.startsWith(prefix)).map(o => [+o.orderNo.slice(3), o]));
+    // Only orders in the synced date range; a stray early number would otherwise flag hundreds of older orders
+    const have = new Map(rawOrders.filter(o => o.orderNo?.startsWith(prefix) && (!o.date || o.date >= since)).map(o => [+o.orderNo.slice(3), o]));
     if (have.size < 2) continue;
     const nums = [...have.keys()].sort((a, b) => a - b);
     for (let i = 1; i < nums.length; i++) {
@@ -1271,11 +1280,16 @@ function findGaps(rawOrders, issues, settings) {
       for (let n = nums[i - 1] + 1; n < nums[i]; n++) {
         const no = prefix + n;
         if (voided[no]) continue;
+        const named = listing ? listing[no] : undefined;
+        if (named && named !== "?" && named < since) continue; // its PDF is dated before the start date — not missing
         const iss = issueList.find(x => x.name && x.name.toUpperCase().replace(/[\s_-]/g, "").includes(no));
         const a = have.get(nums[i - 1]), b = have.get(nums[i]);
         out.push({
           no, between: `${a.orderNo} (${fmtShort(a.date || "")}) – ${b.orderNo} (${fmtShort(b.date || "")})`,
-          reason: iss ? iss.reason : "No PDF with this number in the Dropbox folders (not saved yet, misnamed, or in another folder)",
+          reason: iss ? iss.reason
+            : named ? "There's a PDF with this number but it wasn't read yet — click Retry problem PDFs, then Refresh"
+            : listing ? "No PDF with this number in the Dropbox folders (not saved yet, misnamed, or in another folder)"
+            : "Not found — click Refresh so the hub can check the folders",
           file: iss?.path || "",
         });
       }

@@ -806,7 +806,6 @@ function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMo
             {custType} · {acct?.rep || "Unassigned"}
             {acct?.website && <> · <a href={`https://${domainOf(acct.website)}`} target="_blank" rel="noreferrer" style={{ color: T.tableHeadText }}>{domainOf(acct.website)}</a></>}
             {logo?.source === "manual" && editable && <> · <a style={{ cursor: "pointer", textDecoration: "underline" }} onClick={() => confirm("Remove the uploaded logo?" + (acct?.website && settings.logoDevKey ? " The logo.dev logo will show instead." : "")) && removeLogo(db, accountKey)}>remove uploaded logo</a></>}
-            {logo?.source === "logo.dev" && <> · logo from logo.dev</>}
           </div>
         </div>
         {editable && <button className="btn" onClick={startEdit}>✎ Edit account</button>}

@@ -3,7 +3,7 @@
 // by day / week / month / fiscal year, by customer account, SKU, rep and location.
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { collection, doc, onSnapshot, setDoc, deleteDoc, deleteField } from "firebase/firestore";
-import { DEFAULT_ACCOUNTS, REPS, SALES_REP, normName } from "./accounts";
+import { DEFAULT_ACCOUNTS, REPS, SALES_REP, normName, matchAccount } from "./accounts";
 import { isDropboxConnected, startDropboxAuth, disconnectDropbox, redirectUri, browseFolder, accountInfo } from "./dropbox";
 import { syncOrders } from "./sync";
 import { useLogos, syncLogos, resizeImage, saveLogo, removeLogo } from "./logos";
@@ -707,6 +707,7 @@ function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMo
     if (!target) return;
     // Opens the "Create account" form (name, holder, type); saving it switches to the new account
     if (target === "__new") { startEdit(); return; }
+    if (!confirm(`Attach "${name}" to "${target}"?\n\nAll of ${name}'s orders will count toward ${target}, and future OCs with this name will go there too.\n(You can undo this from ${target}'s page with the ✕ next to the name.)`)) return;
     saveSettings({ aliases: { ...settings.aliases, ...Object.fromEntries(raws.map(r => [normName(r).trim(), target])) } });
     openAccount(target);
   };
@@ -739,6 +740,24 @@ function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMo
     const l = logos[acct.name];
     if (l) { if (!logos[target]) await saveLogo(db, target, l.dataUrl, l.source); await removeLogo(db, acct.name); }
     openAccount(target);
+  };
+  // Undo an Assign/Merge for one name on the OCs: its orders stop counting here
+  const detachName = async raw => {
+    const key = normName(raw).trim();
+    const terms = (acct.terms || []).filter(t => normName(t).trim() !== key);
+    const stillMatches = normName(raw).includes(normName(acct.name)) || terms.some(t => normName(raw).includes(normName(t)));
+    if (!confirm(`Detach "${raw}" from ${name}?\n\nOrders under "${raw}" will no longer count toward ${name}.${stillMatches ? `\n\nNote: "${raw}" still contains one of this account's names or "Also matches" spellings, so check those under Edit account too.` : ""}`)) return;
+    const aliases = { ...(settings.aliases || {}) };
+    const hadAlias = aliases[key] === acct.name;
+    await saveSettings({
+      accounts: settings.accounts.map(a => a.name === acct.name ? { ...a, terms } : a),
+      ...(hadAlias ? { aliases: { [key]: deleteField() } } : {}),
+    });
+    delete aliases[key];
+    // Open wherever that name lands now so it can be assigned properly
+    const lands = matchAccount(raw, settings.accounts.map(a => a.name === acct.name ? { ...a, terms } : a), aliases);
+    // (short pause so the saved settings are in place before the page switches)
+    setTimeout(() => openAccount(lands && lands.name !== acct.name ? lands.name : key), 400);
   };
   const upload = async e => {
     const f = e.target.files?.[0]; e.target.value = "";
@@ -804,7 +823,17 @@ function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMo
         </select>
         <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} onClick={report}>Year-End Report (PDF)</button>
       </div>
-      {raws.length > 0 && <div style={{ fontSize: 11, color: T.tableHeadText }}>Names on OCs: {raws.join(" · ")}</div>}
+      {raws.length > 0 && <div style={{ fontSize: 11, color: T.tableHeadText, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+        Names on OCs:
+        {raws.map(r => (
+          <span key={r} style={{ display: "inline-flex", alignItems: "center", gap: 4, border: `1px solid ${T.border}`, borderRadius: 10, padding: "1px 4px 1px 8px", color: T.subtext }}>
+            {r}
+            {editable && acct && (settings.aliases?.[normName(r).trim()] === acct.name || (acct.terms || []).some(t => normName(t).trim() === normName(r).trim())) && (
+              <button title={`Detach "${r}" from ${name}`} onClick={() => detachName(r)}
+                style={{ background: "none", border: "none", color: T.tableHeadText, fontSize: 12, padding: "0 4px", lineHeight: 1 }}>✕</button>
+            )}
+          </span>))}
+      </div>}
 
       {edit && (
         <Card T={T} title={acct ? "Edit account" : "Create account for this customer"}>

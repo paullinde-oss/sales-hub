@@ -73,6 +73,7 @@ export async function syncOrders({ db, folders, since, seen = {}, existing = {},
   const worker = async () => {
     while (todo.length) {
       const file = todo.shift();
+      let tooOld = false;
       try {
         const data = await downloadFile(file);
         const o = await parseOrderPdf(pdfjs, data, file.name.replace(/_/g, " "));
@@ -91,7 +92,10 @@ export async function syncOrders({ db, folders, since, seen = {}, existing = {},
         }
         if (!o) { res.skipped++; issue(file, "Doesn't look like an order confirmation or bill of lading"); }
         else if (!o.orderNo) { res.skipped++; issue(file, "No BRO/CAL number found in the PDF or file name"); }
-        else if (o.date && o.date < since) { res.skipped++; await dropStale(file, null); }
+        else if (o.date && o.date < since) {
+          res.skipped++; await dropStale(file, null);
+          tooOld = true; // not marked done: if the start date moves earlier, it gets read then
+        }
         else if (o.format === "bol" && formats[o.orderNo] === "oc") { res.skipped++; } // keep the priced OC
         else {
           await dropStale(file, o.orderNo);
@@ -105,9 +109,11 @@ export async function syncOrders({ db, folders, since, seen = {}, existing = {},
           isNew ? res.added++ : res.updated++;
           res.resolved[file.id] = true;
         }
-        res.seen[file.id] = file.rev;
-        pending[file.id] = file.rev;
-        if (onSeen && Object.keys(pending).length >= 25) { const b = pending; pending = {}; await onSeen(b).catch(() => {}); }
+        if (!tooOld) {
+          res.seen[file.id] = file.rev;
+          pending[file.id] = file.rev;
+          if (onSeen && Object.keys(pending).length >= 25) { const b = pending; pending = {}; await onSeen(b).catch(() => {}); }
+        }
       } catch (e) {
         res.errors.push({ file: file.path, error: String(e.message || e) });
         issue(file, "Couldn't be read: " + String(e.message || e).slice(0, 160));

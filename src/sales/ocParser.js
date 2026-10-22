@@ -16,9 +16,10 @@ const isInt = s => /^-?[\d,]+(\.\d+)?$/.test(String(s).trim());
 
 // "October 14, 2026" / "Friday, October 9, 2026" → "2026-10-14"
 export function parseLongDate(s) {
-  const m = String(s || "").toLowerCase().match(/(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})[,.]?\s+(\d{4})/); // "June 9. 2025" happens too
+  // Full or short month names: "October 14, 2026", "Oct 14 2026", "Sept. 3, 2025", "June 9. 2025"
+  const m = String(s || "").toLowerCase().match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?[,.]?\s+(\d{4})/);
   if (!m) return "";
-  const mo = MONTHS.indexOf(m[1]) + 1;
+  const mo = MONTHS.findIndex(x => x.startsWith(m[1])) + 1;
   // A blank date in Leon's template prints as "January 0, 1900" — treat it as missing
   if (+m[3] < 2000 || +m[2] < 1 || +m[2] > 31) return "";
   return `${m[3]}-${String(mo).padStart(2, "0")}-${String(m[2]).padStart(2, "0")}`;

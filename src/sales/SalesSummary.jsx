@@ -98,7 +98,9 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
       // One-time: PDFs skipped before problem files were tracked get one more look, so gaps show a real reason
       const orderFiles = new Set(rawOrders.map(o => o.file?.id).filter(Boolean));
       const reread = (settings.parserVersion || 0) < PARSER_VERSION;
-      const retry = id => reread || badDate.has(id) || (!settings.issuesTracked && !orderFiles.has(id));
+      // Start date moved earlier since the last sync: PDFs skipped as "too old" back then get another look
+      const sinceMovedBack = !settings.syncedSince || settings.since < settings.syncedSince;
+      const retry = id => reread || badDate.has(id) || ((!settings.issuesTracked || sinceMovedBack) && !orderFiles.has(id));
       const r = await syncOrders({ db, folders: settings.folders, since: settings.since, seen: Object.fromEntries(Object.entries(seen).filter(([id]) => !retry(id))), existing, loginName, onProgress: setSync, onSeen: saveSeen });
       if (Object.keys(r.seen).length) await saveSeen(r.seen);
       if (Object.keys(r.listing).length) await setDoc(doc(db, "config", "salesSyncFiles"), { numbers: r.listing, at: new Date().toISOString() });
@@ -110,7 +112,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
         if (lr.added) logoNote = ` ${lr.added} customer logo${lr.added > 1 ? "s" : ""} added.`;
       } catch (e) { logoNote = ` (Couldn't read the logo folder: ${String(e.message).slice(0, 120)})`; }
       const lastSync = { at: new Date().toISOString(), by: loginName || "", added: r.added, updated: r.updated, errors: r.errors.length, scanned: r.scanned };
-      await saveSettings({ lastSync, issuesTracked: true, parserVersion: PARSER_VERSION });
+      await saveSettings({ lastSync, issuesTracked: true, parserVersion: PARSER_VERSION, syncedSince: settings.since });
       setSyncMsg({ ok: !r.errors.length, text: `Synced ${r.scanned} PDFs — ${r.added} new, ${r.updated} updated${r.removed.length ? `, ${r.removed.length} out-of-range or duplicate removed` : ""}${r.errors.length ? `, ${r.errors.length} couldn't be read` : ""}.${logoNote}`, errors: r.errors });
     } catch (e) {
       setConnected(isDropboxConnected());

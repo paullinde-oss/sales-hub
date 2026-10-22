@@ -553,73 +553,120 @@ async function saveAccounts({ db, settings, saveSettings, logos, accounts, renam
 // ═════════════════════════════════════════════════════════════════════════════
 // Accounts — grouped by rep, click into a customer
 // ═════════════════════════════════════════════════════════════════════════════
+// One sortable, filterable list of every customer
+const ACCT_STATUS = [
+  ["any", "Bought this year or last"], ["cur", "Bought this year"], ["growing", "Growing vs last year"],
+  ["declining", "Declining vs last year"], ["new", "New this year"], ["stopped", "Bought last year, not this year"],
+  ["all", "All accounts (incl. no sales)"],
+];
 function AccountsView({ T, orders, settings, opts, currencyMode, openAccount, logos, ownOnly, loginName }) {
-  const fys = useMemo(() => [...new Set(orders.map(o => fyOf(o.date)))].sort((a, b) => b - a), [orders]);
+  const fys = useMemo(() => [...new Set([fyOf(today()), ...orders.map(o => fyOf(o.date))])].sort((a, b) => b - a), [orders]);
   const [fy, setFy] = useState(fyOf(today()));
   const [q, setQ] = useState("");
   const [typeF, setTypeF] = useState("all");
-  const pool = orders.filter(o => currencyMode === "combined" || orderCurrency(o) === currencyMode);
+  const [repF, setRepF] = useState("all");
+  const [locF, setLocF] = useState("all");
+  const [status, setStatus] = useState("any");
+  const [cmpFull, setCmpFull] = useState(false);
+  const [sort, setSort] = useState({ key: "cur", dir: -1 });
 
-  // Every account from the list, plus every unmatched customer that has ordered
+  // Mid-year, compare with the same dates last year unless "all of last year" is ticked
+  const inProgress = today() < fyEnd(fy);
+  const curTo = inProgress ? today() : fyEnd(fy);
+  const prevTo = inProgress && !cmpFull ? addDays(curTo, -365) : fyEnd(fy - 1);
+  const prevLabel = inProgress && !cmpFull ? `FY${fy - 1} same dates` : `FY${fy - 1}`;
+
   const rows = useMemo(() => {
+    const pool = orders.filter(o => (currencyMode === "combined" || orderCurrency(o) === currencyMode) && (locF === "all" || o.location === locF));
     const m = new Map();
     settings.accounts.filter(a => !ownOnly || a.rep === loginName).forEach(a => m.set(a.name, { key: a.name, name: a.name, rep: a.rep || "Unassigned", type: a.type, cur: [], prev: [], last: "" }));
     pool.forEach(o => {
       let r = m.get(o.cust.key);
       if (!r) { r = { key: o.cust.key, name: o.cust.name, rep: o.cust.rep, type: o.cust.type, cur: [], prev: [], last: "" }; m.set(o.cust.key, r); }
-      const f = fyOf(o.date);
-      if (f === fy) r.cur.push(o); else if (f === fy - 1) r.prev.push(o);
+      if (o.date >= fyStart(fy) && o.date <= curTo) r.cur.push(o);
+      else if (o.date >= fyStart(fy - 1) && o.date <= prevTo) r.prev.push(o);
       if (o.date > r.last) r.last = o.date;
     });
-    return [...m.values()].map(r => ({ ...r, curSum: sumOrders(r.cur, opts), prevSum: sumOrders(r.prev, opts) }));
-  }, [settings.accounts, pool, fy, opts, ownOnly, loginName]);
+    return [...m.values()].map(r => {
+      const cur = displayValue(sumOrders(r.cur, opts), currencyMode), prev = displayValue(sumOrders(r.prev, opts), currencyMode);
+      return { ...r, cur, prev, orders: r.cur.length, avg: r.cur.length ? cur / r.cur.length : 0, diff: cur - prev, pct: prev ? ((cur - prev) / prev) * 100 : null, days: r.last ? daysBetween(r.last, today()) : null };
+    });
+  }, [settings.accounts, orders, currencyMode, locF, fy, curTo, prevTo, opts, ownOnly, loginName]);
 
-  const filtered = rows.filter(r => (!q || r.name.toLowerCase().includes(q.toLowerCase())) && (typeF === "all" || r.type === typeF));
-  const reps = [...REPS.filter(r => r !== "Unassigned"), "Unassigned"];
+  const filtered = rows.filter(r =>
+    (!q || r.name.toLowerCase().includes(q.toLowerCase())) && (typeF === "all" || r.type === typeF) && (repF === "all" || r.rep === repF) &&
+    (status === "all" ? true : status === "any" ? (r.cur || r.prev) : status === "cur" ? r.cur > 0 : status === "growing" ? r.prev > 0 && r.cur > r.prev
+      : status === "declining" ? r.prev > 0 && r.cur < r.prev : status === "new" ? r.cur > 0 && !r.prev : status === "stopped" ? r.prev > 0 && !r.cur : true));
+  const total = filtered.reduce((s, r) => s + r.cur, 0), ptotal = filtered.reduce((s, r) => s + r.prev, 0);
+  const val = (r, k) => (k === "share" ? r.cur : k === "days" ? (r.days ?? 1e9) : r[k]);
+  const sorted = [...filtered].sort((a, b) => {
+    const x = val(a, sort.key), y = val(b, sort.key);
+    if (typeof x === "string" || typeof y === "string") return sort.dir * String(x || "").localeCompare(String(y || ""));
+    if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
+    return sort.dir * (x - y) || a.name.localeCompare(b.name);
+  });
+  const cols = [
+    ["name", "Customer", "left"], ["type", "Type", "left"], ["rep", "Held by", "left"],
+    ["cur", `FY${fy}${inProgress ? " to date" : ""}`, "right"], ["orders", "Orders", "right"], ["avg", "Avg order", "right"],
+    ["prev", prevLabel, "right"], ["diff", "Change $", "right"], ["pct", "Change %", "right"], ["share", "% of total", "right"],
+    ["last", "Last order", "left"], ["days", "Days since", "right"],
+  ];
+  const clickSort = k => setSort(s => s.key === k ? { key: k, dir: -s.dir } : { key: k, dir: ["name", "type", "rep", "days"].includes(k) ? 1 : -1 });
+  const exportCsv = () => downloadCSV(`accounts-FY${fy}.csv`, cols.map(c => c[1]),
+    sorted.map(r => [r.name, r.type, r.rep, r.cur.toFixed(2), r.orders, r.avg.toFixed(2), r.prev.toFixed(2), r.diff.toFixed(2), r.pct == null ? "" : r.pct.toFixed(1), total ? ((r.cur / total) * 100).toFixed(1) : "", r.last, r.days ?? ""]));
+  const st = { height: 28, fontSize: 12 };
+  const green = "#5a9e5a", red = "#c86a5a";
+
   return (
-    <div style={{ maxWidth: 1300 }}>
-      <div style={{ display: "flex", gap: 8, marginBottom: 14, alignItems: "center" }}>
-        <input placeholder="Search customers" value={q} onChange={e => setQ(e.target.value)} style={{ height: 28, fontSize: 12, width: 220 }} />
-        <select value={fy} onChange={e => setFy(+e.target.value)} style={{ height: 28, fontSize: 12 }}>
-          {[...new Set([fyOf(today()), ...fys])].sort((a, b) => b - a).map(y => <option key={y} value={y}>Fiscal {y} (Dec {y - 1} – Nov {y})</option>)}
-        </select>
-        <select value={typeF} onChange={e => setTypeF(e.target.value)} style={{ height: 28, fontSize: 12 }}>
-          <option value="all">Distributors + End Users</option><option value="Distributor">Distributors</option><option value="End User">End Users</option>
-        </select>
+    <div style={{ maxWidth: 1500 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <input placeholder="Search customers" value={q} onChange={e => setQ(e.target.value)} style={{ ...st, width: 200 }} />
+        <select value={fy} onChange={e => setFy(+e.target.value)} style={st}>{fys.map(y => <option key={y} value={y}>Fiscal {y} (Dec {y - 1} – Nov {y})</option>)}</select>
+        <select value={status} onChange={e => setStatus(e.target.value)} style={st}>{ACCT_STATUS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+        <select value={typeF} onChange={e => setTypeF(e.target.value)} style={st}><option value="all">Distributors + End Users</option><option value="Distributor">Distributors</option><option value="End User">End Users</option></select>
+        {!ownOnly && <select value={repF} onChange={e => setRepF(e.target.value)} style={st}><option value="all">All account holders</option>{REPS.map(r => <option key={r} value={r}>{r === "Unassigned" ? "Unassigned" : `${r}'s accounts`}</option>)}</select>}
+        <select value={locF} onChange={e => setLocF(e.target.value)} style={st}><option value="all">BRO + CAL</option><option value="BRO">Brooks (BRO) orders</option><option value="CAL">Calgary (CAL) orders</option></select>
+        {inProgress && <label style={{ fontSize: 11, color: T.subtext, display: "flex", gap: 4, alignItems: "center" }}><input type="checkbox" checked={cmpFull} onChange={e => setCmpFull(e.target.checked)} /> Compare with all of FY{fy - 1}</label>}
+        <button className="btn" onClick={() => { setQ(""); setTypeF("all"); setRepF("all"); setLocF("all"); setStatus("any"); setSort({ key: "cur", dir: -1 }); }}>Clear</button>
+        <div style={{ flex: 1 }} />
+        <button className="btn" onClick={exportCsv}>Export CSV</button>
       </div>
-      {reps.map(rep => {
-        const rs = filtered.filter(r => r.rep === rep).sort((a, b) => displayValue(b.curSum, currencyMode) - displayValue(a.curSum, currencyMode) || a.name.localeCompare(b.name));
-        if (!rs.length) return null;
-        const tot = rs.reduce((s, r) => s + displayValue(r.curSum, currencyMode), 0);
-        const ptot = rs.reduce((s, r) => s + displayValue(r.prevSum, currencyMode), 0);
-        return (
-          <Card key={rep} T={T} title={rep === "Unassigned" ? "Unassigned / End Users" : `${rep}'s accounts`} right={<span style={{ fontSize: 12, color: T.subtext }}>FY{fy}: <b style={{ color: T.text }}>{fmtMoney(tot)}</b> · FY{fy - 1}: {fmtMoney(ptot)}</span>} pad={0} style={{ marginBottom: 14 }}>
-            <table className="data-table">
-              <thead><tr><th>Customer</th><th>Type</th><th style={{ textAlign: "right" }}>FY{fy}</th><th style={{ textAlign: "right" }}>Orders</th><th style={{ textAlign: "right" }}>FY{fy - 1}</th><th style={{ textAlign: "right" }}>Change</th><th>Last order</th></tr></thead>
-              <tbody>{rs.map(r => {
-                const v = displayValue(r.curSum, currencyMode), p = displayValue(r.prevSum, currencyMode);
-                const ch = p ? ((v - p) / p) * 100 : null;
-                return (
-                  <tr key={r.key} onClick={() => openAccount(r.key)} style={{ cursor: "pointer" }}>
-                    <td style={{ fontWeight: 500 }}>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ width: 34, height: 22, background: logos[r.key] ? "#fff" : "transparent", borderRadius: 2, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                          {logos[r.key] && <img src={logos[r.key].dataUrl} alt="" style={{ maxWidth: 32, maxHeight: 20, objectFit: "contain" }} />}
-                        </span>{r.name}
-                      </span>
-                    </td>
-                    <td style={{ color: T.subtext }}>{r.type}</td>
-                    <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{v ? fmtMoney(v) : "—"}</td>
-                    <td style={{ textAlign: "right", color: T.subtext }}>{r.cur.length || ""}</td>
-                    <td style={{ textAlign: "right", color: T.subtext, fontVariantNumeric: "tabular-nums" }}>{p ? fmtMoney(p) : "—"}</td>
-                    <td style={{ textAlign: "right", color: ch == null ? T.muted : ch >= 0 ? "#5a9e5a" : "#c86a5a" }}>{ch == null ? "" : `${ch >= 0 ? "▲" : "▼"} ${Math.abs(ch).toFixed(0)}%`}</td>
-                    <td style={{ color: T.subtext }}>{r.last ? `${fmtDate(r.last)} (${daysBetween(r.last, today())}d ago)` : "—"}</td>
-                  </tr>);
-              })}</tbody>
-            </table>
-          </Card>
-        );
-      })}
+      <div style={{ fontSize: 12, color: T.subtext, marginBottom: 8 }}>
+        {sorted.length} customers · FY{fy}: <b style={{ color: T.text }}>{fmtMoney(total)}</b> · {prevLabel}: {fmtMoney(ptotal)}
+        {ptotal > 0 && <span style={{ color: total >= ptotal ? green : red }}> ({total >= ptotal ? "▲" : "▼"} {Math.abs(((total - ptotal) / ptotal) * 100).toFixed(0)}%)</span>}
+        <span style={{ color: T.tableHeadText }}> · click a column heading to sort</span>
+      </div>
+      <Card T={T} pad={0}>
+        <div style={{ overflowX: "auto" }}>
+          <table className="data-table">
+            <thead><tr>{cols.map(([k, l, align]) => (
+              <th key={k} onClick={() => clickSort(k)} style={{ textAlign: align, cursor: "pointer", whiteSpace: "nowrap", color: sort.key === k ? T.gold : undefined }}>
+                {l}{sort.key === k ? (sort.dir < 0 ? " ▼" : " ▲") : ""}
+              </th>))}</tr></thead>
+            <tbody>{sorted.map(r => (
+              <tr key={r.key} onClick={() => openAccount(r.key)} style={{ cursor: "pointer" }}>
+                <td style={{ fontWeight: 500 }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ width: 34, height: 22, background: logos[r.key] ? "#fff" : "transparent", borderRadius: 2, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      {logos[r.key] && <img src={logos[r.key].dataUrl} alt="" style={{ maxWidth: 32, maxHeight: 20, objectFit: "contain" }} />}
+                    </span>{r.name}
+                  </span>
+                </td>
+                <td style={{ color: T.subtext }}>{r.type}</td>
+                <td style={{ color: T.subtext }}>{r.rep}</td>
+                <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.cur ? fmtMoney(r.cur) : "—"}</td>
+                <td style={{ textAlign: "right", color: T.subtext }}>{r.orders || ""}</td>
+                <td style={{ textAlign: "right", color: T.subtext, fontVariantNumeric: "tabular-nums" }}>{r.avg ? fmtMoney(r.avg) : ""}</td>
+                <td style={{ textAlign: "right", color: T.subtext, fontVariantNumeric: "tabular-nums" }}>{r.prev ? fmtMoney(r.prev) : "—"}</td>
+                <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", color: !r.diff ? T.tableHeadText : r.diff > 0 ? green : red }}>{r.diff ? `${r.diff > 0 ? "+" : "−"}${fmtMoney(Math.abs(r.diff))}` : ""}</td>
+                <td style={{ textAlign: "right", color: r.pct == null ? T.tableHeadText : r.pct >= 0 ? green : red }}>{r.pct == null ? (r.cur ? "new" : "") : `${r.pct >= 0 ? "▲" : "▼"} ${Math.abs(r.pct).toFixed(0)}%`}</td>
+                <td style={{ textAlign: "right", color: T.subtext }}>{total && r.cur ? ((r.cur / total) * 100).toFixed(1) + "%" : ""}</td>
+                <td style={{ color: T.subtext, whiteSpace: "nowrap" }}>{r.last ? fmtDate(r.last) : "—"}</td>
+                <td style={{ textAlign: "right", color: r.days > 90 ? red : T.subtext }}>{r.days ?? ""}</td>
+              </tr>))}</tbody>
+          </table>
+        </div>
+      </Card>
     </div>
   );
 }

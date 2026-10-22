@@ -3,7 +3,7 @@
 // by day / week / month / fiscal year, by customer account, SKU, rep and location.
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { collection, doc, onSnapshot, setDoc, deleteDoc, deleteField } from "firebase/firestore";
-import { DEFAULT_ACCOUNTS, REPS, normName } from "./accounts";
+import { DEFAULT_ACCOUNTS, REPS, SALES_REP, normName } from "./accounts";
 import { isDropboxConnected, startDropboxAuth, disconnectDropbox, redirectUri } from "./dropbox";
 import { syncOrders } from "./sync";
 import { useLogos, syncLogos, resizeImage, saveLogo, removeLogo } from "./logos";
@@ -280,7 +280,7 @@ function DayBars({ T, days, mode, sel, onSel }) {
   );
 }
 
-const GROUPS = [["customer", "Customer"], ["product", "Product / SKU"], ["rep", "Sales rep"], ["type", "Distributor / End User"], ["location", "Location (BRO/CAL)"], ["city", "Ship-to city"], ["month", "Month"]];
+const GROUPS = [["customer", "Customer"], ["product", "Product / SKU"], ["rep", "Account holder"], ["type", "Distributor / End User"], ["location", "Location (BRO/CAL)"], ["city", "Ship-to city"], ["month", "Month"]];
 
 function Breakdown({ T, orders, opts, mode, weekStart, refDate, openAccount }) {
   const [period, setPeriod] = useState("selweek");
@@ -370,7 +370,7 @@ function FilterBar({ T, orders, fl, show = ["customer", "sku", "orderNo", "locat
         <option value="all">BRO + CAL</option><option value="BRO">Brooks (BRO)</option><option value="CAL">Calgary (CAL)</option>
       </select>}
       {show.includes("rep") && <select value={f.rep} onChange={e => set("rep", e.target.value)} style={st}>
-        <option value="all">All reps</option>{REPS.map(r => <option key={r} value={r}>{r}</option>)}
+        <option value="all">All account holders</option>{REPS.map(r => <option key={r} value={r}>{r}</option>)}
       </select>}
       {show.includes("type") && <select value={f.type} onChange={e => set("type", e.target.value)} style={st}>
         <option value="all">Distributors + End Users</option><option value="Distributor">Distributors</option><option value="End User">End Users</option>
@@ -420,7 +420,7 @@ function OrderTable({ T, db, orders, opts, openAccount, compact, editable, setti
     <div style={{ overflowX: "auto" }}>
       <table className="data-table">
         <thead><tr>
-          <th>Date</th><th>Order #</th><th>Customer</th>{!compact && <th>Rep</th>}<th>Ship to</th>{!compact && <th>PO</th>}<th>Products</th><th style={{ textAlign: "right" }}>Amount</th>
+          <th>Date</th><th>Order #</th><th>Customer</th>{!compact && <th>Held by</th>}<th>Ship to</th>{!compact && <th>PO</th>}<th>Products</th><th style={{ textAlign: "right" }}>Amount</th>
         </tr></thead>
         <tbody>
           {orders.slice(0, limit).map(o => {
@@ -495,6 +495,24 @@ function OrderDetail({ T, db, o, editable }) {
       </div>
     </div>
   );
+}
+
+// Save an edited account list. `renames` = [[oldName, newName]]: OC-name assignments
+// and logos follow the account to its new name, and the old name keeps matching OCs.
+async function saveAccounts({ db, settings, saveSettings, logos, accounts, renames = [] }) {
+  const map = new Map(renames.filter(([a, b]) => a && b && a !== b));
+  const next = accounts.map(a => {
+    const old = [...map.entries()].find(([, nw]) => nw === a.name)?.[0];
+    if (!old) return a;
+    const terms = a.terms || [];
+    return { ...a, terms: terms.some(t => normName(t) === normName(old)) ? terms : [...terms, old] };
+  });
+  const aliases = Object.fromEntries(Object.entries(settings.aliases || {}).map(([k, v]) => [k, map.get(v) || v]));
+  await saveSettings({ accounts: next, aliases });
+  for (const [oldName, newName] of map) {
+    const l = logos?.[oldName];
+    if (l && !logos[newName]) { await saveLogo(db, newName, l.dataUrl, l.source, l.file ? { file: l.file } : {}); await removeLogo(db, oldName); }
+  }
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -610,6 +628,24 @@ function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMo
     saveSettings({ aliases: { ...settings.aliases, ...Object.fromEntries(raws.map(r => [normName(r).trim(), target])) } });
     openAccount(target);
   };
+  const [edit, setEdit] = useState(null); // { name, rep, type, terms } while editing
+  const startEdit = () => setEdit({ name, rep: acct?.rep || "Unassigned", type: custType, terms: (acct?.terms || []).join(", ") });
+  const saveEdit = async () => {
+    const nm = edit.name.trim();
+    if (!nm) return alert("The account needs a name.");
+    if (nm !== name && settings.accounts.some(a => a.name.toLowerCase() === nm.toLowerCase())) return alert(`There's already an account called "${nm}". Use "Assign to an account" to merge into it.`);
+    const terms = edit.terms.split(",").map(t => t.trim()).filter(Boolean);
+    if (acct) {
+      await saveAccounts({ db, settings, saveSettings, logos, accounts: settings.accounts.map(a => a.name === accountKey ? { ...a, name: nm, rep: edit.rep, type: edit.type, terms } : a), renames: [[accountKey, nm]] });
+    } else {
+      // Not on the list yet: create the account and point this customer's OC names at it
+      await saveSettings({ accounts: [...settings.accounts, { name: nm, rep: edit.rep, type: edit.type, terms }], aliases: { ...settings.aliases, ...Object.fromEntries(raws.map(r => [normName(r).trim(), nm])) } });
+      const l = logos[accountKey];
+      if (l && !logos[nm]) { await saveLogo(db, nm, l.dataUrl, l.source); await removeLogo(db, accountKey); }
+    }
+    setEdit(null);
+    if (nm !== accountKey) openAccount(nm);
+  };
   const upload = async e => {
     const f = e.target.files?.[0]; e.target.value = "";
     if (!f) return;
@@ -646,6 +682,7 @@ function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMo
             {logo?.source === "dropbox" && <> · logo from Dropbox</>}
           </div>
         </div>
+        {editable && <button className="btn" onClick={startEdit}>✎ Edit account</button>}
         {editable && <>
           <select value={acct?.rep || "Unassigned"} disabled={!acct} onChange={e => setAcct({ rep: e.target.value })} style={{ height: 26, fontSize: 11 }} title={acct ? "Account holder" : "Create an account to set a rep"}>
             {REPS.map(r => <option key={r} value={r}>{r}</option>)}
@@ -668,6 +705,26 @@ function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMo
         <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} onClick={report}>Year-End Report (PDF)</button>
       </div>
       {raws.length > 0 && <div style={{ fontSize: 11, color: T.tableHeadText }}>Names on OCs: {raws.join(" · ")}</div>}
+
+      {edit && (
+        <Card T={T} title={acct ? "Edit account" : "Create account for this customer"}>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 3fr", gap: 10, alignItems: "end" }}>
+            <label style={{ fontSize: 10, color: T.tableHeadText, textTransform: "uppercase", letterSpacing: ".06em" }}>Account name
+              <input value={edit.name} onChange={e => setEdit({ ...edit, name: e.target.value })} style={{ display: "block", width: "100%", height: 28, fontSize: 12, marginTop: 4 }} /></label>
+            <label style={{ fontSize: 10, color: T.tableHeadText, textTransform: "uppercase", letterSpacing: ".06em" }}>Held by
+              <select value={edit.rep} onChange={e => setEdit({ ...edit, rep: e.target.value })} style={{ display: "block", width: "100%", height: 28, fontSize: 12, marginTop: 4 }}>{REPS.map(r => <option key={r}>{r}</option>)}</select></label>
+            <label style={{ fontSize: 10, color: T.tableHeadText, textTransform: "uppercase", letterSpacing: ".06em" }}>Type
+              <select value={edit.type} onChange={e => setEdit({ ...edit, type: e.target.value })} style={{ display: "block", width: "100%", height: 28, fontSize: 12, marginTop: 4 }}><option>Distributor</option><option>End User</option></select></label>
+            <label style={{ fontSize: 10, color: T.tableHeadText, textTransform: "uppercase", letterSpacing: ".06em" }}>Also matches these names on OCs (comma separated)
+              <input value={edit.terms} onChange={e => setEdit({ ...edit, terms: e.target.value })} placeholder="e.g. emco corporation, emco waterworks" style={{ display: "block", width: "100%", height: 28, fontSize: 12, marginTop: 4 }} /></label>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
+            <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} onClick={saveEdit}>Save</button>
+            <button className="btn" onClick={() => setEdit(null)}>Cancel</button>
+            <span style={{ fontSize: 11, color: T.tableHeadText }}>Renaming keeps the logo, and OCs with the old name still count toward this account.</span>
+          </div>
+        </Card>
+      )}
 
       <Card T={T} title={`FY${fy}${cmp.inProgress ? " to date" : ""} vs ${prevLabel}`} right={
         <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 11, color: T.subtext }}>
@@ -747,7 +804,7 @@ function ProductTable({ T, rows, mode }) {
 // ═════════════════════════════════════════════════════════════════════════════
 const REPORTS = [
   ["yearend", "Year-End customer reports (PDF)"],
-  ["rep", "Sales by rep"],
+  ["salesrep", `${SALES_REP}'s sales`],
   ["customer", "Sales by customer"],
   ["product", "Sales by product / SKU"],
   ["custprod", "Customer × product (who ordered what)"],
@@ -759,7 +816,7 @@ const REPORTS = [
 ];
 
 function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, logos, bmpLogo }) {
-  const [rep, setRep] = useState("rep");
+  const [rep, setRep] = useState("salesrep");
   const fl = useFilters("fytd");
   const [fy, setFy] = useState(fyOf(today()));
   const [days, setDays] = useState(60);
@@ -768,10 +825,23 @@ function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, log
   const money = r => displayValue(r, currencyMode);
 
   let headers = [], rows = [], csvRows = [];
-  if (["rep", "customer", "product", "location", "type", "city"].includes(rep)) {
+  if (rep === "salesrep") {
+    // John's accounts for the chosen period, against the same dates a year earlier
+    const shift = d => `${+d.slice(0, 4) - 1}${d.slice(4)}`;
+    const mineNow = list.filter(o => o.cust.rep === SALES_REP);
+    const minePrev = filterOrders(orders, { ...fl.filters, from: shift(fl.filters.from), to: shift(fl.filters.to), currency: currencyMode }).filter(o => o.cust.rep === SALES_REP);
+    const g = groupBy(mineNow, "customer", opts), pg = new Map(groupBy(minePrev, "customer", opts).map(r => [r.key, r]));
+    pg.forEach((r, k) => { if (!g.some(x => x.key === k)) g.push({ ...r, cad: 0, usd: 0, combined: 0, count: 0, prevOnly: true }); });
+    const total = g.reduce((s, r) => s + money(r), 0), ptotal = minePrev.length ? [...pg.values()].reduce((s, r) => s + money(r), 0) : 0;
+    const ch = (a, b) => (b ? `${a >= b ? "+" : "−"}${Math.abs(((a - b) / b) * 100).toFixed(0)}%` : a ? "new" : "");
+    headers = ["Customer", "Type", "Orders", `Sales ${cur}`, "Sales same dates last year", "Change", "% of total"];
+    rows = g.map(r => { const p = pg.get(r.key); const pv = p ? money(p) : 0; return [r.label, r.type, r.count, fmtMoney(money(r), 2), fmtMoney(pv, 2), ch(money(r), pv), total ? ((money(r) / total) * 100).toFixed(1) + "%" : ""]; });
+    csvRows = g.map(r => { const p = pg.get(r.key); const pv = p ? money(p) : 0; return [r.label, r.type, r.count, money(r).toFixed(2), pv.toFixed(2), ch(money(r), pv), total ? ((money(r) / total) * 100).toFixed(1) : ""]; });
+    rows.push(["Total", "", mineNow.length, fmtMoney(total, 2), fmtMoney(ptotal, 2), ch(total, ptotal), ""]);
+  } else if (["customer", "product", "location", "type", "city"].includes(rep)) {
     const g = groupBy(list, rep, opts);
     const total = g.reduce((s, r) => s + money(r), 0);
-    headers = [REPORTS.find(r => r[0] === rep)[1].replace("Sales by ", "").replace(/^\w/, c => c.toUpperCase()), ...(rep === "product" ? ["Description", "Qty"] : []), ...(rep === "customer" ? ["Rep", "Type"] : []), "Orders", `Sales ${cur}`, "% of total"];
+    headers = [REPORTS.find(r => r[0] === rep)[1].replace("Sales by ", "").replace(/^\w/, c => c.toUpperCase()), ...(rep === "product" ? ["Description", "Qty"] : []), ...(rep === "customer" ? ["Held by", "Type"] : []), "Orders", `Sales ${cur}`, "% of total"];
     rows = g.map(r => [r.label, ...(rep === "product" ? [r.desc, fmtQty(r.qty)] : []), ...(rep === "customer" ? [r.rep, r.type] : []), r.count, fmtMoney(money(r), 2), total ? ((money(r) / total) * 100).toFixed(1) + "%" : ""]);
     csvRows = g.map(r => [r.label, ...(rep === "product" ? [r.desc, r.qty] : []), ...(rep === "customer" ? [r.rep, r.type] : []), r.count, money(r).toFixed(2), total ? ((money(r) / total) * 100).toFixed(1) : ""]);
     rows.push(["Total", ...(rep === "product" ? ["", ""] : []), ...(rep === "customer" ? ["", ""] : []), list.length, fmtMoney(total, 2), ""]);
@@ -784,7 +854,7 @@ function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, log
       r.combined += c === "USD" ? (l.amount || 0) * opts.usdToCad : (l.amount || 0); r.orders.add(o.orderNo); if (o.date > r.last) r.last = o.date;
     }));
     const g = [...m.values()].sort((a, b) => a.cust.localeCompare(b.cust) || money(b) - money(a));
-    headers = ["Customer", "Rep", "SKU", "Description", "Qty", "Orders", "Last ordered", `Sales ${cur}`];
+    headers = ["Customer", "Held by", "SKU", "Description", "Qty", "Orders", "Last ordered", `Sales ${cur}`];
     rows = g.map(r => [r.cust, r.rep, r.sku, r.desc, fmtQty(r.qty), r.orders.size, fmtDate(r.last), fmtMoney(money(r), 2)]);
     csvRows = g.map(r => [r.cust, r.rep, r.sku, r.desc, r.qty, r.orders.size, r.last, money(r).toFixed(2)]);
   } else if (rep === "monthly") {
@@ -843,10 +913,10 @@ function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, log
         ) : rep === "inactive" ? (
           <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", fontSize: 12 }}>
             No orders in the last <input type="number" value={days} onChange={e => setDays(+e.target.value || 0)} style={{ width: 70, height: 28 }} /> days
-            <select value={fl.f.rep} onChange={e => fl.setF(p => ({ ...p, rep: e.target.value }))} style={{ fontSize: 11, height: 28 }}><option value="all">All reps</option>{REPS.map(r => <option key={r}>{r}</option>)}</select>
+            <select value={fl.f.rep} onChange={e => fl.setF(p => ({ ...p, rep: e.target.value }))} style={{ fontSize: 11, height: 28 }}><option value="all">All account holders</option>{REPS.map(r => <option key={r}>{r}</option>)}</select>
             <select value={fl.f.type} onChange={e => fl.setF(p => ({ ...p, type: e.target.value }))} style={{ fontSize: 11, height: 28 }}><option value="all">Distributors + End Users</option><option>Distributor</option><option>End User</option></select>
           </div>
-        ) : <FilterBar T={T} orders={orders} fl={fl} show={rep === "rep" ? ["customer", "sku", "location", "type"] : ["customer", "sku", "location", "rep", "type"]} />}
+        ) : <FilterBar T={T} orders={rep === "salesrep" ? orders.filter(o => o.cust.rep === SALES_REP) : orders} fl={fl} show={rep === "salesrep" ? ["customer", "sku", "location", "type"] : ["customer", "sku", "location", "rep", "type"]} />}
         <Card T={T} pad={0}>
           {!rows.length ? <div style={{ fontSize: 12, color: T.tableHeadText, padding: 12 }}>No data for these filters.</div> : (
             <div style={{ overflowX: "auto" }}>
@@ -901,14 +971,14 @@ function YearEndPicker({ T, orders, settings, opts, logos, bmpLogo, openAccount 
       <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
         <select value={fy} onChange={e => setFy(+e.target.value)} style={{ fontSize: 11, height: 28 }}>{fys.map(y => <option key={y} value={y}>Fiscal {y} (Dec {y - 1} – Nov {y})</option>)}</select>
         <select value={typeF} onChange={e => setTypeF(e.target.value)} style={{ fontSize: 11, height: 28 }}><option value="Distributor">Distributors</option><option value="End User">End Users</option><option value="all">Distributors + End Users</option></select>
-        <select value={repF} onChange={e => setRepF(e.target.value)} style={{ fontSize: 11, height: 28 }}><option value="all">All reps</option>{REPS.map(r => <option key={r}>{r}</option>)}</select>
+        <select value={repF} onChange={e => setRepF(e.target.value)} style={{ fontSize: 11, height: 28 }}><option value="all">All account holders</option>{REPS.map(r => <option key={r}>{r}</option>)}</select>
       </div>
       <Card T={T} pad={0}>
         {!rows.length ? <div style={{ fontSize: 12, color: T.tableHeadText, padding: 12 }}>No customers with purchases in FY{fy} or FY{fy - 1}.</div> : (
           <table className="data-table">
             <thead><tr>
               <th style={{ width: 30 }}><input type="checkbox" checked={!!all} onChange={() => setSel(all ? {} : Object.fromEntries(rows.map(r => [r.key, true])))} /></th>
-              <th>Customer</th><th>Rep</th><th style={{ textAlign: "right" }}>FY{fy} (CAD)</th><th style={{ textAlign: "right" }}>FY{fy - 1} (CAD)</th><th style={{ textAlign: "right" }}>Change</th><th></th>
+              <th>Customer</th><th>Held by</th><th style={{ textAlign: "right" }}>FY{fy} (CAD)</th><th style={{ textAlign: "right" }}>FY{fy - 1} (CAD)</th><th style={{ textAlign: "right" }}>Change</th><th></th>
             </tr></thead>
             <tbody>{rows.map(r => {
               const ch = r.prev ? ((r.cur - r.prev) / r.prev) * 100 : null;
@@ -993,14 +1063,15 @@ function QuoteMatchesView({ T, matches, settings, saveSettings, opts, quotes, up
 // ═════════════════════════════════════════════════════════════════════════════
 // Settings
 // ═════════════════════════════════════════════════════════════════════════════
-function SettingsView({ T, db, orders, settings, saveSettings, connected, setConnected, seenCount, loginName, openAccount }) {
+function SettingsView({ T, db, orders, settings, saveSettings, connected, setConnected, seenCount, loginName, openAccount, logos }) {
   const [folders, setFolders] = useState(settings.folders.join("\n"));
   const [since, setSince] = useState(settings.since);
   const [rate, setRate] = useState(settings.usdToCad);
-  const [accts, setAccts] = useState(settings.accounts);
+  const withOrig = list => list.map(a => ({ ...a, _orig: a.name }));
+  const [accts, setAccts] = useState(withOrig(settings.accounts));
   const [dirty, setDirty] = useState(false);
   const [logoFolder, setLogoFolder] = useState(settings.logoFolder || "");
-  useEffect(() => { if (!dirty) setAccts(settings.accounts); }, [settings.accounts, dirty]);
+  useEffect(() => { if (!dirty) setAccts(withOrig(settings.accounts)); }, [settings.accounts, dirty]);
 
   const unmatched = useMemo(() => {
     const m = new Map();
@@ -1009,7 +1080,13 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
   }, [orders]);
 
   const upd = (i, patch) => { setDirty(true); setAccts(a => a.map((x, j) => (j === i ? { ...x, ...patch } : x))); };
-  const saveAccts = () => { saveSettings({ accounts: accts.filter(a => a.name.trim()).map(a => ({ ...a, name: a.name.trim() })) }); setDirty(false); };
+  const saveAccts = async () => {
+    const list = accts.filter(a => a.name.trim()).map(a => ({ ...a, name: a.name.trim() }));
+    const names = list.map(a => a.name.toLowerCase());
+    if (new Set(names).size !== names.length) return alert("Two accounts have the same name — please make them different.");
+    await saveAccounts({ db, settings, saveSettings, logos, accounts: list.map(({ _orig, ...a }) => a), renames: list.filter(a => a._orig && a._orig !== a.name).map(a => [a._orig, a.name]) });
+    setDirty(false);
+  };
   const lbl = { fontSize: 10, textTransform: "uppercase", letterSpacing: ".06em", color: T.tableHeadText, marginBottom: 4 };
 
   return (
@@ -1059,7 +1136,7 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
       </div>}>
         <div style={{ fontSize: 11, color: T.tableHeadText, marginBottom: 8 }}>"Also matches" are other spellings that appear on OCs (comma separated). The longest match wins, so "Core and Main Earth Savers" goes to Earth Savers, not Core and Main.</div>
         <table className="data-table">
-          <thead><tr><th>Account</th><th>Rep</th><th>Type</th><th>Also matches</th><th></th></tr></thead>
+          <thead><tr><th>Account</th><th>Held by</th><th>Type</th><th>Also matches</th><th></th></tr></thead>
           <tbody>{accts.map((a, i) => (
             <tr key={i}>
               <td><input value={a.name} onChange={e => upd(i, { name: e.target.value })} style={{ width: "100%", height: 24, fontSize: 12 }} /></td>

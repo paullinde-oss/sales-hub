@@ -62,6 +62,9 @@ export const DEFAULT_ACCOUNTS = [
 ];
 
 export const REPS = ["Mark", "Paul", "John", "Grant", "Jeff", "Unassigned"];
+// Accounts list who is responsible for each customer, but John is the only actual
+// sales rep — the "John's sales" report is built for him.
+export const SALES_REP = "John";
 
 export const normName = s => " " + String(s || "")
   .toLowerCase()

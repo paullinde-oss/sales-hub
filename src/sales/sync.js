@@ -1,5 +1,5 @@
 // ─── Dropbox → Firestore sync of order confirmations ────────────────────────
-import { doc, setDoc, deleteDoc } from "firebase/firestore";
+import { writeOrder, removeOrder } from "./orderStore";
 import { listPdfs, downloadFile } from "./dropbox";
 import { parseOrderPdf, parseLongDate, orderNoFrom } from "./ocParser";
 
@@ -62,7 +62,7 @@ export async function syncOrders({ db, folders, since, seen = {}, existing = {},
   Object.entries(existing).forEach(([no, o]) => { if (o.file?.id) byFile[o.file.id] = no; });
   const dropStale = async (file, keepNo) => {
     const old = byFile[file.id];
-    if (old && old !== keepNo) { await deleteDoc(doc(db, "salesOrders", old)).catch(() => {}); delete formats[old]; res.removed.push(old); }
+    if (old && old !== keepNo) { await removeOrder(db, old).catch(() => {}); delete formats[old]; res.removed.push(old); }
   };
   // Orders saved earlier from PDFs whose file name dates them before the start date: take them out
   for (const f of files) if (byFile[f.id] && obviouslyTooOld(f, since)) await dropStale(f, null);
@@ -101,11 +101,11 @@ export async function syncOrders({ db, folders, since, seen = {}, existing = {},
           await dropStale(file, o.orderNo);
           const isNew = !formats[o.orderNo];
           formats[o.orderNo] = o.format;
-          await setDoc(doc(db, "salesOrders", o.orderNo), {
+          await writeOrder(db, o.orderNo, {
             ...o,
             file: { id: file.id, rev: file.rev, name: file.name, path: file.path },
             syncedAt: new Date().toISOString(), syncedBy: loginName || "",
-          }, { merge: true });
+          });
           isNew ? res.added++ : res.updated++;
           res.resolved[file.id] = true;
         }

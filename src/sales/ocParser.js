@@ -265,6 +265,51 @@ export async function parseOrderPdf(pdfjsLib, data, fileName = "") {
   if (o.hasPricing && Math.abs(o.productTotal + o.freight + o.otherCharges - o.total) > 0.05)
     o.warnings.push(`Line items + charges (${(o.productTotal + o.freight + o.otherCharges).toFixed(2)}) don't add up to Total Before Tax (${o.total.toFixed(2)})`);
   if (!o.hasPricing) o.warnings.push("Bill of lading — no pricing on this document");
-  return o;
+  return cleanOrder(o);
 }
 const round2 = n => Math.round((n || 0) * 100) / 100;
+
+// ─── Keep only real products in `lines` ──────────────────────────────────────
+// Older OCs typed freight, taxes and fees in as line items. This moves them out:
+//   tax     → o.taxes (never counted as sales; taken back out of the total if it was in it)
+//   freight → a freight charge;  fees (processing, expedited, import duty) → other charges
+// Safe to run more than once. Used when reading a PDF and on orders already synced.
+const TAX_RE = /^(?:p|s|product|shipping|shiping)?\s*-?\s*(?:gst|pst|hst|qst|gts)(?:\s*\/\s*hst)?\b|^new brunswick hst\b/i;
+const FREIGHT_SKU_RE = /^(?:frt|freight|shipping|4420-0005)\b/i;
+const FREIGHT_DESC_RE = /^(?:\(4420-0005\)\s*)?(?:freight|shipping|flat deck freight|extra shipping)\b/i;
+const FEE_RE = /processing\/service fee|^expidited service|^expedited service|import duty recovery/i;
+const NO_SKU = s => !s || /^(?:#n\/a|custom|misc|-|admin|exp|drl)$/i.test(s);
+export function lineKind(l) {
+  const sku = String(l.sku || "").trim(), desc = String(l.desc || "").trim();
+  if (TAX_RE.test(sku) || ((NO_SKU(sku) || TAX_RE.test(sku)) && TAX_RE.test(desc))) return "tax";
+  if (FREIGHT_SKU_RE.test(sku) || (NO_SKU(sku) && FREIGHT_DESC_RE.test(desc))) return "freight";
+  if (FEE_RE.test(desc) || /^admin$/i.test(sku)) return "fee";
+  return "product";
+}
+export function cleanOrder(o) {
+  const lines = o.lines || [];
+  const kinds = lines.map(lineKind);
+  const r2 = n => Math.round((n || 0) * 100) / 100;
+  const isFreight = c => c.kind === "freight" || (!c.kind && /freight|shipping|delivery|^frt\b/i.test(c.label || ""));
+  // FRT, "Shipping to …", "Freight to Delivery Address"… are all just "Freight" (original wording kept as a note)
+  const asFreight = c => (c.label === "Freight" && c.kind === "freight" ? c : { ...c, label: "Freight", kind: "freight", note: c.note || (c.label !== "Freight" ? c.label : "") });
+  const already = (o.charges || []).map(c => (isFreight(c) ? asFreight(c) : c));
+  if (!kinds.some(k => k !== "product") && JSON.stringify(already) === JSON.stringify(o.charges || [])) return o;
+  const sumAll = lines.reduce((s, l) => s + (l.amount || 0), 0) + (o.charges || []).reduce((s, c) => s + (c.amount || 0), 0);
+  const totalFromLines = o.total != null && Math.abs(o.total - sumAll) < 0.06; // the total was just the lines added up
+  const moved = lines.map((l, i) => ({ l, k: kinds[i] })).filter(x => x.k !== "product");
+  const taxes = [...(o.taxes || []), ...moved.filter(x => x.k === "tax").map(x => ({ label: x.l.desc || x.l.sku, amount: x.l.amount || 0 }))];
+  const charges = [...already, ...moved.filter(x => x.k !== "tax").map(x => x.k === "freight"
+    ? asFreight({ label: x.l.desc || x.l.sku || "Freight", amount: x.l.amount || 0 })
+    : { label: x.l.desc || x.l.sku || "Fee", amount: x.l.amount || 0, kind: "fee" })];
+  const products = lines.filter((_, i) => kinds[i] === "product");
+  const productTotal = r2(products.reduce((s, l) => s + (l.amount || 0), 0));
+  const freight = r2(charges.filter(isFreight).reduce((s, c) => s + (c.amount || 0), 0));
+  const otherCharges = r2(charges.filter(c => !isFreight(c)).reduce((s, c) => s + (c.amount || 0), 0));
+  const taxAmt = moved.filter(x => x.k === "tax").reduce((s, x) => s + (x.l.amount || 0), 0);
+  const total = totalFromLines || o.total == null ? r2(productTotal + freight + otherCharges) : o.total;
+  return {
+    ...o, lines: products, charges, taxes, productTotal, freight, otherCharges, total,
+    warnings: [...(o.warnings || []).filter(w => !/don't add up/i.test(w)), ...(taxAmt && totalFromLines ? [`Tax lines (${r2(taxAmt)}) taken out of the sales total`] : [])].filter((w, i, a) => a.indexOf(w) === i),
+  };
+}

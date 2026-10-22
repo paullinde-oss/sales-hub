@@ -6,6 +6,7 @@ import { collection, doc, onSnapshot, setDoc, deleteDoc, deleteField } from "fir
 import { DEFAULT_ACCOUNTS, REPS, SALES_REP, normName, matchAccount } from "./accounts";
 import { isDropboxConnected, startDropboxAuth, disconnectDropbox, redirectUri, browseFolder, accountInfo } from "./dropbox";
 import { syncOrders } from "./sync";
+import { writeOrder, removeOrder, listenOrders, buildPacks } from "./orderStore";
 import { useLogos, syncLogos, resizeImage, saveLogo, removeLogo } from "./logos";
 import { yearCompare, openYearEndReport } from "./yearEndReport";
 import { QuoteWinRateReport, OpenPipelineReport, QuoteToOrderReport, LeadReport, SalesForecastReport, ReorderReport, ProductTrendsReport } from "./pipelineReports";
@@ -61,17 +62,28 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
   const scrollRef = useRef(null);
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0; }, [view, accountKey]);
 
-  // During a big sync every saved order fires this listener; redrawing hundreds of
-  // orders each time made the whole page sluggish, so updates are batched to every 2s.
+  // Orders are read from 16 combined "pack" documents (see orderStore.js) — far fewer
+  // database reads than one per order. Redraws are batched to every 2s during a sync.
+  const [packCount, setPackCount] = useState(null);
   useEffect(() => {
     let timer = null, latest = null, first = true;
-    const flush = () => { timer = null; setRawOrders(latest.docs.map(d => ({ ...d.data(), orderNo: d.id }))); setLoaded(true); };
-    const unsub = onSnapshot(collection(db, "salesOrders"), s => {
-      latest = s;
+    const flush = () => { timer = null; setRawOrders(latest); setLoaded(true); };
+    const unsub = listenOrders(db, (all, n) => {
+      latest = all; setPackCount(n);
       if (first) { first = false; flush(); } else if (!timer) timer = setTimeout(flush, 2000);
-    }, e => { console.warn("salesOrders read error", e); setLoaded(true); });
+    }, e => { console.warn("salesPacks read error", e); setLoaded(true); });
     return () => { unsub(); clearTimeout(timer); };
   }, [db]);
+  // First run after this change: an admin's browser copies the existing orders into the packs once
+  const packing = useRef(false);
+  useEffect(() => {
+    if (packCount !== 0 || !isAdmin || packing.current || !stored) return;
+    packing.current = true;
+    setSync({ stage: "Organising orders (one-time)…", done: 0, total: 0 });
+    buildPacks(db).then(n => setSyncMsg({ ok: true, text: `Orders reorganised for faster loading (${n} orders).` }))
+      .catch(e => setSyncMsg({ ok: false, text: "Couldn't reorganise orders: " + e.message }))
+      .finally(() => setSync(null));
+  }, [packCount, isAdmin, stored, db]);
   useEffect(() => onSnapshot(doc(db, "config", "salesSettings"), s => setStored(s.exists() ? s.data() : {}), () => setStored({})), [db]);
   useEffect(() => onSnapshot(doc(db, "config", "salesSyncSeen"), s => setSeen(s.exists() ? (s.data().files || {}) : {})), [db]);
   const [issues, setIssues] = useState({});
@@ -490,8 +502,8 @@ function OrderTable({ T, db, orders, opts, openAccount, compact, editable, setti
 
 function OrderDetail({ T, db, o, editable }) {
   const [ov, setOv] = useState({ customer: o.override?.customer || "", currency: o.override?.currency || "", total: o.override?.total ?? "", date: o.override?.date || "" });
-  const save = () => setDoc(doc(db, "salesOrders", o.orderNo), { override: { customer: ov.customer.trim(), currency: ov.currency, total: ov.total === "" ? "" : Number(ov.total), date: ov.date || "" } }, { merge: true });
-  const remove = () => { if (confirm(`Remove ${o.orderNo} from Sales Summary? (It will come back on the next sync if the PDF is still in Dropbox and is changed.)`)) deleteDoc(doc(db, "salesOrders", o.orderNo)); };
+  const save = () => writeOrder(db, o.orderNo, { override: { customer: ov.customer.trim(), currency: ov.currency, total: ov.total === "" ? "" : Number(ov.total), date: ov.date || "" } });
+  const remove = () => { if (confirm(`Remove ${o.orderNo} from Sales Summary? (It will come back on the next sync if the PDF is still in Dropbox and is changed.)`)) removeOrder(db, o.orderNo); };
   return (
     <div style={{ display: "flex", gap: 24, flexWrap: "wrap", fontSize: 12 }}>
       <div style={{ flex: "2 1 420px" }}>
@@ -499,7 +511,8 @@ function OrderDetail({ T, db, o, editable }) {
           <thead><tr><th>SKU</th><th>Description</th><th style={{ textAlign: "right" }}>Qty</th><th style={{ textAlign: "right" }}>Price</th><th style={{ textAlign: "right" }}>Amount</th></tr></thead>
           <tbody>
             {(o.lines || []).map((l, i) => <tr key={i}><td>{l.sku}</td><td>{l.desc}</td><td style={{ textAlign: "right" }}>{fmtQty(l.qty)}</td><td style={{ textAlign: "right" }}>{o.hasPricing ? fmtMoney(l.price, 2) : "—"}</td><td style={{ textAlign: "right" }}>{o.hasPricing ? fmtMoney(l.amount, 2) : "—"}</td></tr>)}
-            {(o.charges || []).map((c, i) => <tr key={"c" + i}><td></td><td style={{ color: T.subtext }}>{c.label}</td><td></td><td></td><td style={{ textAlign: "right" }}>{fmtMoney(c.amount, 2)}</td></tr>)}
+            {(o.charges || []).map((c, i) => <tr key={"c" + i}><td></td><td style={{ color: T.subtext }}>{c.label}{c.note && <span style={{ color: T.tableHeadText, fontSize: 10 }}> · {c.note}</span>}</td><td></td><td></td><td style={{ textAlign: "right" }}>{fmtMoney(c.amount, 2)}</td></tr>)}
+            {(o.taxes || []).map((c, i) => <tr key={"t" + i}><td></td><td style={{ color: T.tableHeadText }}>{c.label} <span style={{ fontSize: 10 }}>(tax — not counted in sales)</span></td><td></td><td></td><td style={{ textAlign: "right", color: T.tableHeadText }}>{fmtMoney(c.amount, 2)}</td></tr>)}
             {o.hasPricing && <tr><td></td><td style={{ fontWeight: 600 }}>Total before tax</td><td></td><td></td><td style={{ textAlign: "right", fontWeight: 600 }}>{fmtMoney(o.total, 2)} {orderCurrency(o)}</td></tr>}
           </tbody>
         </table>

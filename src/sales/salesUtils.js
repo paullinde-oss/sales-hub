@@ -1,5 +1,6 @@
 // ─── Sales Summary: dates, money, grouping, quote matching ──────────────────
 import { normName, matchAccount, customerOf } from "./accounts";
+import { cleanOrder } from "./ocParser";
 
 // ── Dates (all order dates are "YYYY-MM-DD" strings in local time) ─────────
 export const pad = n => String(n).padStart(2, "0");
@@ -85,6 +86,7 @@ export function enrichOrders(orders, settings) {
   orders.forEach(o => (o.lines || []).forEach(l => { if (l.sku && l.desc && !/^[\d,.]+$/.test(l.sku)) skuByDesc.set(l.desc.trim().toLowerCase(), l.sku); }));
   const fixLines = lines => (lines || []).map(l => (!l.sku || /^[\d,.]+$/.test(l.sku)) && skuByDesc.has((l.desc || "").trim().toLowerCase()) ? { ...l, sku: skuByDesc.get(l.desc.trim().toLowerCase()) } : l);
   return orders
+    .map(cleanOrder) // freight/tax/fees typed in as line items on older OCs
     .map(o => ({ ...o, lines: fixLines(o.lines), date: o.override?.date || o.date || "", cust: customerOf(o, accounts, aliases, custTypes) }))
     .filter(o => /^20\d\d-\d\d-\d\d$/.test(o.date));
 }

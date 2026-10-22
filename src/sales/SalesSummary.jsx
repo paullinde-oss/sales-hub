@@ -321,7 +321,6 @@ function Breakdown({ T, orders, opts, mode, weekStart, refDate, openAccount }) {
                 style={{ display: "grid", gridTemplateColumns: "minmax(140px, 260px) 1fr 110px 70px", gap: 10, alignItems: "center", fontSize: 12, cursor: clickable ? "pointer" : "default", padding: "2px 0" }}>
                 <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T.text }}>
                   {r.label}{r.desc && by === "product" ? <span style={{ color: T.tableHeadText }}> · {r.desc}</span> : null}
-                  {by === "customer" && <span style={{ color: T.tableHeadText, fontSize: 10 }}> · {r.rep}</span>}
                 </div>
                 <div style={{ background: T.border, height: 10, borderRadius: 2 }}><div style={{ width: `${(v / max) * 100}%`, height: 10, background: T.gold, borderRadius: "0 4px 4px 0" }} /></div>
                 <div style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", color: T.text }}>{fmtMoney(v)}</div>
@@ -694,7 +693,7 @@ function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMo
             <select value="" onChange={e => assignTo(e.target.value)} style={{ height: 26, fontSize: 11 }}>
               <option value="">Assign to an account…</option>
               <option value="__new">+ Make this its own account</option>
-              {settings.accounts.map(a => <option key={a.name} value={a.name}>{a.name} ({a.rep})</option>)}
+              {[...settings.accounts].sort((x, y) => x.name.localeCompare(y.name)).map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
             </select>
           )}
         </>}

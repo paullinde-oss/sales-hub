@@ -61,7 +61,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
   const scrollRef = useRef(null);
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0; }, [view, accountKey]);
 
-  // Orders are read from 16 combined "pack" documents (see orderStore.js) — far fewer
+  // Orders are read from 48 combined "pack" documents (see orderStore.js) — far fewer
   // database reads than one per order. Redraws are batched to every 2s during a sync.
   const [packCount, setPackCount] = useState(null);
   useEffect(() => {
@@ -70,7 +70,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
     const unsub = listenOrders(db, (all, n) => {
       latest = all; setPackCount(n);
       if (first) { first = false; flush(); } else if (!timer) timer = setTimeout(flush, 2000);
-    }, e => { console.warn("salesPacks read error", e); setLoaded(true); });
+    }, e => { console.warn("orderPacks read error", e); setLoaded(true); });
     return () => { unsub(); clearTimeout(timer); };
   }, [db]);
   // First run after this change: an admin's browser copies the existing orders into the packs once

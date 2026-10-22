@@ -57,10 +57,17 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
   const scrollRef = useRef(null);
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0; }, [view, accountKey]);
 
-  useEffect(() => onSnapshot(collection(db, "salesOrders"), s => {
-    setRawOrders(s.docs.map(d => ({ ...d.data(), orderNo: d.id })));
-    setLoaded(true);
-  }, e => { console.warn("salesOrders read error", e); setLoaded(true); }), [db]);
+  // During a big sync every saved order fires this listener; redrawing hundreds of
+  // orders each time made the whole page sluggish, so updates are batched to every 2s.
+  useEffect(() => {
+    let timer = null, latest = null, first = true;
+    const flush = () => { timer = null; setRawOrders(latest.docs.map(d => ({ ...d.data(), orderNo: d.id }))); setLoaded(true); };
+    const unsub = onSnapshot(collection(db, "salesOrders"), s => {
+      latest = s;
+      if (first) { first = false; flush(); } else if (!timer) timer = setTimeout(flush, 2000);
+    }, e => { console.warn("salesOrders read error", e); setLoaded(true); });
+    return () => { unsub(); clearTimeout(timer); };
+  }, [db]);
   useEffect(() => onSnapshot(doc(db, "config", "salesSettings"), s => setStored(s.exists() ? s.data() : {}), () => setStored({})), [db]);
   useEffect(() => onSnapshot(doc(db, "config", "salesSyncSeen"), s => setSeen(s.exists() ? (s.data().files || {}) : {})), [db]);
 
@@ -77,8 +84,10 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
     setSync({ stage: "Starting…", done: 0, total: 0 });
     try {
       const existing = Object.fromEntries(rawOrders.map(o => [o.orderNo, o]));
-      const r = await syncOrders({ db, folders: settings.folders, since: settings.since, seen, existing, loginName, onProgress: setSync });
-      if (Object.keys(r.seen).length) await setDoc(doc(db, "config", "salesSyncSeen"), { files: r.seen }, { merge: true });
+      // Record finished files every 25 so an interrupted sync (tab closed, laptop asleep) picks up where it left off
+      const saveSeen = batch => setDoc(doc(db, "config", "salesSyncSeen"), { files: batch }, { merge: true });
+      const r = await syncOrders({ db, folders: settings.folders, since: settings.since, seen, existing, loginName, onProgress: setSync, onSeen: saveSeen });
+      if (Object.keys(r.seen).length) await saveSeen(r.seen);
       let logoNote = "";
       try {
         const lr = await syncLogos({ db, folder: settings.logoFolder, accounts: settings.accounts, aliases: settings.aliases, customerKeys: [...new Set(orders.map(o => o.cust.key))], logos, onProgress: setSync });

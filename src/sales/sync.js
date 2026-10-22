@@ -31,7 +31,7 @@ function obviouslyTooOld(file, since) {
  *   existing — { orderNo: order } currently in Firestore
  * Returns { added, updated, skipped, errors: [{file, error}], seen }
  */
-export async function syncOrders({ db, folders, since, seen = {}, existing = {}, loginName, onProgress = () => {} }) {
+export async function syncOrders({ db, folders, since, seen = {}, existing = {}, loginName, onProgress = () => {}, onSeen = null }) {
   onProgress({ stage: "Listing Dropbox folders…", done: 0, total: 0 });
   // A missing folder shouldn't stop the others from syncing — report it and carry on
   let files = [];
@@ -54,7 +54,7 @@ export async function syncOrders({ db, folders, since, seen = {}, existing = {},
 
   const pdfjs = await loadPdfjs();
   const formats = Object.fromEntries(Object.entries(existing).map(([k, o]) => [k, o.format]));
-  let done = 0;
+  let done = 0, pending = {};
   const worker = async () => {
     while (todo.length) {
       const file = todo.shift();
@@ -75,6 +75,8 @@ export async function syncOrders({ db, folders, since, seen = {}, existing = {},
           isNew ? res.added++ : res.updated++;
         }
         res.seen[file.id] = file.rev;
+        pending[file.id] = file.rev;
+        if (onSeen && Object.keys(pending).length >= 25) { const b = pending; pending = {}; await onSeen(b).catch(() => {}); }
       } catch (e) {
         res.errors.push({ file: file.path, error: String(e.message || e) });
       }

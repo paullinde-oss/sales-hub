@@ -1287,7 +1287,7 @@ function findGaps(rawOrders, issues, settings, listing) {
         out.push({
           no, between: `${a.orderNo} (${fmtShort(a.date || "")}) – ${b.orderNo} (${fmtShort(b.date || "")})`,
           reason: iss ? iss.reason
-            : named ? "There's a PDF with this number but it wasn't read yet — click Retry problem PDFs, then Refresh"
+            : named ? `PDF found${named !== "?" ? ` (dated ${fmtDate(named)})` : ""} but not synced yet — click ↻ Refresh. If it's still here after a Refresh, click Retry problem PDFs.`
             : listing ? "No PDF with this number in the Dropbox folders (not saved yet, misnamed, or in another folder)"
             : "Not found — click Refresh so the hub can check the folders",
           file: iss?.path || "",

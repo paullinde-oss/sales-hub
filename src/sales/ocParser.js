@@ -279,29 +279,46 @@ const FREIGHT_SKU_RE = /^(?:frt|freight|shipping|4420-0005)\b/i;
 const FREIGHT_DESC_RE = /^(?:\(4420-0005\)\s*)?(?:freight|shipping|flat deck freight|extra shipping)\b/i;
 const FEE_RE = /processing\/service fee|^expidited service|^expedited service|import duty recovery/i;
 const NO_SKU = s => !s || /^(?:#n\/a|custom|misc|-|admin|exp|drl)$/i.test(s);
-export function lineKind(l) {
+// Blank lines (no part number, no description) on specific OCs, as confirmed by Paul
+const BLANK_LINE_KIND = { BRO10480: "tax", BRO10881: "freight" };
+// Fees grouped under one name each so they can be tracked
+const FEE_GROUPS = [
+  [/processing\/service fee|processing fee|service fee/i, "Processing Fee"],
+  [/exp[ie]dited service/i, "Expedited Service"],
+  [/import duty recovery/i, "Import Duty Recovery"],
+];
+export const feeGroup = label => (FEE_GROUPS.find(([re]) => re.test(label || "")) || [null, label || "Fee"])[1];
+export function lineKind(l, orderNo) {
   const sku = String(l.sku || "").trim(), desc = String(l.desc || "").trim();
+  if (!sku && !desc && BLANK_LINE_KIND[orderNo]) return BLANK_LINE_KIND[orderNo];
+  if (NO_SKU(sku) && /\bcredit applied\b/i.test(desc)) return "credit";
   if (TAX_RE.test(sku) || ((NO_SKU(sku) || TAX_RE.test(sku)) && TAX_RE.test(desc))) return "tax";
   if (FREIGHT_SKU_RE.test(sku) || (NO_SKU(sku) && FREIGHT_DESC_RE.test(desc))) return "freight";
   if (FEE_RE.test(desc) || /^admin$/i.test(sku)) return "fee";
   return "product";
 }
 export function cleanOrder(o) {
-  const lines = o.lines || [];
-  const kinds = lines.map(lineKind);
+  // Labels / Label Fees are charged for, so they stay as a product — all grouped as one "LABELS" item
+  const lines = (o.lines || []).map(l => (NO_SKU(String(l.sku || "").trim()) && /\blabels?\b/i.test(l.desc || "") && l.sku !== "LABELS")
+    ? { ...l, sku: "LABELS", desc: "Labels / Label Fees", note: l.desc } : l);
+  const relabelled = lines.some((l, i) => l !== (o.lines || [])[i]);
+  const kinds = lines.map(l => lineKind(l, o.orderNo));
   const r2 = n => Math.round((n || 0) * 100) / 100;
   const isFreight = c => c.kind === "freight" || (!c.kind && /freight|shipping|delivery|^frt\b/i.test(c.label || ""));
   // FRT, "Shipping to …", "Freight to Delivery Address"… are all just "Freight" (original wording kept as a note)
   const asFreight = c => (c.label === "Freight" && c.kind === "freight" ? c : { ...c, label: "Freight", kind: "freight", note: c.note || (c.label !== "Freight" ? c.label : "") });
-  const already = (o.charges || []).map(c => (isFreight(c) ? asFreight(c) : c));
-  if (!kinds.some(k => k !== "product") && JSON.stringify(already) === JSON.stringify(o.charges || [])) return o;
+  const asFee = c => ({ ...c, label: feeGroup(c.note || c.label), kind: "fee", note: c.note || (feeGroup(c.label) !== c.label ? c.label : "") });
+  const already = (o.charges || []).map(c => (isFreight(c) ? asFreight(c) : c.kind === "fee" ? asFee(c) : c));
+  if (!relabelled && !kinds.some(k => k !== "product") && JSON.stringify(already) === JSON.stringify(o.charges || [])) return o;
   const sumAll = lines.reduce((s, l) => s + (l.amount || 0), 0) + (o.charges || []).reduce((s, c) => s + (c.amount || 0), 0);
   const totalFromLines = o.total != null && Math.abs(o.total - sumAll) < 0.06; // the total was just the lines added up
   const moved = lines.map((l, i) => ({ l, k: kinds[i] })).filter(x => x.k !== "product");
   const taxes = [...(o.taxes || []), ...moved.filter(x => x.k === "tax").map(x => ({ label: x.l.desc || x.l.sku, amount: x.l.amount || 0 }))];
   const charges = [...already, ...moved.filter(x => x.k !== "tax").map(x => x.k === "freight"
     ? asFreight({ label: x.l.desc || x.l.sku || "Freight", amount: x.l.amount || 0 })
-    : { label: x.l.desc || x.l.sku || "Fee", amount: x.l.amount || 0, kind: "fee" })];
+    : x.k === "credit"
+    ? { label: "Credit applied", amount: -Math.abs(x.l.amount || 0), kind: "credit", note: x.l.desc } // credits reduce the order
+    : asFee({ label: x.l.desc || x.l.sku || "Fee", amount: x.l.amount || 0, kind: "fee" }))];
   const products = lines.filter((_, i) => kinds[i] === "product");
   const productTotal = r2(products.reduce((s, l) => s + (l.amount || 0), 0));
   const freight = r2(charges.filter(isFreight).reduce((s, c) => s + (c.amount || 0), 0));

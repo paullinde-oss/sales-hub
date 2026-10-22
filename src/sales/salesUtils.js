@@ -126,6 +126,8 @@ export function groupBy(orders, by, opts) {
     if (by === "product") {
       for (const l of o.lines || []) add(l.sku || l.desc, l.sku || "(no SKU)", { desc: l.desc }, l.amount || 0, cur, l.qty, o.orderNo);
       if (opts.includeFreight && o.freight) add("__freight", "Freight", { desc: "Freight charged on OCs" }, o.freight, cur, 0, o.orderNo);
+      // Fees (processing, expedited, import duty…) tracked as their own rows; credits shown so totals add up
+      for (const c of o.charges || []) if (c.kind === "fee" || c.kind === "credit") add("__" + c.kind + ":" + c.label, c.label, { desc: c.kind === "fee" ? "Fee" : "Credit" }, c.amount || 0, cur, 0, o.orderNo);
       continue;
     }
     const amt = orderAmount(o, opts.includeFreight);

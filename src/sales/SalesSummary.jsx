@@ -677,6 +677,9 @@ function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMo
   const allMine = orders.filter(o => o.cust.key === accountKey);
   const mine = allMine.filter(o => currencyMode === "combined" || orderCurrency(o) === currencyMode);
   const name = acct?.name || mine[0]?.cust.name || accountKey;
+  // This customer was just assigned to (or made into) an account: show that account instead
+  const movedTo = !acct ? settings.aliases?.[accountKey] : null;
+  useEffect(() => { if (movedTo && settings.accounts.some(a => a.name === movedTo)) openAccount(movedTo); }, [movedTo, settings.accounts]);
   const fys = [...new Set([fyOf(today()), ...mine.map(o => fyOf(o.date))])].sort((a, b) => b - a);
   const [fy, setFy] = useState(fyOf(today()));
   const [cmpFull, setCmpFull] = useState(false);
@@ -702,12 +705,8 @@ function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMo
   const setType = t => acct ? setAcct({ type: t }) : saveSettings({ custTypes: { ...(settings.custTypes || {}), [accountKey]: t } });
   const assignTo = target => {
     if (!target) return;
-    if (target === "__new") {
-      const rep = prompt(`Create a new account "${name}". Which rep owns it? (${REPS.join(", ")})`, "Unassigned");
-      if (rep == null) return;
-      saveSettings({ accounts: [...settings.accounts, { name, rep: REPS.find(r => r.toLowerCase() === rep.trim().toLowerCase()) || "Unassigned", type: custType, terms: [] }], aliases: { ...settings.aliases, ...Object.fromEntries(raws.map(r => [normName(r).trim(), name])) } });
-      return;
-    }
+    // Opens the "Create account" form (name, holder, type); saving it switches to the new account
+    if (target === "__new") { startEdit(); return; }
     saveSettings({ aliases: { ...settings.aliases, ...Object.fromEntries(raws.map(r => [normName(r).trim(), target])) } });
     openAccount(target);
   };

@@ -1083,6 +1083,18 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
   const [dirty, setDirty] = useState(false);
   const [logoFolder, setLogoFolder] = useState(settings.logoFolder || "");
   const [picker, setPicker] = useState(null); // "oc" | "logo" while the folder browser is open
+  const [logoRun, setLogoRun] = useState(null); // { busy, text, unmatched }
+  const runLogos = async () => {
+    setLogoRun({ busy: true, text: "Reading the logo folder…" });
+    try {
+      const r = await syncLogos({ db, folder: logoFolder.trim() || settings.logoFolder, accounts: settings.accounts, aliases: settings.aliases,
+        customerKeys: [...new Set(orders.map(o => o.cust.key))], logos,
+        onProgress: p => setLogoRun({ busy: true, text: `Reading logos… ${p.done}/${p.total}` }) });
+      setLogoRun({ busy: false, text: `${r.added} logo${r.added === 1 ? "" : "s"} added, ${r.skipped} already up to date${r.unmatched.length ? `, ${r.unmatched.length} file${r.unmatched.length === 1 ? "" : "s"} didn't match a customer` : ""}.`, unmatched: r.unmatched });
+    } catch (e) {
+      setLogoRun({ busy: false, text: /not_found/.test(e.message) ? "Logo folder not found — use 📁 Browse to pick it." : "Couldn't read the logo folder: " + String(e.message).slice(0, 160) });
+    }
+  };
   useEffect(() => { if (!dirty) setAccts(withOrig(settings.accounts)); }, [settings.accounts, dirty]);
 
   const unmatched = useMemo(() => {
@@ -1122,7 +1134,13 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
             <div style={{ display: "flex", gap: 6 }}>
               <input value={logoFolder} onChange={e => setLogoFolder(e.target.value)} style={{ flex: 1, height: 28, fontSize: 12 }} />
               {connected && <button className="btn" onClick={() => setPicker("logo")}>📁 Browse…</button>}
-            </div></div>
+              {connected && <button className="btn" disabled={logoRun?.busy} onClick={runLogos}>Sync logos now</button>}
+            </div>
+            {logoRun && <div style={{ fontSize: 11, color: T.subtext, marginTop: 6, lineHeight: 1.5 }}>
+              {logoRun.text}
+              {logoRun.unmatched?.length > 0 && <details style={{ marginTop: 2 }}><summary style={{ cursor: "pointer" }}>Files that didn't match — rename the file to the customer's account name, or upload the logo on the customer's page</summary>
+                <div style={{ color: T.tableHeadText }}>{logoRun.unmatched.join(" · ")}</div></details>}
+            </div>}</div>
           <div><div style={lbl}>Read orders dated on or after</div>
             <input type="date" value={since} onChange={e => setSince(e.target.value)} style={{ height: 28, fontSize: 12 }} />
             <div style={{ fontSize: 10, color: T.tableHeadText, marginTop: 4 }}>Dec 1, 2025 = start of FY2026</div></div>

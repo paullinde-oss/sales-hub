@@ -34,7 +34,7 @@ export const DEFAULT_ACCOUNTS = [
   A("Cross Country", "Paul", ["cross country"]),
   A("Terrafix", "Paul", ["terrafix"]),
   A("Iconix", "Paul", ["iconix"]),
-  A("Greg/GDL", "Paul", ["gdl", "greg"]),
+  A("Greg/GDL", "Paul", ["gdl", "gdl logistix", "greg", "gregg", "gregg distributors"]),
   A("Geo Mods", "Paul", ["geo mods", "geomods"]),
   A("Assured First Aid", "Paul", ["assured first aid", "assured"]),
   A("Beaver Plastics", "Paul", ["beaver plastics"]),

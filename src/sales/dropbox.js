@@ -95,7 +95,9 @@ async function rpc(endpoint, body, useRoot = true) {
 }
 
 // Recursively list every PDF under a folder. Tries the team root first, then the personal home.
-export async function listPdfs(folderPath) {
+export const listPdfs = folderPath => listFiles(folderPath, /\.pdf$/i);
+
+export async function listFiles(folderPath, nameRe) {
   const path = folderPath.replace(/\\/g, "/").replace(/\/+$/, "");
   let first, useRoot = true;
   try { first = await rpc("files/list_folder", { path, recursive: true, limit: 2000 }, true); }
@@ -108,7 +110,7 @@ export async function listPdfs(folderPath) {
   let cur = first;
   while (cur.has_more) { cur = await rpc("files/list_folder/continue", { cursor: cur.cursor }, useRoot); out.push(...cur.entries); }
   return out
-    .filter(e => e[".tag"] === "file" && /\.pdf$/i.test(e.name))
+    .filter(e => e[".tag"] === "file" && nameRe.test(e.name))
     .map(e => ({ id: e.id, rev: e.rev, name: e.name, path: e.path_display, modified: e.server_modified, useRoot }));
 }
 

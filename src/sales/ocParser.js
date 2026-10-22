@@ -11,6 +11,7 @@ const money = s => {
   return isNaN(n) ? null : n;
 };
 const isMoney = s => /^\(?-?\$?\s*-?[\d,]+\.\d{2}\)?$/.test(String(s).trim());
+const CHARGE_RE = /freight|shipping|delivery|fuel|surcharge|discount|handling|restock/i;
 const isInt = s => /^-?[\d,]+(\.\d+)?$/.test(String(s).trim());
 
 // "October 14, 2026" / "Friday, October 9, 2026" → "2026-10-14"
@@ -71,13 +72,14 @@ function parseOCLayout(rows) {
     orderNo: orderNoFrom(valueAfter(rows, /^BOL No\.?/i)),
     date: parseLongDate(valueAfter(rows, /^Date of Order:?/i)),
     po: valueAfter(rows, /^Purchase Order #:?/i),
-    pallets: parseInt(valueAfter(rows, /^Total Pallets:?/i)) || null,
+    pallets: parseInt(valueAfter(rows, /^Total Pallets:?/i)) || parseInt(valueAfter(rows, /^Number of Packages:?/i)) || null,
     freightTerms: valueAfter(rows, /^Freight Terms:?/i),
     customer: valueAfter(rows, /^Sold To:?/i),
     shipTo: valueAfter(rows, /^Ship To:?/i),
     lines: [], charges: [], total: null, hasPricing: true,
   };
   const hi = rows.findIndex(r => /Description/i.test(r.text) && /Part No/i.test(r.text) && /Amount/i.test(r.text));
+  // "Total Pallets" on Brooks OCs, "Number of Packages" on Calgary OCs
   const header = hi >= 0 ? rows[hi] : null;
   const colX = name => { const it = header?.items.find(i => new RegExp(name, "i").test(i.str)); return it ? it.x : null; };
   const partX = colX("^Part"), qtyX = colX("^Qty");
@@ -91,10 +93,12 @@ function parseOCLayout(rows) {
       continue;
     }
     // Charge rows: "(4420-0005) Freight to Delivery Address:  $  1,090.00"
-    const labelIdx = cells.findIndex(c => /:\s*$/.test(c));
-    if (labelIdx >= 0 && cells.slice(labelIdx + 1).some(isMoney)) {
+    //              "Freight to Ship To Address  $  -"   (Calgary OCs; "-" = nothing charged)
+    const labelIdx = cells.findIndex(c => /:\s*$/.test(c) || CHARGE_RE.test(c));
+    const after = labelIdx >= 0 ? cells.slice(labelIdx + 1) : [];
+    if (labelIdx >= 0 && cells.filter(isMoney).length < 2 && (after.some(isMoney) || after.some(c => /^-$/.test(c.trim())) || r.items.some(c => c.str === "$"))) {
       const label = cells[labelIdx].replace(/^\([\d-]+\)\s*/, "").replace(/:\s*$/, "").trim();
-      const amt = money(cells.slice(labelIdx + 1).filter(isMoney).pop());
+      const amt = after.some(isMoney) ? money(after.filter(isMoney).pop()) : 0;
       o.charges.push({ label, amount: amt });
       continue;
     }
@@ -198,6 +202,9 @@ export async function parseOrderPdf(pdfjsLib, data, fileName = "") {
   o.location = o.orderNo.slice(0, 3);
   const addr = parseAddress(o.shipTo);
   o.city = addr.city; o.region = addr.region; o.country = addr.country;
+  if (!o.city && /pick\s*-?\s*up/i.test(o.shipTo)) { // "Customer Pickup - Calgary Branch"
+    o.city = o.location === "BRO" ? "Brooks (pickup)" : "Calgary (pickup)"; o.region = "AB"; o.country = "CA";
+  }
   o.currency = addr.country === "US" ? "USD" : "CAD";
   o.productTotal = round2(o.lines.reduce((s, l) => s + (l.amount || 0), 0));
   o.freight = round2(o.charges.filter(c => /freight|shipping|delivery/i.test(c.label)).reduce((s, c) => s + (c.amount || 0), 0));

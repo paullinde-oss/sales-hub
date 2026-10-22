@@ -6,7 +6,8 @@ import { collection, doc, onSnapshot, setDoc, deleteDoc, deleteField } from "fir
 import { DEFAULT_ACCOUNTS, REPS, normName } from "./accounts";
 import { isDropboxConnected, startDropboxAuth, disconnectDropbox, redirectUri } from "./dropbox";
 import { syncOrders } from "./sync";
-import { PASSWORD_ADMIN, setPassword } from "./auth";
+import { useLogos, syncLogos, resizeImage, saveLogo, removeLogo } from "./logos";
+import { yearCompare, openYearEndReport } from "./yearEndReport";
 import {
   today, mondayOf, addDays, monthStart, monthEnd, fyOf, fyStart, fyEnd, daysBetween, parseYmd,
   fmtDate, fmtShort, fmtMonth, weekdayName, presetRange, PRESETS,
@@ -24,6 +25,7 @@ const DEFAULT_SETTINGS = {
     "/Brooks Division/Brooks BOL/Brooks Order Confirmations",
     "/Calgary BOL/Calgary Order Confirmations",
   ],
+  logoFolder: "/Documents/Marketing/Customer Logos",
   quoteLinks: {},
   dismissedMatches: {},
   lastSync: null,
@@ -34,7 +36,12 @@ const VIEWS = [
   ["reports", "Reports"], ["quotes", "Quote Matches"], ["settings", "Settings"],
 ];
 
-export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginName }) {
+export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginName, user, bmpLogo }) {
+  // "own" scope (e.g. John) only sees accounts where they're the rep; admins also get Settings
+  const ownOnly = user?.salesScope === "own";
+  const isAdmin = !!user?.admin;
+  const canSync = !ownOnly;
+  const logos = useLogos(db);
   const [rawOrders, setRawOrders] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [stored, setStored] = useState(null);
@@ -47,6 +54,8 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
   const [currencyMode, setCurrencyMode] = useState("combined");
   const [includeFreight, setIncludeFreight] = useState(true);
   const autoTried = useRef(false);
+  const scrollRef = useRef(null);
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0; }, [view, accountKey]);
 
   useEffect(() => onSnapshot(collection(db, "salesOrders"), s => {
     setRawOrders(s.docs.map(d => ({ ...d.data(), orderNo: d.id })));
@@ -57,7 +66,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
 
   const settings = useMemo(() => ({ ...DEFAULT_SETTINGS, ...(stored || {}) }), [stored]);
   const saveSettings = useCallback(patch => setDoc(doc(db, "config", "salesSettings"), patch, { merge: true }).catch(e => alert("Couldn't save settings: " + e.message)), [db]);
-  const orders = useMemo(() => enrichOrders(rawOrders, settings).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.orderNo < b.orderNo ? 1 : -1)), [rawOrders, settings]);
+  const orders = useMemo(() => enrichOrders(rawOrders, settings).filter(o => !ownOnly || o.cust.rep === loginName).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.orderNo < b.orderNo ? 1 : -1)), [rawOrders, settings, ownOnly, loginName]);
   const opts = useMemo(() => ({ includeFreight, usdToCad: Number(settings.usdToCad) || 1.37, mode: currencyMode }), [includeFreight, settings.usdToCad, currencyMode]);
   const matches = useMemo(() => findQuoteMatches(orders, quotes, settings), [orders, quotes, settings]);
 
@@ -70,33 +79,39 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
       const existing = Object.fromEntries(rawOrders.map(o => [o.orderNo, o]));
       const r = await syncOrders({ db, folders: settings.folders, since: settings.since, seen, existing, loginName, onProgress: setSync });
       if (Object.keys(r.seen).length) await setDoc(doc(db, "config", "salesSyncSeen"), { files: r.seen }, { merge: true });
+      let logoNote = "";
+      try {
+        const lr = await syncLogos({ db, folder: settings.logoFolder, accounts: settings.accounts, aliases: settings.aliases, customerKeys: [...new Set(orders.map(o => o.cust.key))], logos, onProgress: setSync });
+        if (lr.added) logoNote = ` ${lr.added} customer logo${lr.added > 1 ? "s" : ""} added.`;
+      } catch (e) { logoNote = ` (Couldn't read the logo folder: ${String(e.message).slice(0, 120)})`; }
       const lastSync = { at: new Date().toISOString(), by: loginName || "", added: r.added, updated: r.updated, errors: r.errors.length, scanned: r.scanned };
       await saveSettings({ lastSync });
-      setSyncMsg({ ok: !r.errors.length, text: `Synced ${r.scanned} PDFs — ${r.added} new, ${r.updated} updated${r.errors.length ? `, ${r.errors.length} couldn't be read` : ""}.`, errors: r.errors });
+      setSyncMsg({ ok: !r.errors.length, text: `Synced ${r.scanned} PDFs — ${r.added} new, ${r.updated} updated${r.errors.length ? `, ${r.errors.length} couldn't be read` : ""}.${logoNote}`, errors: r.errors });
     } catch (e) {
       setConnected(isDropboxConnected());
       setSyncMsg({ ok: false, text: String(e.message || e) });
     }
     setSync(null);
-  }, [sync, rawOrders, settings, seen, db, loginName, saveSettings]);
+  }, [sync, rawOrders, orders, logos, settings, seen, db, loginName, saveSettings]);
 
   // Auto-sync once a day-ish for whoever has Dropbox connected
   useEffect(() => {
-    if (autoTried.current || !stored || !connected) return;
+    if (autoTried.current || !stored || !connected || !canSync) return;
     autoTried.current = true;
     const last = stored.lastSync?.at ? new Date(stored.lastSync.at) : null;
     if (!last || Date.now() - last > AUTO_SYNC_HOURS * 3600e3) runSync(true);
   }, [stored, connected, runSync]);
 
   const openAccount = key => { setAccountKey(key); setView("accounts"); };
-  const ctx = { T, db, orders, settings, saveSettings, opts, currencyMode, openAccount, loginName };
+  const ctx = { T, db, orders, settings, saveSettings, opts, currencyMode, openAccount, loginName, logos, bmpLogo, ownOnly };
+  const views = VIEWS.filter(([id]) => id !== "settings" || isAdmin);
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: T.bg }}>
       {/* Top bar */}
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderBottom: `1px solid ${T.border}`, background: T.panelBg, flexWrap: "wrap" }}>
         <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: ".06em", marginRight: 12, color: T.text }}>SALES SUMMARY</div>
-        {VIEWS.map(([id, label]) => (
+        {views.map(([id, label]) => (
           <button key={id} onClick={() => { setView(id); if (id === "accounts") setAccountKey(null); }}
             style={{ background: view === id ? T.activeBg : "transparent", border: `1px solid ${view === id ? T.borderLight : "transparent"}`, color: view === id ? T.gold : T.subtext, padding: "5px 11px", fontSize: 11, borderRadius: 2, letterSpacing: ".03em" }}>
             {label}{id === "quotes" && matches.length ? <span style={{ marginLeft: 6, background: T.gold, color: "#0a0a0a", borderRadius: 8, padding: "0 6px", fontSize: 9, fontWeight: 700 }}>{matches.length}</span> : null}
@@ -111,13 +126,14 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
         <label style={{ fontSize: 11, color: T.subtext, display: "flex", alignItems: "center", gap: 4 }}>
           <input type="checkbox" checked={includeFreight} onChange={e => setIncludeFreight(e.target.checked)} /> Include freight
         </label>
+        {ownOnly && <span style={{ fontSize: 10, color: T.tableHeadText }}>Showing your accounts only</span>}
         <div style={{ fontSize: 10, color: T.tableHeadText, textAlign: "right", lineHeight: 1.3, minWidth: 120 }}>
           {sync ? <span style={{ color: T.gold }}>{sync.stage}{sync.total ? ` ${sync.done}/${sync.total}` : ""}</span>
             : settings.lastSync ? <>Last synced {timeAgo(settings.lastSync.at)}<br />by {settings.lastSync.by || "—"}</> : "Never synced"}
         </div>
-        <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} disabled={!!sync} onClick={() => runSync(false)}>
+        {canSync && <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} disabled={!!sync} onClick={() => runSync(false)}>
           {sync ? "Syncing…" : connected ? "↻ Refresh" : "Connect Dropbox"}
-        </button>
+        </button>}
       </div>
       {sync && sync.total > 0 && (
         <div style={{ height: 3, background: T.border }}><div style={{ height: 3, width: `${(sync.done / sync.total) * 100}%`, background: T.gold, transition: "width .2s" }} /></div>
@@ -133,13 +149,13 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
         </div>
       )}
 
-      <div style={{ flex: 1, overflow: "auto", padding: 16 }}>
+      <div ref={scrollRef} style={{ flex: 1, overflow: "auto", padding: 16 }}>
         {!loaded || !stored ? <Empty T={T}>Loading sales data…</Empty>
           : !orders.length && view !== "settings" ? (
             <Empty T={T}>
               <div style={{ fontSize: 14, color: T.text, marginBottom: 8 }}>No order confirmations yet</div>
               <div style={{ marginBottom: 14 }}>{connected ? "Click Refresh to read your order confirmations from Dropbox." : "Connect Dropbox to pull in your order confirmations. You only need to do this once per computer."}</div>
-              <button className="btn-gold" onClick={() => runSync(false)}>{connected ? "↻ Refresh now" : "Connect Dropbox"}</button>
+              {canSync && <button className="btn-gold" onClick={() => runSync(false)}>{connected ? "↻ Refresh now" : "Connect Dropbox"}</button>}
             </Empty>
           )
           : view === "dashboard" ? <Dashboard {...ctx} />
@@ -147,7 +163,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
           : view === "accounts" ? (accountKey ? <AccountDetail {...ctx} accountKey={accountKey} back={() => setAccountKey(null)} /> : <AccountsView {...ctx} />)
           : view === "reports" ? <ReportsView {...ctx} />
           : view === "quotes" ? <QuoteMatchesView {...ctx} matches={matches} quotes={quotes} updateQuoteStatus={updateQuoteStatus} />
-          : <SettingsView {...ctx} connected={connected} setConnected={setConnected} seenCount={Object.keys(seen).length} />}
+          : isAdmin ? <SettingsView {...ctx} connected={connected} setConnected={setConnected} seenCount={Object.keys(seen).length} /> : null}
       </div>
     </div>
   );
@@ -484,7 +500,7 @@ function OrderDetail({ T, db, o, editable }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // Accounts — grouped by rep, click into a customer
 // ═════════════════════════════════════════════════════════════════════════════
-function AccountsView({ T, orders, settings, opts, currencyMode, openAccount }) {
+function AccountsView({ T, orders, settings, opts, currencyMode, openAccount, logos, ownOnly, loginName }) {
   const fys = useMemo(() => [...new Set(orders.map(o => fyOf(o.date)))].sort((a, b) => b - a), [orders]);
   const [fy, setFy] = useState(fyOf(today()));
   const [q, setQ] = useState("");
@@ -494,7 +510,7 @@ function AccountsView({ T, orders, settings, opts, currencyMode, openAccount }) 
   // Every account from the list, plus every unmatched customer that has ordered
   const rows = useMemo(() => {
     const m = new Map();
-    settings.accounts.forEach(a => m.set(a.name, { key: a.name, name: a.name, rep: a.rep || "Unassigned", type: a.type, cur: [], prev: [], last: "" }));
+    settings.accounts.filter(a => !ownOnly || a.rep === loginName).forEach(a => m.set(a.name, { key: a.name, name: a.name, rep: a.rep || "Unassigned", type: a.type, cur: [], prev: [], last: "" }));
     pool.forEach(o => {
       let r = m.get(o.cust.key);
       if (!r) { r = { key: o.cust.key, name: o.cust.name, rep: o.cust.rep, type: o.cust.type, cur: [], prev: [], last: "" }; m.set(o.cust.key, r); }
@@ -503,7 +519,7 @@ function AccountsView({ T, orders, settings, opts, currencyMode, openAccount }) 
       if (o.date > r.last) r.last = o.date;
     });
     return [...m.values()].map(r => ({ ...r, curSum: sumOrders(r.cur, opts), prevSum: sumOrders(r.prev, opts) }));
-  }, [settings.accounts, pool, fy, opts]);
+  }, [settings.accounts, pool, fy, opts, ownOnly, loginName]);
 
   const filtered = rows.filter(r => (!q || r.name.toLowerCase().includes(q.toLowerCase())) && (typeF === "all" || r.type === typeF));
   const reps = [...REPS.filter(r => r !== "Unassigned"), "Unassigned"];
@@ -532,7 +548,13 @@ function AccountsView({ T, orders, settings, opts, currencyMode, openAccount }) 
                 const ch = p ? ((v - p) / p) * 100 : null;
                 return (
                   <tr key={r.key} onClick={() => openAccount(r.key)} style={{ cursor: "pointer" }}>
-                    <td style={{ fontWeight: 500 }}>{r.name}</td>
+                    <td style={{ fontWeight: 500 }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ width: 34, height: 22, background: logos[r.key] ? "#fff" : "transparent", borderRadius: 2, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          {logos[r.key] && <img src={logos[r.key].dataUrl} alt="" style={{ maxWidth: 32, maxHeight: 20, objectFit: "contain" }} />}
+                        </span>{r.name}
+                      </span>
+                    </td>
                     <td style={{ color: T.subtext }}>{r.type}</td>
                     <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{v ? fmtMoney(v) : "—"}</td>
                     <td style={{ textAlign: "right", color: T.subtext }}>{r.cur.length || ""}</td>
@@ -549,21 +571,31 @@ function AccountsView({ T, orders, settings, opts, currencyMode, openAccount }) 
   );
 }
 
-function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMode, accountKey, back, openAccount }) {
+function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMode, accountKey, back, openAccount, logos, bmpLogo, ownOnly }) {
   const acct = settings.accounts.find(a => a.name === accountKey);
-  const mine = orders.filter(o => o.cust.key === accountKey && (currencyMode === "combined" || orderCurrency(o) === currencyMode));
+  const allMine = orders.filter(o => o.cust.key === accountKey);
+  const mine = allMine.filter(o => currencyMode === "combined" || orderCurrency(o) === currencyMode);
   const name = acct?.name || mine[0]?.cust.name || accountKey;
   const fys = [...new Set([fyOf(today()), ...mine.map(o => fyOf(o.date))])].sort((a, b) => b - a);
   const [fy, setFy] = useState(fyOf(today()));
+  const [cmpFull, setCmpFull] = useState(false);
+  const fileRef = useRef(null);
   const fyOrders = mine.filter(o => fyOf(o.date) === fy);
   const products = groupBy(fyOrders, "product", opts);
   const allProducts = groupBy(mine, "product", opts);
-  const months = Array.from({ length: 12 }, (_, i) => { const d = addDays(fyStart(fy), 0); const dt = parseYmd(d); dt.setMonth(dt.getMonth() + i); const s = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-01`; return s; });
+  const months = Array.from({ length: 12 }, (_, i) => { const dt = parseYmd(fyStart(fy)); dt.setMonth(dt.getMonth() + i); return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-01`; });
   const monthVals = months.map(m => ({ m, v: displayValue(sumOrders(fyOrders.filter(o => o.date.slice(0, 7) === m.slice(0, 7)), opts), currencyMode), pv: displayValue(sumOrders(mine.filter(o => o.date.slice(0, 7) === `${+m.slice(0, 4) - 1}${m.slice(4, 7)}`), opts), currencyMode) }));
   const maxM = Math.max(1, ...monthVals.flatMap(x => [x.v, x.pv]));
-  const raws = [...new Set(mine.map(o => o.customer))];
+  const raws = [...new Set(allMine.map(o => o.customer))];
   const unmatched = !acct;
   const custType = acct ? acct.type : (settings.custTypes?.[accountKey] || "End User");
+  const logo = logos[accountKey];
+  const cmp = yearCompare(mine, fy, opts.usdToCad, { samePeriod: cmpFull ? false : undefined });
+  const prevLabel = cmp.inProgress && !cmpFull ? `same period FY${fy - 1}` : `FY${fy - 1}`;
+  const changes = [
+    ...cmp.more.map(s => ({ ...s, tag: "More" })), ...cmp.less.map(s => ({ ...s, tag: "Less" })),
+    ...cmp.added.map(s => ({ ...s, tag: "New" })), ...cmp.dropped.map(s => ({ ...s, tag: "Not reordered" })),
+  ].sort((a, b) => Math.abs(b.sales - b.psales) - Math.abs(a.sales - a.psales));
 
   const setAcct = patch => saveSettings({ accounts: settings.accounts.map(a => a.name === accountKey ? { ...a, ...patch } : a) });
   const setType = t => acct ? setAcct({ type: t }) : saveSettings({ custTypes: { ...(settings.custTypes || {}), [accountKey]: t } });
@@ -578,45 +610,85 @@ function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMo
     saveSettings({ aliases: { ...settings.aliases, ...Object.fromEntries(raws.map(r => [normName(r).trim(), target])) } });
     openAccount(target);
   };
+  const upload = async e => {
+    const f = e.target.files?.[0]; e.target.value = "";
+    if (!f) return;
+    try { await saveLogo(db, accountKey, await resizeImage(f), "manual", { fileName: f.name }); }
+    catch (err) { alert("Couldn't use that image: " + err.message); }
+  };
+  const report = () => openYearEndReport({ customers: [{ key: accountKey, name, rep: acct?.rep || "Unassigned", type: custType, orders: allMine }], fy, usdToCad: opts.usdToCad, logos, bmpLogo });
+  const kpi = (label, v, pv, fmt) => {
+    const p = pv ? ((v - pv) / pv) * 100 : null;
+    return (
+      <div style={{ padding: "4px 16px 4px 0" }}>
+        <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".08em", color: T.tableHeadText }}>{label}</div>
+        <div style={{ fontSize: 22, fontWeight: 600, color: T.text, fontVariantNumeric: "tabular-nums" }}>{fmt(v)}</div>
+        <div style={{ fontSize: 11, color: p == null ? T.tableHeadText : p >= 0 ? "#5a9e5a" : "#c86a5a" }}>{p == null ? `${prevLabel}: ${fmt(pv || 0)}` : `${p >= 0 ? "▲" : "▼"} ${Math.abs(p).toFixed(0)}% vs ${fmt(pv)}`}</div>
+      </div>
+    );
+  };
+  const editable = !ownOnly;
 
   return (
     <div style={{ maxWidth: 1300, display: "flex", flexDirection: "column", gap: 14 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <button className="btn" onClick={back}>← All accounts</button>
-        <div style={{ fontSize: 18, fontWeight: 600, color: T.text }}>{name}</div>
-        <select value={acct?.rep || "Unassigned"} disabled={!acct} onChange={e => setAcct({ rep: e.target.value })} style={{ height: 26, fontSize: 11 }} title={acct ? "Account holder" : "Create an account to set a rep"}>
-          {REPS.map(r => <option key={r} value={r}>{r}</option>)}
-        </select>
-        <select value={custType} onChange={e => setType(e.target.value)} style={{ height: 26, fontSize: 11 }}>
-          <option>Distributor</option><option>End User</option>
-        </select>
-        {unmatched && (
-          <select value="" onChange={e => assignTo(e.target.value)} style={{ height: 26, fontSize: 11 }}>
-            <option value="">Assign to an account…</option>
-            <option value="__new">+ Make this its own account</option>
-            {settings.accounts.map(a => <option key={a.name} value={a.name}>{a.name} ({a.rep})</option>)}
+        <div onClick={() => editable && fileRef.current?.click()} title={editable ? (logo ? "Click to replace the logo" : "Click to add a logo (PNG or JPG)") : ""}
+          style={{ width: 84, height: 56, border: `1px ${logo ? "solid" : "dashed"} ${T.borderLight}`, borderRadius: 4, background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: editable ? "pointer" : "default", overflow: "hidden", flexShrink: 0 }}>
+          {logo ? <img src={logo.dataUrl} alt="" style={{ maxWidth: "92%", maxHeight: "88%", objectFit: "contain" }} /> : <span style={{ fontSize: 10, color: "#999", textAlign: "center" }}>{editable ? "+ Add logo" : name.slice(0, 2).toUpperCase()}</span>}
+        </div>
+        <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" style={{ display: "none" }} onChange={upload} />
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 600, color: T.text }}>{name}</div>
+          <div style={{ fontSize: 11, color: T.tableHeadText }}>
+            {custType} · {acct?.rep || "Unassigned"}
+            {logo && editable && <> · <a style={{ cursor: "pointer", textDecoration: "underline" }} onClick={() => confirm("Remove this logo?") && removeLogo(db, accountKey)}>remove logo</a></>}
+            {logo?.source === "dropbox" && <> · logo from Dropbox</>}
+          </div>
+        </div>
+        {editable && <>
+          <select value={acct?.rep || "Unassigned"} disabled={!acct} onChange={e => setAcct({ rep: e.target.value })} style={{ height: 26, fontSize: 11 }} title={acct ? "Account holder" : "Create an account to set a rep"}>
+            {REPS.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
-        )}
+          <select value={custType} onChange={e => setType(e.target.value)} style={{ height: 26, fontSize: 11 }}>
+            <option>Distributor</option><option>End User</option>
+          </select>
+          {unmatched && (
+            <select value="" onChange={e => assignTo(e.target.value)} style={{ height: 26, fontSize: 11 }}>
+              <option value="">Assign to an account…</option>
+              <option value="__new">+ Make this its own account</option>
+              {settings.accounts.map(a => <option key={a.name} value={a.name}>{a.name} ({a.rep})</option>)}
+            </select>
+          )}
+        </>}
         <div style={{ flex: 1 }} />
-        <select value={fy} onChange={e => setFy(+e.target.value)} style={{ height: 26, fontSize: 11 }}>
+        <select value={fy} onChange={e => setFy(+e.target.value)} style={{ height: 28, fontSize: 12 }}>
           {fys.map(y => <option key={y} value={y}>Fiscal {y}</option>)}
         </select>
+        <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} onClick={report}>Year-End Report (PDF)</button>
       </div>
       {raws.length > 0 && <div style={{ fontSize: 11, color: T.tableHeadText }}>Names on OCs: {raws.join(" · ")}</div>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
-        {fys.slice(0, 4).map(y => {
-          const s = sumOrders(mine.filter(o => fyOf(o.date) === y), opts);
-          return <Tile key={y} T={T} label={`Fiscal ${y}`} sub={y === fyOf(today()) ? "To date" : `Dec ${y - 1} – Nov ${y}`} sum={s} mode={currencyMode} />;
-        })}
-      </div>
+      <Card T={T} title={`FY${fy}${cmp.inProgress ? " to date" : ""} vs ${prevLabel}`} right={
+        <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 11, color: T.subtext }}>
+          {cmp.inProgress && <label style={{ display: "flex", gap: 4, alignItems: "center" }}><input type="checkbox" checked={cmpFull} onChange={e => setCmpFull(e.target.checked)} /> Compare with all of FY{fy - 1}</label>}
+          <span>{cmp.currency}{cmp.mixed ? " (USD converted)" : ""}</span>
+        </div>}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8 }}>
+          {kpi("Purchases", cmp.cur.total, cmp.prev.total, n => fmtMoney(n))}
+          {kpi("Orders", cmp.cur.orders, cmp.prev.orders, n => String(n))}
+          {kpi("Average order", cmp.cur.avg, cmp.prev.avg, n => fmtMoney(n))}
+          {kpi("Units", cmp.cur.units, cmp.prev.units, fmtQty)}
+          {kpi("Different products", cmp.top.filter(s => s.qty).length, cmp.more.length + cmp.less.length + cmp.same.length + cmp.dropped.length, n => String(n))}
+        </div>
+      </Card>
 
-      <Card T={T} title={`Monthly sales — FY${fy} vs FY${fy - 1}`} right={<Legend T={T} items={[[T.gold, `FY${fy}`], [T.borderMid, `FY${fy - 1}`]]} />}>
+      <Card T={T} title={`Monthly sales — FY${fy} vs FY${fy - 1}`} right={<Legend T={T} items={[[T.gold, `FY${fy}`], [T.tableHeadText, `FY${fy - 1}`]]} />}>
         <div style={{ display: "flex", gap: 6, alignItems: "flex-end", height: 150 }}>
           {monthVals.map(({ m, v, pv }) => (
             <div key={m} title={`${fmtMonth(m)}: ${fmtMoney(v)} · prior year ${fmtMoney(pv)}`} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%", justifyContent: "flex-end" }}>
               <div style={{ display: "flex", gap: 2, alignItems: "flex-end", height: 120, width: "100%", justifyContent: "center" }}>
-                <div style={{ width: "34%", height: (pv / maxM) * 120, background: T.borderMid, borderRadius: "3px 3px 0 0" }} />
+                <div style={{ width: "34%", height: (pv / maxM) * 120, background: T.tableHeadText, borderRadius: "3px 3px 0 0" }} />
                 <div style={{ width: "34%", height: (v / maxM) * 120, background: T.gold, borderRadius: "3px 3px 0 0" }} />
               </div>
               <div style={{ fontSize: 10, color: T.tableHeadText, borderTop: `1px solid ${T.borderMid}`, width: "100%", textAlign: "center", paddingTop: 3 }}>{fmtMonth(m).slice(0, 3)}</div>
@@ -625,11 +697,37 @@ function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMo
         </div>
       </Card>
 
+      <Card T={T} title={`Ordering more or less — FY${fy} vs ${prevLabel}`} pad={0} right={<span style={{ fontSize: 11, color: T.subtext }}>{cmp.more.length} more · {cmp.less.length} less · {cmp.added.length} new · {cmp.dropped.length} not reordered</span>}>
+        {!changes.length ? <div style={{ fontSize: 12, color: T.tableHeadText, padding: 12 }}>No changes to compare yet.</div> : (
+          <table className="data-table">
+            <thead><tr><th></th><th>SKU</th><th>Description</th><th style={{ textAlign: "right" }}>Qty {prevLabel.replace("same period ", "")}</th><th style={{ textAlign: "right" }}>Qty FY{fy}</th><th style={{ textAlign: "right" }}>Change</th><th style={{ textAlign: "right" }}>Sales {prevLabel.replace("same period ", "")}</th><th style={{ textAlign: "right" }}>Sales FY{fy}</th></tr></thead>
+            <tbody>{changes.map(s => {
+              const up = s.tag === "More" || s.tag === "New";
+              return (
+                <tr key={s.sku + s.desc}>
+                  <td><span className="pill" style={{ background: up ? "rgba(90,158,90,.14)" : "rgba(200,106,90,.14)", color: up ? "#5a9e5a" : "#c86a5a" }}>{up ? "▲" : "▼"} {s.tag}</span></td>
+                  <td style={{ fontWeight: 500 }}>{s.sku}</td><td style={{ color: T.subtext }}>{s.desc}</td>
+                  <td style={{ textAlign: "right" }}>{s.pqty ? fmtQty(s.pqty) : "—"}</td><td style={{ textAlign: "right" }}>{s.qty ? fmtQty(s.qty) : "—"}</td>
+                  <td style={{ textAlign: "right", color: up ? "#5a9e5a" : "#c86a5a" }}>{s.qty - s.pqty >= 0 ? "+" : "−"}{fmtQty(Math.abs(s.qty - s.pqty))}{s.pqty && s.qty ? ` (${(((s.qty - s.pqty) / s.pqty) * 100).toFixed(0)}%)` : ""}</td>
+                  <td style={{ textAlign: "right" }}>{fmtMoney(s.psales)}</td><td style={{ textAlign: "right" }}>{fmtMoney(s.sales)}</td>
+                </tr>);
+            })}</tbody>
+          </table>
+        )}
+      </Card>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+        {fys.slice(0, 4).map(y => {
+          const s = sumOrders(mine.filter(o => fyOf(o.date) === y), opts);
+          return <Tile key={y} T={T} label={`Fiscal ${y}`} sub={y === fyOf(today()) ? "To date" : `Dec ${y - 1} – Nov ${y}`} sum={s} mode={currencyMode} />;
+        })}
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(460px, 1fr))", gap: 14 }}>
         <Card T={T} title={`What they ordered — FY${fy}`} pad={0}><ProductTable T={T} rows={products} mode={currencyMode} /></Card>
         <Card T={T} title="What they ordered — all years" pad={0}><ProductTable T={T} rows={allProducts} mode={currencyMode} /></Card>
       </div>
-      <Card T={T} title={`Orders (${mine.length})`} pad={0}><OrderTable T={T} db={db} orders={mine} opts={opts} openAccount={() => {}} editable /></Card>
+      <Card T={T} title={`Orders (${mine.length})`} pad={0}><OrderTable T={T} db={db} orders={mine} opts={opts} openAccount={() => {}} editable={editable} /></Card>
     </div>
   );
 }
@@ -648,6 +746,7 @@ function ProductTable({ T, rows, mode }) {
 // Reports
 // ═════════════════════════════════════════════════════════════════════════════
 const REPORTS = [
+  ["yearend", "Year-End customer reports (PDF)"],
   ["rep", "Sales by rep"],
   ["customer", "Sales by customer"],
   ["product", "Sales by product / SKU"],
@@ -659,7 +758,7 @@ const REPORTS = [
   ["inactive", "Accounts that haven't ordered lately"],
 ];
 
-function ReportsView({ T, orders, settings, opts, currencyMode, openAccount }) {
+function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, logos, bmpLogo }) {
   const [rep, setRep] = useState("rep");
   const fl = useFilters("fytd");
   const [fy, setFy] = useState(fyOf(today()));
@@ -728,6 +827,7 @@ function ReportsView({ T, orders, settings, opts, currencyMode, openAccount }) {
           <button key={k} onClick={() => setRep(k)} style={{ textAlign: "left", background: rep === k ? T.activeBg : "transparent", border: "none", borderLeft: `2px solid ${rep === k ? T.gold : "transparent"}`, color: rep === k ? T.text : T.subtext, padding: "8px 10px", fontSize: 12 }}>{l}</button>
         ))}
       </div>
+      {rep === "yearend" ? <YearEndPicker T={T} orders={orders} settings={settings} opts={opts} logos={logos} bmpLogo={bmpLogo} openAccount={openAccount} /> :
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
           <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{title}</div>
@@ -761,7 +861,70 @@ function ReportsView({ T, orders, settings, opts, currencyMode, openAccount }) {
             </div>
           )}
         </Card>
+      </div>}
+    </div>
+  );
+}
+
+// Pick customers and a fiscal year → one PDF with a "Year in Review" for each
+function YearEndPicker({ T, orders, settings, opts, logos, bmpLogo, openAccount }) {
+  const fys = [...new Set([fyOf(today()), ...orders.map(o => fyOf(o.date))])].sort((a, b) => b - a);
+  const [fy, setFy] = useState(today() < `${fyOf(today())}-11-15` ? fyOf(today()) - 1 : fyOf(today()));
+  const [typeF, setTypeF] = useState("Distributor");
+  const [repF, setRepF] = useState("all");
+  const [sel, setSel] = useState({});
+  const rows = useMemo(() => {
+    const m = new Map();
+    orders.forEach(o => {
+      let r = m.get(o.cust.key);
+      if (!r) { r = { key: o.cust.key, name: o.cust.name, rep: o.cust.rep, type: o.cust.type, orders: [] }; m.set(o.cust.key, r); }
+      r.orders.push(o);
+    });
+    return [...m.values()].map(r => ({ ...r, cur: sumOrders(r.orders.filter(o => fyOf(o.date) === fy), opts).combined, prev: sumOrders(r.orders.filter(o => fyOf(o.date) === fy - 1), opts).combined }))
+      .filter(r => (r.cur || r.prev) && (typeF === "all" || r.type === typeF) && (repF === "all" || r.rep === repF))
+      .sort((a, b) => b.cur - a.cur);
+  }, [orders, fy, typeF, repF, opts]);
+  const chosen = rows.filter(r => sel[r.key]);
+  const make = list => openYearEndReport({ customers: list, fy, usdToCad: opts.usdToCad, logos, bmpLogo });
+  const all = rows.length && chosen.length === rows.length;
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>Year-End customer reports</div>
+        <div style={{ flex: 1 }} />
+        <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11, opacity: chosen.length ? 1 : .5 }} disabled={!chosen.length} onClick={() => make(chosen)}>Create PDF for {chosen.length || ""} selected</button>
       </div>
+      <div style={{ fontSize: 11, color: T.tableHeadText, marginBottom: 10, lineHeight: 1.5 }}>
+        Each customer gets a "Year in Review": totals and month-by-month purchases vs the year before, top products, a page showing what they ordered more or less of, and their order history.
+        The report opens in a new window — choose "Save as PDF" in the print dialog.
+      </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+        <select value={fy} onChange={e => setFy(+e.target.value)} style={{ fontSize: 11, height: 28 }}>{fys.map(y => <option key={y} value={y}>Fiscal {y} (Dec {y - 1} – Nov {y})</option>)}</select>
+        <select value={typeF} onChange={e => setTypeF(e.target.value)} style={{ fontSize: 11, height: 28 }}><option value="Distributor">Distributors</option><option value="End User">End Users</option><option value="all">Distributors + End Users</option></select>
+        <select value={repF} onChange={e => setRepF(e.target.value)} style={{ fontSize: 11, height: 28 }}><option value="all">All reps</option>{REPS.map(r => <option key={r}>{r}</option>)}</select>
+      </div>
+      <Card T={T} pad={0}>
+        {!rows.length ? <div style={{ fontSize: 12, color: T.tableHeadText, padding: 12 }}>No customers with purchases in FY{fy} or FY{fy - 1}.</div> : (
+          <table className="data-table">
+            <thead><tr>
+              <th style={{ width: 30 }}><input type="checkbox" checked={!!all} onChange={() => setSel(all ? {} : Object.fromEntries(rows.map(r => [r.key, true])))} /></th>
+              <th>Customer</th><th>Rep</th><th style={{ textAlign: "right" }}>FY{fy} (CAD)</th><th style={{ textAlign: "right" }}>FY{fy - 1} (CAD)</th><th style={{ textAlign: "right" }}>Change</th><th></th>
+            </tr></thead>
+            <tbody>{rows.map(r => {
+              const ch = r.prev ? ((r.cur - r.prev) / r.prev) * 100 : null;
+              return (
+                <tr key={r.key}>
+                  <td><input type="checkbox" checked={!!sel[r.key]} onChange={() => setSel(p => ({ ...p, [r.key]: !p[r.key] }))} /></td>
+                  <td><a style={{ cursor: "pointer" }} onClick={() => openAccount(r.key)}>{r.name}</a></td>
+                  <td style={{ color: T.subtext }}>{r.rep}</td>
+                  <td style={{ textAlign: "right" }}>{fmtMoney(r.cur)}</td><td style={{ textAlign: "right", color: T.subtext }}>{fmtMoney(r.prev)}</td>
+                  <td style={{ textAlign: "right", color: ch == null ? T.tableHeadText : ch >= 0 ? "#5a9e5a" : "#c86a5a" }}>{ch == null ? "new" : `${ch >= 0 ? "▲" : "▼"} ${Math.abs(ch).toFixed(0)}%`}</td>
+                  <td><button className="btn" onClick={() => make([r])}>PDF</button></td>
+                </tr>);
+            })}</tbody>
+          </table>
+        )}
+      </Card>
     </div>
   );
 }
@@ -836,7 +999,7 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
   const [rate, setRate] = useState(settings.usdToCad);
   const [accts, setAccts] = useState(settings.accounts);
   const [dirty, setDirty] = useState(false);
-  const [pw, setPw] = useState({ a: "", b: "", msg: "" });
+  const [logoFolder, setLogoFolder] = useState(settings.logoFolder || "");
   useEffect(() => { if (!dirty) setAccts(settings.accounts); }, [settings.accounts, dirty]);
 
   const unmatched = useMemo(() => {
@@ -847,12 +1010,6 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
 
   const upd = (i, patch) => { setDirty(true); setAccts(a => a.map((x, j) => (j === i ? { ...x, ...patch } : x))); };
   const saveAccts = () => { saveSettings({ accounts: accts.filter(a => a.name.trim()).map(a => ({ ...a, name: a.name.trim() })) }); setDirty(false); };
-  const changePw = async () => {
-    if (pw.a.length < 6) return setPw({ ...pw, msg: "Use at least 6 characters." });
-    if (pw.a !== pw.b) return setPw({ ...pw, msg: "The two passwords don't match." });
-    try { await setPassword(db, pw.a, loginName); setPw({ a: "", b: "", msg: "Password changed. Everyone will need the new password next time they sign in." }); }
-    catch (e) { setPw({ ...pw, msg: "Couldn't save: " + e.message }); }
-  };
   const lbl = { fontSize: 10, textTransform: "uppercase", letterSpacing: ".06em", color: T.tableHeadText, marginBottom: 4 };
 
   return (
@@ -870,7 +1027,9 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 14 }}>
           <div><div style={lbl}>Order confirmation folders (one per line, path inside Dropbox)</div>
-            <textarea value={folders} onChange={e => setFolders(e.target.value)} rows={3} style={{ width: "100%", fontSize: 12 }} /></div>
+            <textarea value={folders} onChange={e => setFolders(e.target.value)} rows={3} style={{ width: "100%", fontSize: 12 }} />
+            <div style={{ ...lbl, marginTop: 8 }}>Customer logo folder (file names matched to customer names)</div>
+            <input value={logoFolder} onChange={e => setLogoFolder(e.target.value)} style={{ width: "100%", height: 28, fontSize: 12 }} /></div>
           <div><div style={lbl}>Read orders dated on or after</div>
             <input type="date" value={since} onChange={e => setSince(e.target.value)} style={{ height: 28, fontSize: 12 }} />
             <div style={{ fontSize: 10, color: T.tableHeadText, marginTop: 4 }}>Dec 1, 2025 = start of FY2026</div></div>
@@ -878,7 +1037,7 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
             <input type="number" step="0.0001" value={rate} onChange={e => setRate(e.target.value)} style={{ height: 28, fontSize: 12, width: 100 }} /></div>
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
-          <button className="btn" onClick={() => saveSettings({ folders: folders.split("\n").map(s => s.trim()).filter(Boolean), since, usdToCad: Number(rate) || 1.37 })}>Save</button>
+          <button className="btn" onClick={() => saveSettings({ folders: folders.split("\n").map(s => s.trim()).filter(Boolean), logoFolder: logoFolder.trim(), since, usdToCad: Number(rate) || 1.37 })}>Save</button>
           <span style={{ fontSize: 11, color: T.tableHeadText }}>{orders.length} orders on file · {seenCount} PDFs read so far</span>
           <div style={{ flex: 1 }} />
           <button className="btn-del" onClick={() => { if (confirm("Re-read every PDF on the next Refresh? Corrections you've made are kept.")) setDoc(doc(db, "config", "salesSyncSeen"), { files: {} }); }}>Re-read all PDFs on next refresh</button>
@@ -912,16 +1071,6 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
         </table>
       </Card>
 
-      {loginName === PASSWORD_ADMIN && (
-        <Card T={T} title="Master password (only you can see this)">
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <input type="password" placeholder="New password" value={pw.a} onChange={e => setPw({ ...pw, a: e.target.value, msg: "" })} style={{ height: 28, fontSize: 12 }} />
-            <input type="password" placeholder="Type it again" value={pw.b} onChange={e => setPw({ ...pw, b: e.target.value, msg: "" })} style={{ height: 28, fontSize: 12 }} />
-            <button className="btn" onClick={changePw}>Change password</button>
-            {pw.msg && <span style={{ fontSize: 11, color: T.subtext }}>{pw.msg}</span>}
-          </div>
-        </Card>
-      )}
     </div>
   );
 }

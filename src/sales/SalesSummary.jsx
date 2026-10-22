@@ -8,6 +8,7 @@ import { isDropboxConnected, startDropboxAuth, disconnectDropbox, redirectUri, b
 import { syncOrders } from "./sync";
 import { useLogos, syncLogos, resizeImage, saveLogo, removeLogo } from "./logos";
 import { yearCompare, openYearEndReport } from "./yearEndReport";
+import { QuoteWinRateReport, OpenPipelineReport, QuoteToOrderReport, LeadReport, SalesForecastReport, ReorderReport, ProductTrendsReport } from "./pipelineReports";
 import {
   today, mondayOf, addDays, monthStart, monthEnd, fyOf, fyStart, fyEnd, daysBetween, parseYmd,
   fmtDate, fmtShort, fmtMonth, weekdayName, presetRange, PRESETS,
@@ -39,7 +40,7 @@ const VIEWS = [
   ["reports", "Reports"], ["quotes", "Quote Matches"], ["settings", "Settings"],
 ];
 
-export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginName, user, bmpLogo }) {
+export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginName, user, bmpLogo, leads = [], adSpend = {}, canSeeLeads = false }) {
   // "own" scope (e.g. John) only sees accounts where they're the rep; admins also get Settings
   const ownOnly = user?.salesScope === "own";
   const isAdmin = !!user?.admin;
@@ -196,7 +197,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
             </>
           : view === "orders" ? <OrdersView {...ctx} />
           : view === "accounts" ? (accountKey ? <AccountDetail {...ctx} accountKey={accountKey} back={() => setAccountKey(null)} /> : <AccountsView {...ctx} />)
-          : view === "reports" ? <ReportsView {...ctx} />
+          : view === "reports" ? <ReportsView {...ctx} quotes={quotes} leads={leads} adSpend={adSpend} canSeeLeads={canSeeLeads} />
           : view === "quotes" ? <QuoteMatchesView {...ctx} matches={matches} quotes={quotes} updateQuoteStatus={updateQuoteStatus} />
           : isAdmin ? <SettingsView {...ctx} connected={connected} setConnected={setConnected} seenCount={Object.keys(seen).length} gaps={gaps} issues={issues} /> : null}
       </div>
@@ -903,6 +904,7 @@ function ProductTable({ T, rows, mode }) {
 // Reports
 // ═════════════════════════════════════════════════════════════════════════════
 const REPORTS = [
+  ["__h", "Sales"],
   ["yearend", "Year-End customer reports (PDF)"],
   ["salesrep", `${SALES_REP}'s sales`],
   ["customer", "Sales by customer"],
@@ -912,10 +914,21 @@ const REPORTS = [
   ["location", "Sales by location (BRO vs CAL)"],
   ["type", "Distributors vs End Users"],
   ["city", "Sales by ship-to city"],
+  ["__h", "Quotes & pipeline"],
+  ["winrate", "Quote win rate"],
+  ["pipeline", "Open pipeline & expected wins"],
+  ["quoteorder", "Won quotes → orders"],
+  ["__h", "Leads", "leads"],
+  ["leads", "Lead tracking (End Users)", "leads"],
+  ["__h", "Forecasting"],
+  ["forecast", "Sales forecast (this fiscal year)"],
+  ["reorder", "Customers due to reorder"],
+  ["trends", "Product trends"],
   ["inactive", "Accounts that haven't ordered lately"],
 ];
+const PIPELINE_REPORTS = ["winrate", "pipeline", "quoteorder", "leads", "forecast", "reorder", "trends"];
 
-function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, logos, bmpLogo }) {
+function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, logos, bmpLogo, quotes, leads, adSpend, canSeeLeads, ownOnly, loginName }) {
   const [rep, setRep] = useState("salesrep");
   const fl = useFilters("fytd");
   const [fy, setFy] = useState(fyOf(today()));
@@ -993,11 +1006,22 @@ function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, log
   return (
     <div style={{ display: "flex", gap: 16, maxWidth: 1500 }}>
       <div style={{ width: 230, flexShrink: 0, display: "flex", flexDirection: "column", gap: 2 }}>
-        {REPORTS.map(([k, l]) => (
+        {REPORTS.filter(r => r[2] !== "leads" || canSeeLeads).map(([k, l], i) => k === "__h" ? (
+          <div key={"h" + i} style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".08em", color: T.tableHeadText, padding: i ? "14px 10px 4px" : "2px 10px 4px", fontWeight: 600 }}>{l}</div>
+        ) : (
           <button key={k} onClick={() => setRep(k)} style={{ textAlign: "left", background: rep === k ? T.activeBg : "transparent", border: "none", borderLeft: `2px solid ${rep === k ? T.gold : "transparent"}`, color: rep === k ? T.text : T.subtext, padding: "8px 10px", fontSize: 12 }}>{l}</button>
         ))}
       </div>
-      {rep === "yearend" ? <YearEndPicker T={T} orders={orders} settings={settings} opts={opts} logos={logos} bmpLogo={bmpLogo} openAccount={openAccount} /> :
+      {PIPELINE_REPORTS.includes(rep) ? (() => {
+        const pp = { T, orders, opts, currencyMode, settings, quotes, ownOnly, loginName, openAccount };
+        return rep === "winrate" ? <QuoteWinRateReport {...pp} />
+          : rep === "pipeline" ? <OpenPipelineReport {...pp} />
+          : rep === "quoteorder" ? <QuoteToOrderReport {...pp} />
+          : rep === "leads" ? <LeadReport {...pp} leads={leads} adSpend={adSpend} />
+          : rep === "forecast" ? <SalesForecastReport {...pp} />
+          : rep === "reorder" ? <ReorderReport {...pp} />
+          : <ProductTrendsReport {...pp} />;
+      })() : rep === "yearend" ? <YearEndPicker T={T} orders={orders} settings={settings} opts={opts} logos={logos} bmpLogo={bmpLogo} openAccount={openAccount} /> :
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
           <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{title}</div>

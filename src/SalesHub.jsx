@@ -1249,7 +1249,7 @@ ${quoteNumLine}
             productsCAD={productsCAD} productsUSD={productsUSD} effectiveProductsUSD={effectiveProductsUSD} createNewQuote={createNewQuote}
             setActiveQuote={setActiveQuote} saveQuote={saveQuote} editQuote={q=>setActiveQuote({...q,saved:false})}
             openEmailModal={openEmailModal} generatePDF={generatePDF} deleteConfirm={deleteConfirm} setDeleteConfirm={setDeleteConfirm} deleteQuote={deleteQuote} duplicateQuote={duplicateQuote} quoteSort={quoteSort} setQuoteSort={setQuoteSort} closeConfirm={closeConfirm} setCloseConfirm={setCloseConfirm} exchangeRate={exchangeRate} onQuoteStatusChange={updateQuoteStatus} T={T}/>}
-          {activeTab==="sales"&&canSee(currentUser,"sales")&&<SalesSummary T={T} db={db} quotes={quotes} updateQuoteStatus={updateQuoteStatus} loginName={loginName} user={currentUser} bmpLogo={BMP_LOGO_FULL}/>}
+          {activeTab==="sales"&&canSee(currentUser,"sales")&&<SalesSummary T={T} db={db} quotes={quotes} updateQuoteStatus={updateQuoteStatus} loginName={loginName} user={currentUser} bmpLogo={BMP_LOGO_FULL} leads={leads} adSpend={adSpend} canSeeLeads={canSee(currentUser,"leads")}/>}
           {activeTab==="admin"&&canSee(currentUser,"admin")&&<AdminTab T={T} db={db} users={users||DEFAULT_USERS} loginName={loginName}/>}
           {activeTab==="dims"&&<DimsTab dims={dims} setDims={setDims} T={T}/>}
           {activeTab==="shipping"&&<ShippingTab T={T}/>}

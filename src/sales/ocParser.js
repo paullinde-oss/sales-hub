@@ -237,6 +237,12 @@ export async function parseOrderPdf(pdfjsLib, data, fileName = "") {
   // Keep the file name's date too — sync decides between them when they disagree
   o.nameDate = parseLongDate(String(fileName));
   if (!o.date) o.date = o.nameDate;
+  // No "Sold To" on the PDF: use the customer from the file name ("OC - BRO10375 - Centerfield - …")
+  if (!o.customer) {
+    const parts = String(fileName).replace(/\.pdf$/i, "").split(/\s+-\s+/).map(x => x.trim());
+    const at = parts.findIndex(x => orderNoFrom(x));
+    if (at >= 0 && parts[at + 1] && !parseLongDate(parts[at + 1])) o.customer = parts[at + 1];
+  }
   o.location = o.orderNo.slice(0, 3);
   const addr = parseAddress(o.shipTo);
   o.city = addr.city; o.region = addr.region; o.country = addr.country;

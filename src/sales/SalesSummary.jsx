@@ -93,7 +93,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
     try {
       const existing = Object.fromEntries(rawOrders.map(o => [o.orderNo, o]));
       // Re-read PDFs that came in without a usable date (e.g. "January 0, 1900")
-      const badDate = new Set(rawOrders.filter(o => !/^20\d\d-/.test(o.override?.date || o.date || "")).map(o => o.file?.id).filter(Boolean));
+      const badDate = new Set(rawOrders.filter(o => !/^20\d\d-/.test(o.override?.date || o.date || "") || !(o.customer || "").trim()).map(o => o.file?.id).filter(Boolean)); // also re-read orders with no customer name
       // Record finished files every 25 so an interrupted sync (tab closed, laptop asleep) picks up where it left off
       const saveSeen = batch => setDoc(doc(db, "config", "salesSyncSeen"), { files: batch }, { merge: true });
       // One-time: PDFs skipped before problem files were tracked get one more look, so gaps show a real reason
@@ -690,7 +690,7 @@ function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMo
   const months = Array.from({ length: 12 }, (_, i) => { const dt = parseYmd(fyStart(fy)); dt.setMonth(dt.getMonth() + i); return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-01`; });
   const monthVals = months.map(m => ({ m, v: displayValue(sumOrders(fyOrders.filter(o => o.date.slice(0, 7) === m.slice(0, 7)), opts), currencyMode), pv: displayValue(sumOrders(mine.filter(o => o.date.slice(0, 7) === `${+m.slice(0, 4) - 1}${m.slice(4, 7)}`), opts), currencyMode) }));
   const maxM = Math.max(1, ...monthVals.flatMap(x => [x.v, x.pv]));
-  const raws = [...new Set(allMine.map(o => o.customer))];
+  const raws = [...new Set(allMine.map(o => (o.override?.customer || o.customer || "Unknown").trim()))];
   const unmatched = !acct;
   const custType = acct ? acct.type : (settings.custTypes?.[accountKey] || "End User");
   const logo = logos[accountKey];

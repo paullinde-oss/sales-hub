@@ -206,7 +206,9 @@ export async function parseOrderPdf(pdfjsLib, data, fileName = "") {
   else if (/BILL OF LADING/i.test(all)) o = parseBOLLayout(rows);
   else return null;
 
-  if (!o.orderNo) o.orderNo = orderNoFrom(fileName);
+  // The file name's number wins if the PDF disagrees, so two files can't overwrite one order
+  const nameNo = orderNoFrom(fileName), docNo = o.orderNo;
+  if (nameNo) o.orderNo = nameNo;
   if (!o.date) {
     const m = String(fileName).match(/(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}/i);
     if (m) o.date = parseLongDate(m[0]);
@@ -223,6 +225,7 @@ export async function parseOrderPdf(pdfjsLib, data, fileName = "") {
   o.otherCharges = round2(o.charges.filter(c => !/freight|shipping|delivery/i.test(c.label)).reduce((s, c) => s + (c.amount || 0), 0));
   if (o.total == null) o.total = round2(o.productTotal + o.freight + o.otherCharges);
   o.warnings = [];
+  if (nameNo && docNo && nameNo !== docNo) o.warnings.push(`The OC says ${docNo} but the file is named ${nameNo}`);
   if (!o.orderNo) o.warnings.push("No order number found");
   if (!o.date) o.warnings.push("No order date found");
   if (!o.customer) o.warnings.push("No customer found");

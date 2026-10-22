@@ -51,7 +51,9 @@ export async function syncOrders({ db, folders, since, seen = {}, existing = {},
     // oldest first so a revised OC overwrites the earlier version
     .sort((a, b) => (a.modified < b.modified ? -1 : 1));
 
-  const res = { added: 0, updated: 0, skipped: 0, errors: [...folderErrors], seen: {}, scanned: files.length };
+  // issues: files we couldn't turn into an order (shown under "Missing order numbers"); resolved: ones that now read fine
+  const res = { added: 0, updated: 0, skipped: 0, errors: [...folderErrors], seen: {}, scanned: files.length, issues: {}, resolved: {} };
+  const issue = (file, reason) => { res.issues[file.id] = { name: file.name, path: file.path, reason, at: new Date().toISOString() }; };
   if (!todo.length) { onProgress({ stage: "Up to date", done: 0, total: 0 }); return res; }
 
   const pdfjs = await loadPdfjs();
@@ -68,7 +70,8 @@ export async function syncOrders({ db, folders, since, seen = {}, existing = {},
           o.date = file.modified.slice(0, 10);
           o.warnings = [...(o.warnings || []).filter(w => !/order date/i.test(w)), "No order date on the OC — using the date the PDF was saved. Fix it under Corrections if needed."];
         }
-        if (!o || !o.orderNo) { res.skipped++; }
+        if (!o) { res.skipped++; issue(file, "Doesn't look like an order confirmation or bill of lading"); }
+        else if (!o.orderNo) { res.skipped++; issue(file, "No BRO/CAL number found in the PDF or file name"); }
         else if (o.date && o.date < since) { res.skipped++; }
         else if (o.format === "bol" && formats[o.orderNo] === "oc") { res.skipped++; } // keep the priced OC
         else {
@@ -80,12 +83,14 @@ export async function syncOrders({ db, folders, since, seen = {}, existing = {},
             syncedAt: new Date().toISOString(), syncedBy: loginName || "",
           }, { merge: true });
           isNew ? res.added++ : res.updated++;
+          res.resolved[file.id] = true;
         }
         res.seen[file.id] = file.rev;
         pending[file.id] = file.rev;
         if (onSeen && Object.keys(pending).length >= 25) { const b = pending; pending = {}; await onSeen(b).catch(() => {}); }
       } catch (e) {
         res.errors.push({ file: file.path, error: String(e.message || e) });
+        issue(file, "Couldn't be read: " + String(e.message || e).slice(0, 160));
       }
       done++;
       onProgress({ stage: "Reading order confirmations…", done, total: done + todo.length, file: file.name });

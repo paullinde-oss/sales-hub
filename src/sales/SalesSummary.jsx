@@ -70,6 +70,8 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
   }, [db]);
   useEffect(() => onSnapshot(doc(db, "config", "salesSettings"), s => setStored(s.exists() ? s.data() : {}), () => setStored({})), [db]);
   useEffect(() => onSnapshot(doc(db, "config", "salesSyncSeen"), s => setSeen(s.exists() ? (s.data().files || {}) : {})), [db]);
+  const [issues, setIssues] = useState({});
+  useEffect(() => onSnapshot(doc(db, "config", "salesSyncIssues"), s => setIssues(s.exists() ? (s.data().files || {}) : {})), [db]);
 
   const settings = useMemo(() => ({ ...DEFAULT_SETTINGS, ...(stored || {}) }), [stored]);
   const saveSettings = useCallback(patch => setDoc(doc(db, "config", "salesSettings"), patch, { merge: true }).catch(e => alert("Couldn't save settings: " + e.message)), [db]);
@@ -88,15 +90,20 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
       const badDate = new Set(rawOrders.filter(o => !/^20\d\d-/.test(o.override?.date || o.date || "")).map(o => o.file?.id).filter(Boolean));
       // Record finished files every 25 so an interrupted sync (tab closed, laptop asleep) picks up where it left off
       const saveSeen = batch => setDoc(doc(db, "config", "salesSyncSeen"), { files: batch }, { merge: true });
-      const r = await syncOrders({ db, folders: settings.folders, since: settings.since, seen: Object.fromEntries(Object.entries(seen).filter(([id]) => !badDate.has(id))), existing, loginName, onProgress: setSync, onSeen: saveSeen });
+      // One-time: PDFs skipped before problem files were tracked get one more look, so gaps show a real reason
+      const orderFiles = new Set(rawOrders.map(o => o.file?.id).filter(Boolean));
+      const retry = id => badDate.has(id) || (!settings.issuesTracked && !orderFiles.has(id));
+      const r = await syncOrders({ db, folders: settings.folders, since: settings.since, seen: Object.fromEntries(Object.entries(seen).filter(([id]) => !retry(id))), existing, loginName, onProgress: setSync, onSeen: saveSeen });
       if (Object.keys(r.seen).length) await saveSeen(r.seen);
+      if (Object.keys(r.issues).length || Object.keys(r.resolved).length)
+        await setDoc(doc(db, "config", "salesSyncIssues"), { files: { ...r.issues, ...Object.fromEntries(Object.keys(r.resolved).map(id => [id, deleteField()])) } }, { merge: true });
       let logoNote = "";
       try {
         const lr = await syncLogos({ db, folder: settings.logoFolder, accounts: settings.accounts, aliases: settings.aliases, customerKeys: [...new Set(orders.map(o => o.cust.key))], logos, onProgress: setSync });
         if (lr.added) logoNote = ` ${lr.added} customer logo${lr.added > 1 ? "s" : ""} added.`;
       } catch (e) { logoNote = ` (Couldn't read the logo folder: ${String(e.message).slice(0, 120)})`; }
       const lastSync = { at: new Date().toISOString(), by: loginName || "", added: r.added, updated: r.updated, errors: r.errors.length, scanned: r.scanned };
-      await saveSettings({ lastSync });
+      await saveSettings({ lastSync, issuesTracked: true });
       setSyncMsg({ ok: !r.errors.length, text: `Synced ${r.scanned} PDFs — ${r.added} new, ${r.updated} updated${r.errors.length ? `, ${r.errors.length} couldn't be read` : ""}.${logoNote}`, errors: r.errors });
     } catch (e) {
       setConnected(isDropboxConnected());
@@ -114,6 +121,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
   }, [stored, connected, runSync]);
 
   const openAccount = key => { setAccountKey(key); setView("accounts"); };
+  const gaps = useMemo(() => findGaps(rawOrders, issues, settings), [rawOrders, issues, settings]);
   const ctx = { T, db, orders, settings, saveSettings, opts, currencyMode, openAccount, loginName, logos, bmpLogo, ownOnly };
   const views = VIEWS.filter(([id]) => id !== "settings" || isAdmin);
 
@@ -169,12 +177,19 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
               {canSync && <button className="btn-gold" onClick={() => runSync(false)}>{connected ? "↻ Refresh now" : "Connect Dropbox"}</button>}
             </Empty>
           )
-          : view === "dashboard" ? <Dashboard {...ctx} />
+          : view === "dashboard" ? <>
+              {isAdmin && gaps.length > 0 && (
+                <div onClick={() => setView("settings")} style={{ cursor: "pointer", marginBottom: 12, padding: "8px 12px", fontSize: 12, border: "1px solid #6a5420", background: "rgba(200,160,48,.10)", color: "#c8a030", borderRadius: 3, maxWidth: 1400 }}>
+                  ⚠ {gaps.length} order number{gaps.length > 1 ? "s are" : " is"} missing: {gaps.slice(0, 6).map(g => g.no).join(", ")}{gaps.length > 6 ? "…" : ""} — click to see why (Settings → Missing order numbers)
+                </div>
+              )}
+              <Dashboard {...ctx} />
+            </>
           : view === "orders" ? <OrdersView {...ctx} />
           : view === "accounts" ? (accountKey ? <AccountDetail {...ctx} accountKey={accountKey} back={() => setAccountKey(null)} /> : <AccountsView {...ctx} />)
           : view === "reports" ? <ReportsView {...ctx} />
           : view === "quotes" ? <QuoteMatchesView {...ctx} matches={matches} quotes={quotes} updateQuoteStatus={updateQuoteStatus} />
-          : isAdmin ? <SettingsView {...ctx} connected={connected} setConnected={setConnected} seenCount={Object.keys(seen).length} /> : null}
+          : isAdmin ? <SettingsView {...ctx} connected={connected} setConnected={setConnected} seenCount={Object.keys(seen).length} gaps={gaps} issues={issues} /> : null}
       </div>
     </div>
   );
@@ -1092,7 +1107,7 @@ function QuoteMatchesView({ T, matches, settings, saveSettings, opts, quotes, up
 // ═════════════════════════════════════════════════════════════════════════════
 // Settings
 // ═════════════════════════════════════════════════════════════════════════════
-function SettingsView({ T, db, orders, settings, saveSettings, connected, setConnected, seenCount, loginName, openAccount, logos }) {
+function SettingsView({ T, db, orders, settings, saveSettings, connected, setConnected, seenCount, loginName, openAccount, logos, gaps = [], issues = {} }) {
   const [folders, setFolders] = useState(settings.folders.join("\n"));
   const [since, setSince] = useState(settings.since);
   const [rate, setRate] = useState(settings.usdToCad);
@@ -1192,6 +1207,25 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
           setPicker(null);
         }} />}
 
+      <Card T={T} title={`Missing order numbers (${gaps.length})`} right={
+        Object.keys(issues).length > 0 && <button className="btn" onClick={() => setDoc(doc(db, "config", "salesSyncSeen"), { files: Object.fromEntries(Object.keys(issues).map(id => [id, deleteField()])) }, { merge: true }).then(() => alert("Those PDFs will be tried again on the next Refresh."))}>Retry problem PDFs on next refresh</button>}>
+        <div style={{ fontSize: 11, color: T.tableHeadText, marginBottom: 8 }}>
+          BRO and CAL numbers between the first and latest order on file that the hub doesn't have. If a number was cancelled or never used, mark it "Not used" and it won't be flagged again.
+        </div>
+        {!gaps.length ? <div style={{ fontSize: 12, color: "#5a9e5a" }}>✓ No gaps — every BRO and CAL number up to the latest one is here.</div> : (
+          <table className="data-table">
+            <thead><tr><th>Order #</th><th>Between</th><th>Why it's missing</th><th></th></tr></thead>
+            <tbody>{gaps.slice(0, 300).map(g => (
+              <tr key={g.no}>
+                <td style={{ fontWeight: 600 }}>{g.no}</td>
+                <td style={{ color: T.subtext, whiteSpace: "nowrap" }}>{g.between}</td>
+                <td style={{ color: g.file ? "#c86a5a" : T.subtext }}>{g.reason}{g.file && <div style={{ fontSize: 10, color: T.tableHeadText, wordBreak: "break-all" }}>{g.file}</div>}</td>
+                <td><button className="btn" onClick={() => saveSettings({ voidNumbers: { [g.no]: true } })}>Not used</button></td>
+              </tr>))}</tbody>
+          </table>
+        )}
+      </Card>
+
       {unmatched.length > 0 && (
         <Card T={T} title={`Customers not on any account list (${unmatched.length})`}>
           <div style={{ fontSize: 11, color: T.tableHeadText, marginBottom: 8 }}>These are treated as unassigned End Users. Click one to assign it to an account or change its type.</div>
@@ -1221,6 +1255,33 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
 
     </div>
   );
+}
+
+// BRO/CAL numbers missing between the first and latest order on file, with the likeliest reason
+function findGaps(rawOrders, issues, settings) {
+  const voided = settings.voidNumbers || {};
+  const issueList = Object.values(issues || {});
+  const out = [];
+  for (const prefix of ["BRO", "CAL"]) {
+    const have = new Map(rawOrders.filter(o => o.orderNo?.startsWith(prefix)).map(o => [+o.orderNo.slice(3), o]));
+    if (have.size < 2) continue;
+    const nums = [...have.keys()].sort((a, b) => a - b);
+    for (let i = 1; i < nums.length; i++) {
+      if (nums[i] - nums[i - 1] > 200) continue; // a jump this big is a numbering change, not missing orders
+      for (let n = nums[i - 1] + 1; n < nums[i]; n++) {
+        const no = prefix + n;
+        if (voided[no]) continue;
+        const iss = issueList.find(x => x.name && x.name.toUpperCase().replace(/[\s_-]/g, "").includes(no));
+        const a = have.get(nums[i - 1]), b = have.get(nums[i]);
+        out.push({
+          no, between: `${a.orderNo} (${fmtShort(a.date || "")}) – ${b.orderNo} (${fmtShort(b.date || "")})`,
+          reason: iss ? iss.reason : "No PDF with this number in the Dropbox folders (not saved yet, misnamed, or in another folder)",
+          file: iss?.path || "",
+        });
+      }
+    }
+  }
+  return out;
 }
 
 // Browse the folders the hub can see in Dropbox and pick one

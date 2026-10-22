@@ -80,8 +80,12 @@ export const inCurrencyMode = (o, mode) => mode === "combined" || orderCurrency(
 export function enrichOrders(orders, settings) {
   const accounts = settings.accounts, aliases = settings.aliases || {}, custTypes = settings.custTypes || {};
   // A corrected date wins; orders still without a valid date are left out of the date-based views
+  // Fill in a missing/unreadable part number from other orders with the same product description
+  const skuByDesc = new Map();
+  orders.forEach(o => (o.lines || []).forEach(l => { if (l.sku && l.desc && !/^[\d,.]+$/.test(l.sku)) skuByDesc.set(l.desc.trim().toLowerCase(), l.sku); }));
+  const fixLines = lines => (lines || []).map(l => (!l.sku || /^[\d,.]+$/.test(l.sku)) && skuByDesc.has((l.desc || "").trim().toLowerCase()) ? { ...l, sku: skuByDesc.get(l.desc.trim().toLowerCase()) } : l);
   return orders
-    .map(o => ({ ...o, date: o.override?.date || o.date || "", cust: customerOf(o, accounts, aliases, custTypes) }))
+    .map(o => ({ ...o, lines: fixLines(o.lines), date: o.override?.date || o.date || "", cust: customerOf(o, accounts, aliases, custTypes) }))
     .filter(o => /^20\d\d-\d\d-\d\d$/.test(o.date));
 }
 
@@ -166,17 +170,23 @@ function nameScore(orderName, quoteName, accounts, aliases) {
   return inter / Math.min(t1.length, t2.length);
 }
 
+const MATCH_TOLERANCE = 3000; // CAD
 // Returns [{ order, quote, score, reasons }] best-first
 export function findQuoteMatches(orders, quotes, settings) {
   const links = settings.quoteLinks || {}, dismissed = settings.dismissedMatches || {};
   const linkedQuotes = new Set(Object.values(links).map(String));
-  const qs = (quotes || []).filter(q => q.saved !== false && (q.lineItems || []).length).map(q => ({
+  // Quotes already marked Won are left out — they've been dealt with
+  const qs = (quotes || []).filter(q => q.saved !== false && q.quoteStatus !== "won" && (q.lineItems || []).length).map(q => ({
     q, date: quoteDate(q), name: q.company || q.name || "",
     skus: new Set((q.lineItems || []).map(li => String(li.sku || "").toUpperCase().trim()).filter(Boolean)),
+    total: (q.lineItems || []).reduce((s, li) => s + (parseFloat(li.unitPrice) || 0) * (parseInt(li.qty) || 0), 0),
+    currency: q.currency || "CAD",
   }));
+  const rate = Number(settings.usdToCad) || 1.37;
+  const inCad = (amt, cur) => (cur === "USD" ? amt * rate : amt);
   const out = [];
   for (const o of orders) {
-    if (links[o.orderNo]) continue;
+    if (links[o.orderNo] || !o.hasPricing) continue; // no pricing on a BOL, so nothing to compare
     const oskus = [...new Set((o.lines || []).map(l => l.sku).filter(Boolean))];
     let best = null;
     for (const x of qs) {
@@ -185,6 +195,11 @@ export function findQuoteMatches(orders, quotes, settings) {
         const gap = daysBetween(x.date, o.date);
         if (gap < -3 || gap > 240) continue; // quote must come before (or right around) the order
       }
+      // Dollar amounts must be close (within $3,000), with or without freight
+      const oc = orderCurrency(o);
+      const qv = inCad(x.total, x.currency);
+      const diff = Math.min(Math.abs(qv - inCad(o.productTotal || 0, oc)), Math.abs(qv - inCad(o.total || 0, oc)));
+      if (!x.total || diff > MATCH_TOLERANCE) continue;
       const ns = Math.max(nameScore(o.customer, x.name, settings.accounts, settings.aliases), nameScore(o.cust.name, x.name, settings.accounts, settings.aliases));
       const hit = oskus.filter(s => x.skus.has(s)).length;
       const ss = oskus.length ? hit / oskus.length : 0;
@@ -193,6 +208,7 @@ export function findQuoteMatches(orders, quotes, settings) {
       const reasons = [];
       reasons.push(ns >= 1 ? "Same customer" : "Similar customer name");
       if (oskus.length) reasons.push(`${hit} of ${oskus.length} SKU${oskus.length > 1 ? "s" : ""} on the quote`);
+      reasons.push(diff < 1 ? "Same dollar amount" : `Amounts within ${fmtMoney(diff)}`);
       if (x.date && o.date) reasons.push(`Quoted ${daysBetween(x.date, o.date)} days before order`);
       const cand = { order: o, quote: x.q, quoteDate: x.date, score, reasons };
       if (!best || score > best.score) best = cand;

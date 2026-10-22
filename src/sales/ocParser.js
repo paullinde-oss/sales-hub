@@ -104,6 +104,16 @@ function parseOCLayout(rows) {
       o.charges.push({ label, amount: amt });
       continue;
     }
+    // Charge label with its amount on the next line, e.g. "(4420-0005) Freight to Delivery Address:" / "$ 600.00"
+    if (labelIdx >= 0 && !cells.some(isMoney) && (/^\(\d{4}-\d{4}\)/.test(cells[0] || "") || /:\s*$/.test(cells[labelIdx]))) {
+      const next = rows[i + 1];
+      const nextCells = next ? next.items.map(c => c.str).filter(x => x !== "$") : [];
+      const amtOnly = nextCells.length && nextCells.every(c => isMoney(c) || /^-$/.test(c.trim()));
+      const label = cells[labelIdx].replace(/^\([\d-]+\)\s*/, "").replace(/:\s*$/, "").trim();
+      o.charges.push({ label, amount: amtOnly && nextCells.some(isMoney) ? money(nextCells.filter(isMoney).pop()) : 0 });
+      if (amtOnly) i++;
+      continue;
+    }
     if (hi < 0) continue;
     const moneys = cells.filter(isMoney);
     if (moneys.length >= 2) {
@@ -114,12 +124,12 @@ function parseOCLayout(rows) {
       let qty = null, sku = "", desc = [];
       for (const c of items) {
         if (qtyX != null && Math.abs(c.x - qtyX) < 30 && isInt(c.str)) qty = money(c.str);
-        else if (partX != null && c.x >= partX - 40 && (qtyX == null || c.x < qtyX - 15)) sku = c.str;
+        else if (partX != null && c.x >= partX - 40 && (qtyX == null || c.x < qtyX - 15)) { if (!isInt(c.str)) sku = c.str; } // a bare number isn't a part number
         else desc.push(c.str);
       }
       if (qty == null) { const q = items.filter(c => isInt(c.str)).pop(); if (q) { qty = money(q.str); desc = desc.filter(d => d !== q.str); } }
       o.lines.push({ sku: sku.toUpperCase(), desc: desc.join(" ").trim(), qty: qty ?? 0, price: price ?? 0, amount: amount ?? 0 });
-    } else if (o.lines.length && cells.length && !o.charges.length && o.total == null) {
+    } else if (o.lines.length && cells.length && !o.charges.length && o.total == null && !/^\(\d{4}-\d{4}\)/.test(cells[0])) {
       // wrapped description line
       const last = o.lines[o.lines.length - 1];
       last.desc = (last.desc + " " + cells.join(" ")).trim();

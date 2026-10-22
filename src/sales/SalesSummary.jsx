@@ -1143,7 +1143,15 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
             </div>}</div>
           <div><div style={lbl}>Read orders dated on or after</div>
             <input type="date" value={since} onChange={e => setSince(e.target.value)} style={{ height: 28, fontSize: 12 }} />
-            <div style={{ fontSize: 10, color: T.tableHeadText, marginTop: 4 }}>Dec 1, 2025 = start of FY2026</div></div>
+            <div style={{ fontSize: 10, color: T.tableHeadText, marginTop: 4 }}>Quick pick (saves right away):</div>
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 3 }}>
+              {[2024, 2025, 2026].map(y => {
+                const d = `${y - 1}-12-01`;
+                return <button key={y} className="btn" style={{ padding: "3px 8px", fontSize: 10, borderColor: since === d ? T.gold : undefined }}
+                  onClick={() => { setSince(d); saveSettings({ since: d }); }}>From FY{y}</button>;
+              })}
+            </div>
+            <div style={{ fontSize: 10, color: T.tableHeadText, marginTop: 4 }}>Saved: {fmtDate(settings.since)}</div></div>
           <div><div style={lbl}>USD → CAD rate (for combined totals)</div>
             <input type="number" step="0.0001" value={rate} onChange={e => setRate(e.target.value)} style={{ height: 28, fontSize: 12, width: 100 }} /></div>
         </div>

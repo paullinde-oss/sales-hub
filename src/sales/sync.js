@@ -44,6 +44,8 @@ export async function syncOrders({ db, folders, since, seen = {}, existing = {},
     const e = new Error(`Couldn't open ${folderErrors.map(x => `"${x.file}"`).join(" or ")} in Dropbox. Go to Sales Summary → Settings and use "Browse Dropbox" to pick the right folder.`);
     throw e;
   }
+  // A folder listed inside another listed folder would otherwise be read twice
+  files = [...new Map(files.map(f => [f.id, f])).values()];
   const todo = files
     .filter(f => seen[f.id] !== f.rev && !obviouslyTooOld(f, since))
     // oldest first so a revised OC overwrites the earlier version

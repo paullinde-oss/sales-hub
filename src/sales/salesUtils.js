@@ -79,7 +79,10 @@ export const inCurrencyMode = (o, mode) => mode === "combined" || orderCurrency(
 // ── Enrichment: attach customer/account info used everywhere ────────────────
 export function enrichOrders(orders, settings) {
   const accounts = settings.accounts, aliases = settings.aliases || {}, custTypes = settings.custTypes || {};
-  return orders.map(o => ({ ...o, cust: customerOf(o, accounts, aliases, custTypes) }));
+  // A corrected date wins; orders still without a valid date are left out of the date-based views
+  return orders
+    .map(o => ({ ...o, date: o.override?.date || o.date || "", cust: customerOf(o, accounts, aliases, custTypes) }))
+    .filter(o => /^20\d\d-\d\d-\d\d$/.test(o.date));
 }
 
 export function filterOrders(orders, f) {

@@ -19,6 +19,8 @@ export function parseLongDate(s) {
   const m = String(s || "").toLowerCase().match(/(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2}),?\s+(\d{4})/);
   if (!m) return "";
   const mo = MONTHS.indexOf(m[1]) + 1;
+  // A blank date in Leon's template prints as "January 0, 1900" — treat it as missing
+  if (+m[3] < 2000 || +m[2] < 1 || +m[2] > 31) return "";
   return `${m[3]}-${String(mo).padStart(2, "0")}-${String(m[2]).padStart(2, "0")}`;
 }
 

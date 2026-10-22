@@ -61,6 +61,11 @@ export async function syncOrders({ db, folders, since, seen = {}, existing = {},
       try {
         const data = await downloadFile(file);
         const o = await parseOrderPdf(pdfjs, data, file.name.replace(/_/g, " "));
+        if (o && !o.date && file.modified) {
+          // No usable date on the OC or in the file name: fall back to when the PDF was saved
+          o.date = file.modified.slice(0, 10);
+          o.warnings = [...(o.warnings || []).filter(w => !/order date/i.test(w)), "No order date on the OC — using the date the PDF was saved. Fix it under Corrections if needed."];
+        }
         if (!o || !o.orderNo) { res.skipped++; }
         else if (o.date && o.date < since) { res.skipped++; }
         else if (o.format === "bol" && formats[o.orderNo] === "oc") { res.skipped++; } // keep the priced OC

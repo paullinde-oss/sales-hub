@@ -84,9 +84,11 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
     setSync({ stage: "Starting…", done: 0, total: 0 });
     try {
       const existing = Object.fromEntries(rawOrders.map(o => [o.orderNo, o]));
+      // Re-read PDFs that came in without a usable date (e.g. "January 0, 1900")
+      const badDate = new Set(rawOrders.filter(o => !/^20\d\d-/.test(o.override?.date || o.date || "")).map(o => o.file?.id).filter(Boolean));
       // Record finished files every 25 so an interrupted sync (tab closed, laptop asleep) picks up where it left off
       const saveSeen = batch => setDoc(doc(db, "config", "salesSyncSeen"), { files: batch }, { merge: true });
-      const r = await syncOrders({ db, folders: settings.folders, since: settings.since, seen, existing, loginName, onProgress: setSync, onSeen: saveSeen });
+      const r = await syncOrders({ db, folders: settings.folders, since: settings.since, seen: Object.fromEntries(Object.entries(seen).filter(([id]) => !badDate.has(id))), existing, loginName, onProgress: setSync, onSeen: saveSeen });
       if (Object.keys(r.seen).length) await saveSeen(r.seen);
       let logoNote = "";
       try {
@@ -462,8 +464,8 @@ function OrderTable({ T, db, orders, opts, openAccount, compact, editable, setti
 }
 
 function OrderDetail({ T, db, o, editable }) {
-  const [ov, setOv] = useState({ customer: o.override?.customer || "", currency: o.override?.currency || "", total: o.override?.total ?? "" });
-  const save = () => setDoc(doc(db, "salesOrders", o.orderNo), { override: { customer: ov.customer.trim(), currency: ov.currency, total: ov.total === "" ? "" : Number(ov.total) } }, { merge: true });
+  const [ov, setOv] = useState({ customer: o.override?.customer || "", currency: o.override?.currency || "", total: o.override?.total ?? "", date: o.override?.date || "" });
+  const save = () => setDoc(doc(db, "salesOrders", o.orderNo), { override: { customer: ov.customer.trim(), currency: ov.currency, total: ov.total === "" ? "" : Number(ov.total), date: ov.date || "" } }, { merge: true });
   const remove = () => { if (confirm(`Remove ${o.orderNo} from Sales Summary? (It will come back on the next sync if the PDF is still in Dropbox and is changed.)`)) deleteDoc(doc(db, "salesOrders", o.orderNo)); };
   return (
     <div style={{ display: "flex", gap: 24, flexWrap: "wrap", fontSize: 12 }}>
@@ -492,6 +494,7 @@ function OrderDetail({ T, db, o, editable }) {
               <select value={ov.currency} onChange={e => setOv({ ...ov, currency: e.target.value })} style={{ height: 26, fontSize: 11 }}>
                 <option value="">Currency: auto ({o.currency})</option><option value="CAD">CAD</option><option value="USD">USD</option>
               </select>
+              <input type="date" value={ov.date || o.date} onChange={e => setOv({ ...ov, date: e.target.value })} title="Order date" style={{ height: 26, fontSize: 11 }} />
               <input type="number" placeholder={o.hasPricing ? "Override total" : "Enter order total"} value={ov.total} onChange={e => setOv({ ...ov, total: e.target.value })} style={{ height: 26, fontSize: 11, width: 130 }} />
             </div>
             <div style={{ display: "flex", gap: 6 }}>

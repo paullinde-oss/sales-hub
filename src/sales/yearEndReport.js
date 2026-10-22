@@ -174,11 +174,16 @@ export function openYearEndReport({ customers, fy, usdToCad, logos = {}, bmpLogo
   const w = window.open("", "_blank");
   if (!w) { alert("Your browser blocked the report window. Allow pop-ups for the Sales Hub and try again."); return; }
   const body = customers.map(c => section(c, yearCompare(c.orders, fy, usdToCad), bmpLogo, logos[c.key]?.dataUrl)).join("");
-  const title = customers.length === 1 ? `${customers[0].name} — FY${fy} Year in Review` : `FY${fy} Year in Review — ${customers.length} customers`;
+  // The browser uses the page title as the suggested file name when saving as PDF
+  const safe = n => String(n).replace(/[\\/:*?"<>|]+/g, "-").trim();
+  const title = customers.length === 1
+    ? `${safe(customers[0].name)} — FY${fy} BMP Supplies Year in Review`
+    : `FY${fy} BMP Supplies Year in Review — ${customers.length} customers`;
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${CSS}</style></head><body>
     <div class="toolbar">${esc(title)}<div style="flex:1"></div>Choose “Save as PDF” as the printer to save a PDF. <button onclick="window.print()">Save as PDF / Print</button></div>
     <div class="wrap">${body}</div>
     <script>window.onload = () => setTimeout(() => window.print(), 400);<\/script></body></html>`);
   w.document.close();
+  w.document.title = title;
 }
 

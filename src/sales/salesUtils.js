@@ -2,7 +2,7 @@
 import { normName, matchAccount, customerOf } from "./accounts";
 import { cleanOrder } from "./ocParser";
 import { normalizeCities } from "./cities";
-import { buildCatalog, standardiseLine } from "./skus";
+import { buildCatalog, standardiseLine, lineKey } from "./skus";
 
 // ── Dates (all order dates are "YYYY-MM-DD" strings in local time) ─────────
 export const pad = n => String(n).padStart(2, "0");
@@ -88,9 +88,11 @@ export function enrichOrders(orders, settings, products = []) {
   orders.forEach(o => (o.lines || []).forEach(l => { if (l.sku && l.desc && !/^[\d,.]+$/.test(l.sku)) skuByDesc.set(l.desc.trim().toLowerCase(), l.sku); }));
   const fixLines = lines => (lines || []).map(l => (!l.sku || /^[\d,.]+$/.test(l.sku)) && skuByDesc.has((l.desc || "").trim().toLowerCase()) ? { ...l, sku: skuByDesc.get(l.desc.trim().toLowerCase()) } : l);
   // Match every product line to the Products list (Settings → Product SKU clean-up)
-  const cleaned = orders.map(cleanOrder); // freight/tax/fees typed in as line items on older OCs
-  const catalog = buildCatalog(products, cleaned.flatMap(o => o.lines || []));
   const skuMap = settings.skuMap || {};
+  // Lines marked in the clean-up as not a product at all (tax / freight / fee)
+  const kindOverride = l => { const v = skuMap[lineKey(l)]; return ["__tax", "__freight", "__fee"].includes(v) ? v.slice(2) : null; };
+  const cleaned = orders.map(o => cleanOrder(o, kindOverride)); // freight/tax/fees typed in as line items on older OCs
+  const catalog = buildCatalog(products, cleaned.flatMap(o => o.lines || []));
   return normalizeCities(cleaned) // "CALGARY", "Calgary, Alberta", "Calgary (pickup)" → "Calgary, AB"
     .map(o => ({ ...o, lines: (o.lines || []).map(l => standardiseLine(l, catalog, skuMap)) }))
     .map(o => ({ ...o, lines: fixLines(o.lines), date: o.override?.date || o.date || "", cust: customerOf(o, accounts, aliases, custTypes) }))

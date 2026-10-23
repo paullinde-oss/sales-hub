@@ -1481,6 +1481,9 @@ function SkuCleanup({ T, orders, products, settings, saveSettings }) {
                     <select value={v} onChange={e => setPick({ ...pick, [r.key]: e.target.value })} style={{ height: 26, fontSize: 11, maxWidth: 340 }}>
                       {r.sugg.map(s => <option key={s.sku} value={s.sku}>{s.sku} — {String(s.desc).slice(0, 40)}{s.source !== "Products list" ? " (used on orders)" : ""}</option>)}
                       <option value="__keep">Keep "{r.generic ? r.desc?.slice(0, 30) : r.sku}" as its own SKU</option>
+                      <option value="__tax">Not a product — it's tax (ignore it)</option>
+                      <option value="__freight">Not a product — it's freight</option>
+                      <option value="__fee">Not a product — it's a fee</option>
                       <option value="__other">Type a different SKU…</option>
                     </select>
                     {v === "__other" && <input list="sku-catalog" value={typed[r.key] || ""} onChange={e => setTyped({ ...typed, [r.key]: e.target.value })} placeholder="SKU" style={{ height: 26, fontSize: 11, width: 130, marginLeft: 4 }} />}
@@ -1496,7 +1499,7 @@ function SkuCleanup({ T, orders, products, settings, saveSettings }) {
         <table className="data-table" style={{ marginTop: 10 }}>
           <thead><tr><th>On orders</th><th>Reported as</th><th></th></tr></thead>
           <tbody>{done.sort().map(([k, v]) => (
-            <tr key={k}><td>{label(k)}</td><td style={{ fontWeight: 600 }}>{v === "__keep" ? <span style={{ color: T.tableHeadText }}>kept as its own SKU</span> : v}</td>
+            <tr key={k}><td>{label(k)}</td><td style={{ fontWeight: 600 }}>{{ __keep: "kept as its own SKU", __tax: "tax (ignored)", __freight: "freight", __fee: "fee" }[v] ? <span style={{ color: T.tableHeadText }}>{{ __keep: "kept as its own SKU", __tax: "tax (ignored)", __freight: "freight", __fee: "fee" }[v]}</span> : v}</td>
               <td><button className="btn-del" onClick={() => saveSettings({ skuMap: { [k]: deleteField() } })}>Undo</button></td></tr>))}</tbody>
         </table>
       )}

@@ -297,12 +297,13 @@ export function lineKind(l, orderNo) {
   if (FEE_RE.test(desc) || /^admin$/i.test(sku)) return "fee";
   return "product";
 }
-export function cleanOrder(o) {
+// kindOverride(line) can say a line is "tax" / "freight" / "fee" (choices from Settings → Product SKU clean-up)
+export function cleanOrder(o, kindOverride = null) {
   // Labels / Label Fees are charged for, so they stay as a product — all grouped as one "LABELS" item
   const lines = (o.lines || []).map(l => (NO_SKU(String(l.sku || "").trim()) && /\blabels?\b/i.test(l.desc || "") && l.sku !== "LABELS")
     ? { ...l, sku: "LABELS", desc: "Labels / Label Fees", note: l.desc } : l);
   const relabelled = lines.some((l, i) => l !== (o.lines || [])[i]);
-  const kinds = lines.map(l => lineKind(l, o.orderNo));
+  const kinds = lines.map(l => (kindOverride && kindOverride(l)) || lineKind(l, o.orderNo));
   const r2 = n => Math.round((n || 0) * 100) / 100;
   const isFreight = c => c.kind === "freight" || (!c.kind && /freight|shipping|delivery|^frt\b/i.test(c.label || ""));
   // FRT, "Shipping to …", "Freight to Delivery Address"… are all just "Freight" (original wording kept as a note)

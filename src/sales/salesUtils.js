@@ -94,8 +94,9 @@ export function enrichOrders(orders, settings, products = []) {
   const cleaned = orders.map(o => cleanOrder(o, kindOverride)); // freight/tax/fees typed in as line items on older OCs
   const catalog = buildCatalog(products, cleaned.flatMap(o => o.lines || []));
   return normalizeCities(cleaned) // "CALGARY", "Calgary, Alberta", "Calgary (pickup)" → "Calgary, AB"
-    .map(o => ({ ...o, lines: (o.lines || []).map(l => standardiseLine(l, catalog, skuMap)) }))
-    .map(o => ({ ...o, lines: fixLines(o.lines), date: o.override?.date || o.date || "", cust: customerOf(o, accounts, aliases, custTypes) }))
+    // Fill in a blank/numeric SKU from other orders with the same description first, then standardise it
+    .map(o => ({ ...o, lines: fixLines(o.lines).map(l => standardiseLine(l, catalog, skuMap)) }))
+    .map(o => ({ ...o, date: o.override?.date || o.date || "", cust: customerOf(o, accounts, aliases, custTypes) }))
     .filter(o => /^20\d\d-\d\d-\d\d$/.test(o.date));
 }
 

@@ -58,6 +58,12 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
   const [currencyMode, setCurrencyMode] = useState("combined");
   const [includeFreight, setIncludeFreight] = useState(true);
   const autoTried = useRef(false);
+  // If the database can't be read (e.g. Firebase's free daily limit is used up), syncing must not run:
+  // it couldn't see which orders/PDFs it already has and could overwrite good orders.
+  const [dbError, setDbError] = useState("");
+  const [seenLoaded, setSeenLoaded] = useState(false);
+  const [oldFiles, setOldFiles] = useState({});
+  const onDbError = e => { console.warn("database read error", e); setDbError(/resource-exhausted|quota/i.test(`${e?.code} ${e?.message}`) ? "quota" : String(e?.message || e)); };
   const scrollRef = useRef(null);
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0; }, [view, accountKey]);
 
@@ -70,7 +76,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
     const unsub = listenOrders(db, (all, n) => {
       latest = all; setPackCount(n);
       if (first) { first = false; flush(); } else if (!timer) timer = setTimeout(flush, 2000);
-    }, e => { console.warn("orderPacks read error", e); setLoaded(true); });
+    }, e => { onDbError(e); setLoaded(true); });
     return () => { unsub(); clearTimeout(timer); };
   }, [db]);
   // First run after this change: an admin's browser copies the existing orders into the packs once
@@ -83,8 +89,8 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
       .catch(e => setSyncMsg({ ok: false, text: "Couldn't reorganise orders: " + e.message }))
       .finally(() => setSync(null));
   }, [packCount, isAdmin, stored, db]);
-  useEffect(() => onSnapshot(doc(db, "config", "salesSettings"), s => setStored(s.exists() ? s.data() : {}), () => setStored({})), [db]);
-  useEffect(() => onSnapshot(doc(db, "config", "salesSyncSeen"), s => setSeen(s.exists() ? (s.data().files || {}) : {})), [db]);
+  useEffect(() => onSnapshot(doc(db, "config", "salesSettings"), s => { setStored(s.exists() ? s.data() : {}); setDbError(""); }, e => { onDbError(e); setStored(null); }), [db]);
+  useEffect(() => onSnapshot(doc(db, "config", "salesSyncSeen"), s => { setSeen(s.exists() ? (s.data().files || {}) : {}); setOldFiles(s.exists() ? (s.data().old || {}) : {}); setSeenLoaded(true); }, onDbError), [db]);
   const [issues, setIssues] = useState({});
   const [listing, setListing] = useState(null); // { BRO10301: "2025-06-02", … } every numbered PDF in the folders
   useEffect(() => onSnapshot(doc(db, "config", "salesSyncFiles"), s => setListing(s.exists() ? (s.data().numbers || {}) : null)), [db]);
@@ -102,8 +108,14 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
   const opts = useMemo(() => ({ includeFreight, usdToCad: Number(settings.usdToCad) || 1.37, mode: currencyMode }), [includeFreight, settings.usdToCad, currencyMode]);
   const matches = useMemo(() => findQuoteMatches(orders, quotes, settings), [orders, quotes, settings]);
 
+  // Everything a sync needs to know about what's already been done
+  const ready = loaded && !!stored && seenLoaded && packCount > 0 && !dbError;
   const runSync = useCallback(async (auto = false) => {
     if (sync) return;
+    if (!ready) {
+      if (!auto) setSyncMsg({ ok: false, text: dbError === "quota" ? "Can't sync right now — Firebase's free daily limit is used up, so the hub can't see what it already has. It resets at midnight Pacific (1 am Alberta). Nothing is lost." : dbError ? `Can't sync right now — the database isn't responding (${dbError}).` : "Still loading — try Refresh again in a few seconds." });
+      return;
+    }
     if (!isDropboxConnected()) { setConnected(false); if (!auto) startDropboxAuth(); return; }
     setSyncMsg(null);
     setSync({ stage: "Starting…", done: 0, total: 0 });
@@ -113,14 +125,16 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
       const badDate = new Set(rawOrders.filter(o => !/^20\d\d-/.test(o.override?.date || o.date || "") || !(o.customer || "").trim()).map(o => o.file?.id).filter(Boolean)); // also re-read orders with no customer name
       // Record finished files every 25 so an interrupted sync (tab closed, laptop asleep) picks up where it left off
       const saveSeen = batch => setDoc(doc(db, "config", "salesSyncSeen"), { files: batch }, { merge: true });
+      const saveOld = batch => setDoc(doc(db, "config", "salesSyncSeen"), { old: batch }, { merge: true });
       // One-time: PDFs skipped before problem files were tracked get one more look, so gaps show a real reason
       const orderFiles = new Set(rawOrders.map(o => o.file?.id).filter(Boolean));
       const reread = (settings.parserVersion || 0) < PARSER_VERSION;
       // Start date moved earlier since the last sync: PDFs skipped as "too old" back then get another look
       const sinceMovedBack = !settings.syncedSince || settings.since < settings.syncedSince;
       const retry = id => reread || badDate.has(id) || !!issues[id] || ((!settings.issuesTracked || sinceMovedBack) && !orderFiles.has(id));
-      const r = await syncOrders({ db, folders: settings.folders, since: settings.since, seen: Object.fromEntries(Object.entries(seen).filter(([id]) => !retry(id))), existing, loginName, onProgress: setSync, onSeen: saveSeen });
+      const r = await syncOrders({ db, folders: settings.folders, since: settings.since, seen: Object.fromEntries(Object.entries(seen).filter(([id]) => !retry(id))), old: sinceMovedBack ? {} : oldFiles, existing, loginName, onProgress: setSync, onSeen: saveSeen });
       if (Object.keys(r.seen).length) await saveSeen(r.seen);
+      if (Object.keys(r.old).length) await saveOld(r.old);
       if (Object.keys(r.listing).length) await setDoc(doc(db, "config", "salesSyncFiles"), { numbers: r.listing, at: new Date().toISOString() });
       if (Object.keys(r.issues).length || Object.keys(r.resolved).length)
         await setDoc(doc(db, "config", "salesSyncIssues"), { files: { ...r.issues, ...Object.fromEntries(Object.keys(r.resolved).map(id => [id, deleteField()])) } }, { merge: true });
@@ -132,15 +146,16 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
       setSyncMsg({ ok: false, text: String(e.message || e) });
     }
     setSync(null);
-  }, [sync, rawOrders, settings, seen, issues, db, loginName, saveSettings]);
+  }, [sync, ready, dbError, rawOrders, settings, seen, oldFiles, issues, db, loginName, saveSettings]);
 
   // Auto-sync once a day-ish for whoever has Dropbox connected
   useEffect(() => {
-    if (autoTried.current || !stored || !connected || !canSync) return;
+    // Wait until everything has loaded (and the one-time reorganise is done) before deciding
+    if (autoTried.current || !ready || sync || !connected || !canSync) return;
     autoTried.current = true;
     const last = stored.lastSync?.at ? new Date(stored.lastSync.at) : null;
     if (!last || Date.now() - last > AUTO_SYNC_HOURS * 3600e3) runSync(true);
-  }, [stored, connected, runSync]);
+  }, [ready, sync, stored, connected, runSync]);
 
   const openAccount = key => { setAccountKey(key); setView("accounts"); };
   const gaps = useMemo(() => findGaps(rawOrders, issues, settings, listing), [rawOrders, issues, settings, listing]);
@@ -176,6 +191,13 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
           {sync ? "Syncing…" : connected ? "↻ Refresh" : "Connect Dropbox"}
         </button>}
       </div>
+      {dbError && (
+        <div style={{ padding: "8px 16px", fontSize: 12, background: "rgba(200,106,90,.12)", color: "#c86a5a" }}>
+          {dbError === "quota"
+            ? "⚠ Firebase's free daily limit is used up, so the hub can't load or save sales data right now. It resets at midnight Pacific (1 am Alberta) — nothing is lost. Syncing is paused until then."
+            : `⚠ The database isn't responding (${dbError}). Syncing is paused — try reloading the page.`}
+        </div>
+      )}
       {sync && sync.total > 0 && (
         <div style={{ height: 3, background: T.border }}><div style={{ height: 3, width: `${(sync.done / sync.total) * 100}%`, background: T.gold, transition: "width .2s" }} /></div>
       )}

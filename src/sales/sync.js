@@ -31,12 +31,16 @@ function obviouslyTooOld(file, since) {
  *   existing — { orderNo: order } currently in Firestore
  * Returns { added, updated, skipped, errors: [{file, error}], seen }
  */
-export async function syncOrders({ db, folders, since, seen = {}, existing = {}, loginName, onProgress = () => {}, onSeen = null }) {
+export async function syncOrders({ db, folders, since, seen = {}, old = {}, existing = {}, loginName, onProgress = () => {}, onSeen = null }) {
   onProgress({ stage: "Listing Dropbox folders…", done: 0, total: 0 });
   // A missing folder shouldn't stop the others from syncing — report it and carry on
   let files = [];
   const folderErrors = [];
-  for (const f of folders.filter(Boolean)) {
+  // A folder inside another listed folder is read with it anyway — skip it (also avoids
+  // "not found" after a year folder is renamed)
+  const norm = f => f.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  const list = folders.filter(Boolean).filter(f => !folders.some(g => g && norm(g) !== norm(f) && norm(f).startsWith(norm(g) + "/")));
+  for (const f of list) {
     try { files.push(...await listPdfs(f)); }
     catch (e) { folderErrors.push({ file: f, error: /not_found/.test(e.message) ? "Folder not found — use Browse in Sales Summary → Settings to pick it" : String(e.message).slice(0, 160) }); }
   }
@@ -48,11 +52,13 @@ export async function syncOrders({ db, folders, since, seen = {}, existing = {},
   files = [...new Map(files.map(f => [f.id, f])).values()];
   const todo = files
     .filter(f => seen[f.id] !== f.rev && !obviouslyTooOld(f, since))
+    // PDFs already found to be dated before the start date (and unchanged since) aren't downloaded again
+    .filter(f => { const o = old[f.id]; if (!o) return true; const [rev, date] = o.split("|"); return !(rev === f.rev && date && date < since); })
     // oldest first so a revised OC overwrites the earlier version
     .sort((a, b) => (a.modified < b.modified ? -1 : 1));
 
   // issues: files we couldn't turn into an order (shown under "Missing order numbers"); resolved: ones that now read fine
-  const res = { added: 0, updated: 0, skipped: 0, errors: [...folderErrors], seen: {}, scanned: files.length, issues: {}, resolved: {}, removed: [], listing: {} };
+  const res = { added: 0, updated: 0, skipped: 0, errors: [...folderErrors], seen: {}, old: {}, scanned: files.length, issues: {}, resolved: {}, removed: [], listing: {} };
   // Every BRO/CAL number that has a PDF, with the date in its file name — used by "Missing order numbers"
   for (const f of files) { const no = orderNoFrom(f.name); if (no) res.listing[no] = parseLongDate(f.name.replace(/_/g, " ")) || "?"; }
   const issue = (file, reason) => { res.issues[file.id] = { name: file.name, path: file.path, reason, at: new Date().toISOString() }; };
@@ -95,6 +101,7 @@ export async function syncOrders({ db, folders, since, seen = {}, existing = {},
         else if (o.date && o.date < since) {
           res.skipped++; await dropStale(file, null);
           tooOld = true; // not marked done: if the start date moves earlier, it gets read then
+          res.old[file.id] = `${file.rev}|${o.date}`;
         }
         else if (o.format === "bol" && formats[o.orderNo] === "oc") { res.skipped++; } // keep the priced OC
         else {

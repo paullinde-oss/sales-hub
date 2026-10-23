@@ -2,6 +2,7 @@
 import { normName, matchAccount, customerOf } from "./accounts";
 import { cleanOrder } from "./ocParser";
 import { normalizeCities } from "./cities";
+import { buildCatalog, standardiseLine } from "./skus";
 
 // ── Dates (all order dates are "YYYY-MM-DD" strings in local time) ─────────
 export const pad = n => String(n).padStart(2, "0");
@@ -79,15 +80,19 @@ export function displayValue(sum, mode) { return mode === "CAD" ? sum.cad : mode
 export const inCurrencyMode = (o, mode) => mode === "combined" || orderCurrency(o) === mode;
 
 // ── Enrichment: attach customer/account info used everywhere ────────────────
-export function enrichOrders(orders, settings) {
+export function enrichOrders(orders, settings, products = []) {
   const accounts = settings.accounts, aliases = settings.aliases || {}, custTypes = settings.custTypes || {};
   // A corrected date wins; orders still without a valid date are left out of the date-based views
   // Fill in a missing/unreadable part number from other orders with the same product description
   const skuByDesc = new Map();
   orders.forEach(o => (o.lines || []).forEach(l => { if (l.sku && l.desc && !/^[\d,.]+$/.test(l.sku)) skuByDesc.set(l.desc.trim().toLowerCase(), l.sku); }));
   const fixLines = lines => (lines || []).map(l => (!l.sku || /^[\d,.]+$/.test(l.sku)) && skuByDesc.has((l.desc || "").trim().toLowerCase()) ? { ...l, sku: skuByDesc.get(l.desc.trim().toLowerCase()) } : l);
-  return normalizeCities(orders) // "CALGARY", "Calgary, Alberta", "Calgary (pickup)" → "Calgary, AB"
-    .map(cleanOrder) // freight/tax/fees typed in as line items on older OCs
+  // Match every product line to the Products list (Settings → Product SKU clean-up)
+  const cleaned = orders.map(cleanOrder); // freight/tax/fees typed in as line items on older OCs
+  const catalog = buildCatalog(products, cleaned.flatMap(o => o.lines || []));
+  const skuMap = settings.skuMap || {};
+  return normalizeCities(cleaned) // "CALGARY", "Calgary, Alberta", "Calgary (pickup)" → "Calgary, AB"
+    .map(o => ({ ...o, lines: (o.lines || []).map(l => standardiseLine(l, catalog, skuMap)) }))
     .map(o => ({ ...o, lines: fixLines(o.lines), date: o.override?.date || o.date || "", cust: customerOf(o, accounts, aliases, custTypes) }))
     .filter(o => /^20\d\d-\d\d-\d\d$/.test(o.date));
 }

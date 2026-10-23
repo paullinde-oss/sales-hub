@@ -9,6 +9,7 @@ import { syncOrders } from "./sync";
 import { writeOrder, removeOrder, listenOrders, buildPacks } from "./orderStore";
 import { useLogos, resizeImage, saveLogo, removeLogo, logoDevUrl, domainOf } from "./logos";
 import { yearCompare, openYearEndReport } from "./yearEndReport";
+import { buildCatalog, suggestSkus, isGenericSku } from "./skus";
 import { QuoteWinRateReport, OpenPipelineReport, QuoteToOrderReport, LeadReport, SalesForecastReport, ReorderReport, ProductTrendsReport } from "./pipelineReports";
 import {
   today, mondayOf, addDays, monthStart, monthEnd, fyOf, fyStart, fyEnd, daysBetween, parseYmd,
@@ -40,7 +41,7 @@ const VIEWS = [
   ["reports", "Reports"], ["quotes", "Quote Matches"], ["settings", "Settings"],
 ];
 
-export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginName, user, bmpLogo, leads = [], adSpend = {}, canSeeLeads = false }) {
+export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginName, user, bmpLogo, leads = [], adSpend = {}, canSeeLeads = false, products = [] }) {
   // "own" scope (e.g. John) only sees accounts where they're the rep; admins also get Settings
   const ownOnly = user?.salesScope === "own";
   const isAdmin = !!user?.admin;
@@ -104,7 +105,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
     return { ...m, ...uploadedLogos };
   }, [settings.accounts, settings.logoDevKey, uploadedLogos]);
   const saveSettings = useCallback(patch => setDoc(doc(db, "config", "salesSettings"), patch, { merge: true }).catch(e => alert("Couldn't save settings: " + e.message)), [db]);
-  const orders = useMemo(() => enrichOrders(rawOrders, settings).filter(o => !ownOnly || o.cust.rep === loginName).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.orderNo < b.orderNo ? 1 : -1)), [rawOrders, settings, ownOnly, loginName]);
+  const orders = useMemo(() => enrichOrders(rawOrders, settings, products).filter(o => !ownOnly || o.cust.rep === loginName).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.orderNo < b.orderNo ? 1 : -1)), [rawOrders, settings, products, ownOnly, loginName]);
   const opts = useMemo(() => ({ includeFreight, usdToCad: Number(settings.usdToCad) || 1.37, mode: currencyMode }), [includeFreight, settings.usdToCad, currencyMode]);
   const matches = useMemo(() => findQuoteMatches(orders, quotes, settings), [orders, quotes, settings]);
 
@@ -159,7 +160,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
 
   const openAccount = key => { setAccountKey(key); setView("accounts"); };
   const gaps = useMemo(() => findGaps(rawOrders, issues, settings, listing), [rawOrders, issues, settings, listing]);
-  const ctx = { T, db, orders, settings, saveSettings, opts, currencyMode, openAccount, loginName, logos, bmpLogo, ownOnly };
+  const ctx = { T, db, orders, settings, saveSettings, opts, currencyMode, openAccount, loginName, logos, bmpLogo, ownOnly, products };
   const views = VIEWS.filter(([id]) => id !== "settings" || isAdmin);
 
   return (
@@ -1253,7 +1254,7 @@ function QuoteMatchesView({ T, matches, settings, saveSettings, opts, quotes, up
 // ═════════════════════════════════════════════════════════════════════════════
 // Settings
 // ═════════════════════════════════════════════════════════════════════════════
-function SettingsView({ T, db, orders, settings, saveSettings, connected, setConnected, seenCount, loginName, openAccount, logos, gaps = [], issues = {} }) {
+function SettingsView({ T, db, orders, settings, saveSettings, connected, setConnected, seenCount, loginName, openAccount, logos, gaps = [], issues = {}, products = [] }) {
   const [folders, setFolders] = useState(settings.folders.join("\n"));
   const [since, setSince] = useState(settings.since);
   const [rate, setRate] = useState(settings.usdToCad);
@@ -1342,6 +1343,8 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
         </div>
       </Card>
 
+      <SkuCleanup T={T} orders={orders} products={products} settings={settings} saveSettings={saveSettings} />
+
       <Card T={T} title={`Missing order numbers (${gaps.length})`} right={
         Object.keys(issues).length > 0 && <button className="btn" onClick={() => setDoc(doc(db, "config", "salesSyncSeen"), { files: Object.fromEntries(Object.keys(issues).map(id => [id, deleteField()])) }, { merge: true }).then(() => alert("Those PDFs will be tried again on the next Refresh."))}>Retry problem PDFs on next refresh</button>}>
         <div style={{ fontSize: 11, color: T.tableHeadText, marginBottom: 8 }}>
@@ -1425,6 +1428,80 @@ function findGaps(rawOrders, issues, settings, listing) {
     }
   }
   return out;
+}
+
+// SKUs on orders that don't match the Products list, with the closest suggestions
+function SkuCleanup({ T, orders, products, settings, saveSettings }) {
+  const [pick, setPick] = useState({}); // key → chosen SKU / "__keep" / "__other"
+  const [typed, setTyped] = useState({});
+  const [showDone, setShowDone] = useState(false);
+  const squash = s => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const catalog = useMemo(() => buildCatalog(products, orders.flatMap(o => o.lines || [])), [products, orders]);
+  const rows = useMemo(() => {
+    const m = new Map();
+    for (const o of orders) for (const l of o.lines || []) {
+      if (l.skuStatus !== "unmatched") continue;
+      const generic = isGenericSku(l.sku);
+      const key = generic ? `desc:${String(l.desc || "").toLowerCase().replace(/\s+/g, " ").trim()}` : `sku:${squash(l.sku)}`;
+      const r = m.get(key) || { key, sku: l.sku, generic, desc: l.desc, spellings: new Set(), orders: new Set(), qty: 0, sales: 0 };
+      if (l.origSku) r.spellings.add(l.origSku); if (!generic) r.spellings.add(l.sku);
+      r.orders.add(o.orderNo); r.qty += l.qty || 0; r.sales += l.amount || 0;
+      m.set(key, r);
+    }
+    return [...m.values()].map(r => ({ ...r, sugg: suggestSkus({ sku: r.generic ? "" : r.sku, desc: r.desc }, catalog, 5) })).sort((a, b) => b.sales - a.sales);
+  }, [orders, catalog]);
+  const done = Object.entries(settings.skuMap || {});
+  const apply = r => {
+    const v = pick[r.key] ?? r.sugg[0]?.sku ?? "__keep";
+    const value = v === "__other" ? (typed[r.key] || "").trim().toUpperCase() : v;
+    if (!value) return alert("Type the SKU to use.");
+    saveSettings({ skuMap: { ...(settings.skuMap || {}), [r.key]: value } });
+  };
+  const label = k => k.startsWith("desc:") ? `"${k.slice(5)}" (no SKU)` : k.slice(4);
+  return (
+    <Card T={T} title={`Product SKU clean-up (${rows.length} to review)`} right={done.length > 0 && <button className="btn" onClick={() => setShowDone(!showDone)}>{showDone ? "Hide" : "Show"} saved matches ({done.length})</button>}>
+      <div style={{ fontSize: 11, color: T.tableHeadText, marginBottom: 8, lineHeight: 1.5 }}>
+        SKUs on orders are matched to the <b>Products list</b>. Differences like a "BMP-" prefix, dashes, spaces or capitals are matched automatically.
+        These ones didn't match — pick the right SKU (suggestions are closest first) or keep it as its own SKU. Your choice applies to every past and future order.
+      </div>
+      {!rows.length ? <div style={{ fontSize: 12, color: "#5a9e5a" }}>✓ Every SKU on your orders matches the Products list or has been reviewed.</div> : (
+        <div style={{ maxHeight: 520, overflowY: "auto" }}>
+          <table className="data-table">
+            <thead><tr><th>SKU on orders</th><th>Description</th><th style={{ textAlign: "right" }}>Orders</th><th style={{ textAlign: "right" }}>Sales</th><th>Use this SKU</th><th></th></tr></thead>
+            <tbody>{rows.map(r => {
+              const v = pick[r.key] ?? r.sugg[0]?.sku ?? "__keep";
+              return (
+                <tr key={r.key}>
+                  <td style={{ fontWeight: 600 }}>{r.generic ? <span style={{ color: T.tableHeadText }}>{r.sku || "(blank)"}</span> : r.sku}
+                    {r.spellings.size > 1 && <div style={{ fontSize: 10, color: T.tableHeadText, fontWeight: 400 }}>also: {[...r.spellings].filter(x => x !== r.sku).join(", ")}</div>}</td>
+                  <td style={{ color: T.subtext, maxWidth: 280 }}>{r.desc}</td>
+                  <td style={{ textAlign: "right" }}>{r.orders.size}</td>
+                  <td style={{ textAlign: "right" }}>{fmtMoney(r.sales)}</td>
+                  <td>
+                    <select value={v} onChange={e => setPick({ ...pick, [r.key]: e.target.value })} style={{ height: 26, fontSize: 11, maxWidth: 340 }}>
+                      {r.sugg.map(s => <option key={s.sku} value={s.sku}>{s.sku} — {String(s.desc).slice(0, 40)}{s.source !== "Products list" ? " (used on orders)" : ""}</option>)}
+                      <option value="__keep">Keep "{r.generic ? r.desc?.slice(0, 30) : r.sku}" as its own SKU</option>
+                      <option value="__other">Type a different SKU…</option>
+                    </select>
+                    {v === "__other" && <input list="sku-catalog" value={typed[r.key] || ""} onChange={e => setTyped({ ...typed, [r.key]: e.target.value })} placeholder="SKU" style={{ height: 26, fontSize: 11, width: 130, marginLeft: 4 }} />}
+                  </td>
+                  <td><button className="btn" onClick={() => apply(r)}>Apply</button></td>
+                </tr>);
+            })}</tbody>
+          </table>
+          <datalist id="sku-catalog">{catalog.all.map(p => <option key={p.sku} value={p.sku}>{p.desc}</option>)}</datalist>
+        </div>
+      )}
+      {showDone && (
+        <table className="data-table" style={{ marginTop: 10 }}>
+          <thead><tr><th>On orders</th><th>Reported as</th><th></th></tr></thead>
+          <tbody>{done.sort().map(([k, v]) => (
+            <tr key={k}><td>{label(k)}</td><td style={{ fontWeight: 600 }}>{v === "__keep" ? <span style={{ color: T.tableHeadText }}>kept as its own SKU</span> : v}</td>
+              <td><button className="btn-del" onClick={() => saveSettings({ skuMap: { [k]: deleteField() } })}>Undo</button></td></tr>))}</tbody>
+        </table>
+      )}
+    </Card>
+  );
 }
 
 // Browse the folders the hub can see in Dropbox and pick one

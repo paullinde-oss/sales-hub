@@ -80,12 +80,16 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
 - Free plan = **50,000 reads/day**, resets midnight Pacific (1 am Alberta). It has been hit twice.
   Paul has been advised to move to the pay-as-you-go **Blaze** plan with a small budget alert.
 - Orders are stored twice: `salesOrders/{orderNo}` and grouped in **`orderPacks/p0…p47`**; the app
-  reads only the 48 packs. Always write via `writeOrder` / `removeOrder` in `orderStore.js`.
+  reads only the 48 packs (and only the changed ones — see browser copies below). Always write via `writeOrder` / `removeOrder` in `orderStore.js`.
 - Other docs: `config/salesSettings` (accounts, aliases, skuMap, logo key, folders, since…),
   `config/salesSyncSeen` (files done / too-old files), `config/salesSyncFiles`, `config/salesSyncIssues`,
   `config/users`, `config/auth` (password hash), `customerLogos/*` (manual uploads).
-- The original app still reads **every quote** on load (`quotes` collection) — will grow; if reads
-  become a problem, pack quotes like orders or move to Blaze.
+- **Browser copies (`src/cachedCollection.js`)**: `quotes`, `leads` and `orderPacks` are kept in each
+  browser's IndexedDB; on open only docs with `_updated` newer than the last seen are read (a normal
+  open ≈ a handful of reads). Full re-read once a week per browser as a safety net. Every write to
+  these collections must carry `_updated: serverTimestamp()` — use `putDoc` / `dropDoc` /
+  `stamp()` / `deletedMarker()`; deletes are `_deleted: true` markers, never `deleteDoc`.
+  Sales Summary shows the browser copy at once but only allows syncing once Firebase has answered.
 - Avoid reading the live database from scripts unless needed; one full read of orders ≈ 48 reads
   (packs) — never page through `salesOrders` (≈1,500+ reads).
 

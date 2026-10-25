@@ -70,13 +70,18 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
 
   // Orders are read from 48 combined "pack" documents (see orderStore.js) — far fewer
   // database reads than one per order. Redraws are batched to every 2s during a sync.
+  // The browser's saved copy shows straight away; "loaded" (which lets a sync run) waits
+  // until Firebase has confirmed what's new.
   const [packCount, setPackCount] = useState(null);
+  const loadedRef = useRef(false);
   useEffect(() => {
-    let timer = null, latest = null, first = true;
-    const flush = () => { timer = null; setRawOrders(latest); setLoaded(true); };
-    const unsub = listenOrders(db, (all, n) => {
-      latest = all; setPackCount(n);
-      if (first) { first = false; flush(); } else if (!timer) timer = setTimeout(flush, 2000);
+    let timer = null, latest = null, latestFresh = false, first = true;
+    const flush = () => { timer = null; setRawOrders(latest); if (latestFresh) setLoaded(true); };
+    const unsub = listenOrders(db, (all, n, fresh) => {
+      latest = all; latestFresh = fresh;
+      if (fresh) setPackCount(n);
+      if (first || (fresh && !loadedRef.current)) { first = false; clearTimeout(timer); flush(); } else if (!timer) timer = setTimeout(flush, 2000);
+      if (fresh) loadedRef.current = true;
     }, e => { onDbError(e); setLoaded(true); });
     return () => { unsub(); clearTimeout(timer); };
   }, [db]);

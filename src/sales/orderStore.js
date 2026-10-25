@@ -5,9 +5,12 @@
 // The hub reads the 48 packs instead of every order, so opening Sales Summary
 // costs ~48 database reads instead of one per order (Firebase's free plan allows
 // 50,000 reads a day). Writes go to both through the helpers below.
+// Each browser also keeps its own copy of the packs and only reads the packs changed
+// since it last looked (see cachedCollection.js), so a normal open costs a read or two.
 // Each pack holds up to 1 MB: 48 of them fit roughly 30,000 orders (~40 years at
 // today's volume). Changing PACKS means using a new collection name and rebuilding.
-import { doc, collection, setDoc, updateDoc, deleteDoc, deleteField, getDocs, onSnapshot, FieldPath } from "firebase/firestore";
+import { doc, collection, setDoc, updateDoc, deleteDoc, deleteField, getDocs, serverTimestamp, FieldPath } from "firebase/firestore";
+import { listenCollection, stamp } from "../cachedCollection";
 
 export const PACKS = 48;
 const PACK_COLLECTION = "orderPacks";
@@ -21,21 +24,22 @@ export async function writeOrder(db, no, data) {
   await setDoc(packRef(db, no), {}, { merge: true });
   const args = [];
   for (const [k, v] of Object.entries(data)) if (v !== undefined) args.push(new FieldPath("orders", no, k), clean(v));
-  if (args.length) await updateDoc(packRef(db, no), ...args);
+  if (args.length) await updateDoc(packRef(db, no), ...args, "_updated", serverTimestamp());
 }
 
 export async function removeOrder(db, no) {
   await deleteDoc(doc(db, "salesOrders", no));
   await setDoc(packRef(db, no), {}, { merge: true });
-  await updateDoc(packRef(db, no), new FieldPath("orders", no), deleteField());
+  await updateDoc(packRef(db, no), new FieldPath("orders", no), deleteField(), "_updated", serverTimestamp());
 }
 
-// Live list of all orders, read from the packs
+// Live list of all orders, read from the packs. fresh is false while only this
+// browser's saved copy is showing (Firebase hasn't answered yet).
 export function listenOrders(db, onOrders, onError) {
-  return onSnapshot(collection(db, PACK_COLLECTION), s => {
+  return listenCollection(db, PACK_COLLECTION, (packs, { fresh }) => {
     const all = [];
-    s.docs.forEach(d => Object.entries(d.data().orders || {}).forEach(([no, o]) => all.push({ ...o, orderNo: no })));
-    onOrders(all, s.docs.length);
+    packs.forEach(p => Object.entries(p.data.orders || {}).forEach(([no, o]) => all.push({ ...o, orderNo: no })));
+    onOrders(all, packs.length, fresh);
   }, onError);
 }
 
@@ -44,6 +48,6 @@ export async function buildPacks(db) {
   const snap = await getDocs(collection(db, "salesOrders"));
   const packs = {};
   snap.docs.forEach(d => { (packs[packId(d.id)] ||= {})[d.id] = d.data(); });
-  for (let i = 0; i < PACKS; i++) await setDoc(doc(db, PACK_COLLECTION, "p" + i), { orders: packs["p" + i] || {} });
+  for (let i = 0; i < PACKS; i++) await setDoc(doc(db, PACK_COLLECTION, "p" + i), stamp({ orders: packs["p" + i] || {} }));
   return snap.size;
 }

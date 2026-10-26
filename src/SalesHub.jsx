@@ -4519,10 +4519,6 @@ function PDFModal({quote:q, onClose}) {
 
 </div>
 
-<div class="no-print" style="position:fixed;bottom:16px;right:16px;display:flex;gap:8px;z-index:999;">
-  <button onclick="window.print()" style="background:#1a1a1a;color:#fff;border:none;padding:10px 20px;font-size:12px;cursor:pointer;font-family:Raleway,sans-serif;font-weight:600;letter-spacing:.04em;">🖨 Print / Save as PDF</button>
-  <button onclick="window.close()" style="background:#e8e8e4;color:#333;border:none;padding:10px 16px;font-size:12px;cursor:pointer;font-family:Raleway,sans-serif;">Close</button>
-</div>
 </body></html>`;
   }
 
@@ -4536,23 +4532,16 @@ function PDFModal({quote:q, onClose}) {
   function doPrint(){
     const company = (q.company || q.name || "BMP Supplies").trim();
     const date = q.savedDate || todayStr;
-    const filename = `Quote ${q.quoteNum} - ${company} - ${date}`;
-    // Get the HTML from the iframe and open a new named window
-    // Chrome uses the window name / title for the PDF filename
-    if(iframeRef.current){
-      const idoc = iframeRef.current.contentDocument || iframeRef.current.contentWindow.document;
-      const html = idoc.documentElement.outerHTML;
-      // Inject the correct title into the HTML string before opening
-      const titledHTML = html.replace(/<title>[^<]*<\/title>/, `<title>${filename}</title>`);
-      const printWin = window.open('', filename, 'width=900,height=700');
-      if(printWin){
-        printWin.document.open();
-        printWin.document.write(titledHTML);
-        printWin.document.close();
-        printWin.document.title = filename;
-        setTimeout(()=>{ printWin.focus(); printWin.print(); printWin.close(); }, 500);
-      }
-    }
+    // Characters like "/" (e.g. in 10/26/2026) aren't allowed in file names — Chrome then
+    // leaves the PDF name blank, so swap them out
+    const filename = `Quote ${q.quoteNum} - ${company} - ${date}`.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim();
+    // Print the preview itself; Chrome names the PDF after the page title
+    const win = iframeRef.current?.contentWindow;
+    if(!win) return;
+    const oldTitle = document.title;
+    win.document.title = filename; document.title = filename;
+    win.focus(); win.print();
+    setTimeout(()=>{ document.title = oldTitle; }, 1000);
   }
 
   // ── Preview screen ───────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ import { collection, doc, onSnapshot, setDoc, deleteDoc, deleteField } from "fir
 import { DEFAULT_ACCOUNTS, REPS, SALES_REP, normName, matchAccount } from "./accounts";
 import { isDropboxConnected, startDropboxAuth, disconnectDropbox, redirectUri, browseFolder, accountInfo } from "./dropbox";
 import { syncOrders } from "./sync";
+import { Loader } from "../Loader";
 import { writeOrder, removeOrder, listenOrders, buildPacks } from "./orderStore";
 import { useLogos, resizeImage, saveLogo, removeLogo, logoDevUrl, domainOf } from "./logos";
 import { yearCompare, openYearEndReport } from "./yearEndReport";
@@ -190,7 +191,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
         </label>
         {ownOnly && <span style={{ fontSize: 10, color: T.tableHeadText }}>Showing your accounts only</span>}
         <div style={{ fontSize: 10, color: T.tableHeadText, textAlign: "right", lineHeight: 1.3, minWidth: 120 }}>
-          {sync ? <span style={{ color: T.gold }}>{sync.stage}{sync.total ? ` ${sync.done}/${sync.total}` : ""}</span>
+          {sync ? <span style={{ color: T.gold, display: "inline-flex", alignItems: "center", gap: 6 }}><Loader T={T} size={18} inline />{sync.stage}{sync.total ? ` ${sync.done}/${sync.total}` : ""}</span>
             : settings.lastSync ? <>Last synced {timeAgo(settings.lastSync.at)}<br />by {settings.lastSync.by || "—"}</> : "Never synced"}
         </div>
         {canSync && <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} disabled={!!sync} onClick={() => runSync(false)}>
@@ -219,7 +220,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
       )}
 
       <div ref={scrollRef} style={{ flex: 1, overflow: "auto", padding: 16 }}>
-        {!loaded || !stored ? <Empty T={T}>Loading sales data…</Empty>
+        {!loaded || !stored ? <Loader T={T} label="Loading sales data…" />
           : !orders.length && view !== "settings" ? (
             <Empty T={T}>
               <div style={{ fontSize: 14, color: T.text, marginBottom: 8 }}>No order confirmations yet</div>
@@ -1537,7 +1538,7 @@ function FolderPicker({ T, title, onPick, onClose }) {
         </div>
         <div style={{ border: `1px solid ${T.border}`, borderRadius: 2, height: 320, overflowY: "auto", background: T.panelBg }}>
           {err ? <div style={{ padding: 12, fontSize: 12, color: "#c86a5a" }}>{err}</div>
-            : !data ? <div style={{ padding: 12, fontSize: 12, color: T.tableHeadText }}>Loading…</div>
+            : !data ? <Loader T={T} size={40} />
             : !data.folders.length ? <div style={{ padding: 12, fontSize: 12, color: T.tableHeadText, lineHeight: 1.5 }}>
                 No folders here{data.files ? ` (${data.files} files)` : ""}.
                 {!path && <><br /><br />If you expected to see your Dropbox folders, the Dropbox app is probably set to <b>App folder</b> access. In dropbox.com/developers/apps, create the app again with <b>Full Dropbox</b> access, tick files.metadata.read and files.content.read, add the same redirect URIs, and send me the new App key.</>}

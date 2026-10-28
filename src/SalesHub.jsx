@@ -6013,7 +6013,9 @@ function QuoteGroupedList({quotes, activeQuote, setActiveQuote, setDeleteConfirm
                     <div style={{fontSize:11, color:T.subtext, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{q.name||'—'}</div>
                     <div style={{fontSize:10, color:T.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
                       {q.company||'—'}
-                      {total>0 && <span style={{color:T.accent, fontWeight:600}}> · {fmtCur(total)}</span>}
+                    </div>
+                    <div style={{fontSize:10, color:T.muted, whiteSpace:'nowrap'}}>
+                      {total>0 ? <span style={{color:T.accent, fontWeight:600}}>{fmtCur(total)}</span> : '—'}
                       {' '}{q.currency}
                     </div>
                   </div>

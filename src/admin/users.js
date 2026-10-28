@@ -8,18 +8,27 @@
 import { useEffect, useState } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 
+// The six areas on the left (Users & Access is admin-only). "leads" is a separate tick that
+// shows the Leads section inside Pipeline & Leads.
 export const ALL_TABS = [
-  { id: "quotes",   label: "Quote Maker" },
+  { id: "quotes",   label: "Quotes" },
   { id: "sales",    label: "Sales Summary" },
-  { id: "pipeline", label: "Pipeline" },
-  { id: "shipping", label: "Shipping" },
-  { id: "products", label: "Products" },
+  { id: "pipeline", label: "Pipeline & Leads" },
+  { id: "leads",    label: "↳ Leads section", sub: true },
+  { id: "products", label: "Products & Price List" },
   { id: "stock",    label: "Stock Levels" },
-  { id: "loadcalc", label: "Load Calculator" },
-  { id: "leads",    label: "Lead Tracking" },
-  { id: "dims",     label: "DIMS" },
+  { id: "shipping", label: "Shipping" },
 ];
 const ALL_IDS = ALL_TABS.map(t => t.id);
+
+// Saved user lists from before the tabs were grouped used separate ids for Load Calculator,
+// DIMS and Lead Tracking — read them as the new areas
+export function userTabs(user) {
+  const t = new Set(user?.tabs || []);
+  if (t.has("loadcalc") || t.has("dims")) t.add("shipping");
+  if (t.has("leads")) t.add("pipeline");
+  return [...t].filter(x => ALL_IDS.includes(x));
+}
 
 export const DEFAULT_USERS = [
   { name: "Paul",  tabs: ALL_IDS, salesScope: "all", admin: true },
@@ -42,4 +51,5 @@ export const saveUsers = (db, list) => setDoc(doc(db, "config", "users"), { list
 export const findUser = (users, name) =>
   (users || []).find(u => u.name.toLowerCase() === String(name || "").trim().toLowerCase()) || null;
 
-export const canSee = (user, tab) => !!user && (tab === "admin" ? !!user.admin : (user.tabs || []).includes(tab));
+const LEGACY = { loadcalc: "shipping", dims: "shipping" };
+export const canSee = (user, tab) => !!user && (tab === "admin" ? !!user.admin : userTabs(user).includes(LEGACY[tab] || tab));

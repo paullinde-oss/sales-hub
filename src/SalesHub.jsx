@@ -8,6 +8,7 @@ const FAVICON_LIGHT = "data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUN
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, writeBatch } from "firebase/firestore";
 import { listenCollection, putDoc, dropDoc, stamp, deletedMarker, applyLocal } from "./cachedCollection";
 import { Loader, BMP_LOGO, onDark } from "./Loader";
+import PipelineDashboard from "./pipeline/PipelineDashboard";
 import SalesSummary from "./sales/SalesSummary";
 import AdminTab from "./admin/AdminTab";
 import { useUsers, findUser, canSee, DEFAULT_USERS } from "./admin/users";
@@ -533,6 +534,25 @@ const SHIPPING_DATA = {
 let __nextLineItemId = Date.now();
 function newLineItemId() { return ++__nextLineItemId; }
 
+// ─── Shared top bar for every left-hand area (same look as Sales Summary) ────
+function TabPage({T, title, sections, active, onSelect, right, children}) {
+  return (
+    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg,minHeight:0}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",borderBottom:`1px solid ${T.border}`,background:T.panelBg,flexWrap:"wrap",flexShrink:0,minHeight:43}}>
+        <div style={{fontSize:13,fontWeight:600,letterSpacing:".06em",marginRight:12,color:T.text}}>{title}</div>
+        {(sections||[]).map(([id,label])=>(
+          <button key={id} onClick={()=>onSelect(id)}
+            style={{background:active===id?T.activeBg:"transparent",border:`1px solid ${active===id?T.borderLight:"transparent"}`,color:active===id?T.gold:T.subtext,padding:"5px 11px",fontSize:11,borderRadius:2,letterSpacing:".03em"}}>
+            {label}
+          </button>
+        ))}
+        <div style={{flex:1}}/>{right}
+      </div>
+      <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",minHeight:0}}>{children}</div>
+    </div>
+  );
+}
+
 const PRICE_INCREASE_OPTIONS = [-20,-15,-10,-5,-2,0,2,5,10,15,20,25,30,35,40,50,55,60];
 function fmtCur(val) {
   if (val === "" || val === null || val === undefined) return "—";
@@ -683,8 +703,11 @@ export default function SalesHub() {
   const [activeTab, setActiveTab] = useState(() => {
     const t = sessionStorage.getItem(SS_OPEN_TAB);
     if (t) sessionStorage.removeItem(SS_OPEN_TAB);
-    return t || "quotes";
+    return ({leads:"pipeline", loadcalc:"shipping", dims:"shipping"})[t] || t || "quotes";
   });
+  // Section shown inside the grouped areas (remembered on this computer)
+  const [pipeSection, setPipeSection] = useLocalStorage('bmp_pipe_section', 'dashboard');
+  const [shipSection, setShipSection] = useLocalStorage('bmp_ship_section', 'loadcalc');
   const [productsCAD, setProductsCAD] = useLocalStorage('bmp_products_cad', INITIAL_PRODUCTS_CAD);
   const [productsUSD, setProductsUSD] = useLocalStorage('bmp_products_usd',
     INITIAL_PRODUCTS_CAD.map(p=>({...p,price:"",palletPrice:"",prepaid:"",prepaidPallet:"",truckPrice:""}))
@@ -1145,16 +1168,13 @@ ${quoteNumLine}
 
 
   const ALL_SIDEBAR_TABS = [
-    {id:"quotes",   label:"Quote Maker",     icon:"quote"},
-    {id:"sales",    label:"Sales Summary",   icon:"sales"},
-    {id:"pipeline", label:"Pipeline",        icon:"pipeline"},
-    {id:"shipping", label:"Shipping",        icon:"ship"},
-    {id:"products", label:"Products",        icon:"products"},
-    {id:"stock",    label:"Stock Levels",    icon:"stock"},
-    {id:"loadcalc", label:"Load Calculator", icon:"truck"},
-    {id:"leads",    label:"Lead Tracking",  icon:"leads"},
-    {id:"dims",     label:"DIMS",            icon:"dims"},
-    {id:"admin",    label:"Admin",           icon:"admin"},
+    {id:"quotes",   label:"Quotes",                icon:"quote"},
+    {id:"sales",    label:"Sales Summary",         icon:"sales"},
+    {id:"pipeline", label:"Pipeline & Leads",      icon:"pipeline"},
+    {id:"products", label:"Products & Price List", icon:"products"},
+    {id:"stock",    label:"Stock Levels",          icon:"stock"},
+    {id:"shipping", label:"Shipping",              icon:"ship"},
+    {id:"admin",    label:"Users & Access",        icon:"admin"},
   ];
   const TABS = ALL_SIDEBAR_TABS.filter(t => canSee(currentUser, t.id));
   // If someone lands on a tab they can't see (e.g. after permissions change), move them to one they can
@@ -1260,24 +1280,33 @@ ${quoteNumLine}
         {/* Content */}
         <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
           <TabErrorBoundary tabKey={activeTab}>
-          {activeTab==="quotes"&&<QuotesTab quotes={filteredQuotes} activeQuote={activeQuote} searchQ={searchQ} setSearchQ={setSearchQ}
+          {activeTab==="quotes"&&<TabPage T={T} title="QUOTES"><QuotesTab quotes={filteredQuotes} activeQuote={activeQuote} searchQ={searchQ} setSearchQ={setSearchQ}
             productsCAD={productsCAD} productsUSD={productsUSD} effectiveProductsUSD={effectiveProductsUSD} createNewQuote={createNewQuote}
             setActiveQuote={setActiveQuote} saveQuote={saveQuote} editQuote={q=>setActiveQuote({...q,saved:false})}
-            openEmailModal={openEmailModal} generatePDF={generatePDF} deleteConfirm={deleteConfirm} setDeleteConfirm={setDeleteConfirm} deleteQuote={deleteQuote} duplicateQuote={duplicateQuote} quoteSort={quoteSort} setQuoteSort={setQuoteSort} closeConfirm={closeConfirm} setCloseConfirm={setCloseConfirm} exchangeRate={exchangeRate} onQuoteStatusChange={updateQuoteStatus} T={T}/>}
+            openEmailModal={openEmailModal} generatePDF={generatePDF} deleteConfirm={deleteConfirm} setDeleteConfirm={setDeleteConfirm} deleteQuote={deleteQuote} duplicateQuote={duplicateQuote} quoteSort={quoteSort} setQuoteSort={setQuoteSort} closeConfirm={closeConfirm} setCloseConfirm={setCloseConfirm} exchangeRate={exchangeRate} onQuoteStatusChange={updateQuoteStatus} T={T}/></TabPage>}
           {activeTab==="sales"&&canSee(currentUser,"sales")&&<SalesSummary T={T} db={db} quotes={quotes} updateQuoteStatus={updateQuoteStatus} loginName={loginName} user={currentUser} bmpLogo={BMP_LOGO_FULL} leads={leads} adSpend={adSpend} canSeeLeads={canSee(currentUser,"leads")} products={productsCAD}/>}
-          {activeTab==="admin"&&canSee(currentUser,"admin")&&<AdminTab T={T} db={db} users={users||DEFAULT_USERS} loginName={loginName}/>}
-          {activeTab==="dims"&&<DimsTab dims={dims} setDims={setDims} T={T}/>}
-          {activeTab==="shipping"&&<ShippingTab T={T}/>}
-          {activeTab==="products"&&<ProductsTab products={filteredProducts} setProducts={setCurrentProducts}
+          {activeTab==="pipeline"&&(()=>{
+            const sections=[["dashboard","Dashboard"],["pipeline","Pipeline"],...(canSee(currentUser,"leads")?[["leads","Leads"]]:[])];
+            const sec=sections.some(x=>x[0]===pipeSection)?pipeSection:"dashboard";
+            return <TabPage T={T} title="PIPELINE & LEADS" sections={sections} active={sec} onSelect={setPipeSection}>
+              {sec==="dashboard"&&<PipelineDashboard T={T} quotes={quotes} leads={leads} adSpend={adSpend} canSeeLeads={canSee(currentUser,"leads")} usdToCad={exchangeRate?1/exchangeRate:1.37} ownOnly={currentUser?.salesScope==="own"} loginName={loginName} go={setPipeSection}/>}
+              {sec==="pipeline"&&<PipelineTab quotes={quotes} setQuotes={setQuotes} T={T} loginName={loginName} setActiveQuote={setActiveQuote} setActiveTab={setActiveTab} leads={leads} setLeads={setLeads}/>}
+              {sec==="leads"&&<LeadTrackingTab leads={leads} setLeads={setLeads} adSpend={adSpend} setAdSpend={setAdSpend} quotes={quotes} setQuotes={setQuotes} T={T} loginName={loginName}/>}
+            </TabPage>;
+          })()}
+          {activeTab==="products"&&<TabPage T={T} title="PRODUCTS & PRICE LIST"><ProductsTab products={filteredProducts} setProducts={setCurrentProducts}
             currency={productCurrency} setCurrency={setProductCurrency} search={productSearch} setSearch={setProductSearch}
             categories={categories} setCategories={setCurrentCategories}
             subCategories={subCategories} setSubCategories={setCurrentSubCategories}
             subCatDefs={subCatDefs} setSubCatDefs={setCurrentSubCatDefs}
-            exchangeRate={exchangeRate} setExchangeRate={setExchangeRate} T={T} onSkuRenamed={renameProductSku}/>}
-          {activeTab==="stock"&&<StockLevelsTab T={T}/>}
-          {activeTab==="loadcalc"&&<LoadCalcTab T={T}/>}
-          {activeTab==="pipeline"&&<PipelineTab quotes={quotes} setQuotes={setQuotes} T={T} loginName={loginName} setActiveQuote={setActiveQuote} setActiveTab={setActiveTab} leads={leads} setLeads={setLeads}/>}
-          {activeTab==="leads"&&canSee(currentUser,"leads")&&<LeadTrackingTab leads={leads} setLeads={setLeads} adSpend={adSpend} setAdSpend={setAdSpend} quotes={quotes} setQuotes={setQuotes} T={T} loginName={loginName}/>}
+            exchangeRate={exchangeRate} setExchangeRate={setExchangeRate} T={T} onSkuRenamed={renameProductSku}/></TabPage>}
+          {activeTab==="stock"&&<TabPage T={T} title="STOCK LEVELS"><StockLevelsTab T={T}/></TabPage>}
+          {activeTab==="shipping"&&<TabPage T={T} title="SHIPPING" sections={[["loadcalc","Load Calculator"],["curtain","Turbidity Curtain Shipping"],["dims","Package Dimensions"]]} active={shipSection} onSelect={setShipSection}>
+            {shipSection==="loadcalc"&&<LoadCalcTab T={T}/>}
+            {shipSection==="curtain"&&<ShippingTab T={T}/>}
+            {shipSection==="dims"&&<DimsTab dims={dims} setDims={setDims} T={T}/>}
+          </TabPage>}
+          {activeTab==="admin"&&canSee(currentUser,"admin")&&<TabPage T={T} title="USERS & ACCESS"><AdminTab T={T} db={db} users={users||DEFAULT_USERS} loginName={loginName}/></TabPage>}
           </TabErrorBoundary>
         </div>
       </div>
@@ -2490,7 +2519,6 @@ function StockLevelsTab({T}) {
     <div style={{display:"flex",flexDirection:"column",height:"100%",background:T.bg}}>
       {/* Header / controls */}
       <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-        <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".12em",color:T.sectionLabel||T.muted}}>Stock Levels</div>
         <input placeholder="Search SKU…" value={search} onChange={e=>setSearch(e.target.value)}
           style={{flex:1,minWidth:120,fontSize:12,height:30,padding:"0 10px",background:"var(--input-bg)",border:"1px solid var(--border-light)",color:"var(--text)",borderRadius:3}}/>
         <button className="btn" style={{fontSize:10,padding:"5px 12px",whiteSpace:"nowrap"}} onClick={fetchAll} disabled={loading}>
@@ -2731,8 +2759,7 @@ function DimsTab({dims,setDims,T}) {
 
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
-      <div style={{padding:"10px 14px",borderBottom:"1px solid #181818",display:"flex",alignItems:"center",gap:10,background:"#090909",flexWrap:"wrap"}}>
-        <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".12em",color:"#555"}}>DIMS — Package Dimensions</div>
+      <div style={{padding:"10px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10,background:T.panelBg,flexWrap:"wrap"}}>
         {syncing
           ? <span className="pill pill-sync">Syncing…</span>
           : syncError
@@ -2947,7 +2974,6 @@ function ShippingTab({T}) {
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100%",background:T.bg}}>
       <div style={{padding:"10px 14px",borderBottom:`1px solid ${T.border}`,background:T.panelBg,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-        <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".12em",color:T.sectionLabel}}>Turbidity Curtain Shipping</div>
         <div style={{display:"flex",gap:4,alignItems:"center"}}>
           <span style={{fontSize:10,color:T.sectionLabel}}>From</span>
           {["calgary","brooks"].map(o=>(
@@ -3792,7 +3818,6 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
 
       {/* Toolbar */}
       <div style={{padding:"10px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10,background:T.panelBg||T.headerBg,flexWrap:"wrap"}}>
-        <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".12em",color:T.sectionLabel}}>Product &amp; Price List</div>
         <button className="btn-gold" style={{fontSize:10,padding:"4px 12px",whiteSpace:"nowrap"}} onClick={()=>setAddModal(true)}>＋ Add Product</button>
         <div style={{display:"flex",gap:3}}>
           {["CAD","USD"].map(c=>(

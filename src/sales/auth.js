@@ -1,5 +1,7 @@
 // ─── Master password (shared by the whole team, changeable by Paul) ─────────
-// Only a salted SHA-256 hash is stored, in Firestore at config/auth.
+// Stored in Firestore at config/auth: a salted SHA-256 hash (used to check sign-ins) and,
+// at Paul's request, the password itself so Users & Access can show it. The database is
+// open, so this is convenience, not security.
 // Until Paul sets one, the starting password is accepted.
 import { doc, getDoc, setDoc } from "firebase/firestore";
 
@@ -28,6 +30,15 @@ export async function checkPassword(db, pw) {
 
 export async function setPassword(db, pw, by) {
   const passwordHash = await hashPassword(pw);
-  await setDoc(doc(db, "config", "auth"), { passwordHash, changedBy: by || "", changedAt: new Date().toISOString() });
+  await setDoc(doc(db, "config", "auth"), { passwordHash, password: pw, changedBy: by || "", changedAt: new Date().toISOString() });
   return passwordHash;
+}
+
+// The current password for Users & Access, or null if it was set before it was saved in readable form
+export async function readPassword(db) {
+  try {
+    const snap = await getDoc(doc(db, "config", "auth"));
+    if (!snap.exists() || !snap.data().passwordHash) return STARTING_PASSWORD;
+    return snap.data().password || null;
+  } catch { return null; }
 }

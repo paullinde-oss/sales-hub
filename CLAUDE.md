@@ -16,7 +16,14 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
 ## Stack & layout
 - React 18 + Vite 5, Firebase Firestore (project `bmp-sales-hub`, **free Spark plan**), pdfjs-dist 3.11.174.
 - `src/SalesHub.jsx` — the original app (one very large file: all the older tabs, login, layout).
-- `src/admin/` — Admin tab: users, per-user tab access, sales-data scope, master password.
+- Left-hand areas (Paul's grouping): Quotes · Sales Summary · Pipeline & Leads (Dashboard /
+  Pipeline / Leads) · Products & Price List · Stock Levels · Shipping (Load Calculator / Turbidity
+  Curtain Shipping / Package Dimensions) · Users & Access. Every area uses `TabPage` (in
+  `SalesHub.jsx`) for the same top bar as Sales Summary — keep new areas consistent with it.
+- `src/pipeline/PipelineDashboard.jsx` — Pipeline & Leads dashboard (lead tiles hidden without "leads").
+- `src/admin/` — Users & Access: per-user area access (+ "leads" sub-permission; old ids loadcalc/dims
+  map to shipping via `userTabs`), sales-data scope, master password (viewable — stored readable
+  in `config/auth.password` at Paul's request).
 - `src/sales/` — Sales Summary:
   - `SalesSummary.jsx` — the tab UI (Dashboard, Orders, Accounts, Reports, Quote Matches, Settings)
   - `sync.js` — Dropbox → Firestore sync; `dropbox.js` — Dropbox OAuth (PKCE, browser only) + API

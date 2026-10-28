@@ -6,6 +6,8 @@ import {
   today, addDays, fyOf, fyStart, fyEnd, daysBetween, parseYmd, ymd, fmtDate, fmtMonth, fmtMoney, fmtQty,
   sumOrders, displayValue, groupBy, downloadCSV, quoteDate, presetRange, PRESETS,
 } from "./salesUtils";
+import { useTableSort } from "./tableSort";
+import { customerOf } from "./accounts";
 
 const GREEN = "#5a9e5a", RED = "#c86a5a";
 const STATUS_LABEL = { won: "Won", lost: "Lost", cold: "Went cold", inprogress: "Open" };
@@ -24,10 +26,12 @@ const winRate = g => pct(g.won, g.won + g.lost + g.cold);
 // ── Shared table with CSV / print ───────────────────────────────────────────
 function ReportTable({ T, title, sub, note, headers, rows, csvRows, right = [], controls, summary }) {
   const isRight = i => right.includes(i);
+  const ts = useTableSort();
+  const shown = ts.apply(rows, r => r.cells, r => r.bold);
   const print = () => {
     const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;");
     const w = window.open("", "_blank"); if (!w) return;
-    w.document.write(`<html><head><title>${esc(title)}</title><style>body{font-family:Helvetica,Arial,sans-serif;font-size:11px;padding:24px}h1{font-size:16px;margin:0}div{color:#777;margin:4px 0 14px}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #ddd;padding:4px 6px;text-align:left}th{background:#f2f2f0;font-size:10px;text-transform:uppercase}.r{text-align:right}</style></head><body><h1>BMP Supplies — ${esc(title)}</h1><div>${esc(sub || "")} · printed ${new Date().toLocaleDateString("en-CA")}</div><table><thead><tr>${headers.map((h, i) => `<th class="${isRight(i) ? "r" : ""}">${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${r.cells.map((c, i) => `<td class="${isRight(i) ? "r" : ""}">${esc(typeof c === "object" && c !== null ? c.text : c)}</td>`).join("")}</tr>`).join("")}</tbody></table><script>window.onload=()=>window.print()</script></body></html>`);
+    w.document.write(`<html><head><title>${esc(title)}</title><style>body{font-family:Helvetica,Arial,sans-serif;font-size:11px;padding:24px}h1{font-size:16px;margin:0}div{color:#777;margin:4px 0 14px}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #ddd;padding:4px 6px;text-align:left}th{background:#f2f2f0;font-size:10px;text-transform:uppercase}.r{text-align:right}</style></head><body><h1>BMP Supplies — ${esc(title)}</h1><div>${esc(sub || "")} · printed ${new Date().toLocaleDateString("en-CA")}</div><table><thead><tr>${headers.map((h, i) => `<th class="${isRight(i) ? "r" : ""}">${esc(h)}</th>`).join("")}</tr></thead><tbody>${shown.map(r => `<tr>${r.cells.map((c, i) => `<td class="${isRight(i) ? "r" : ""}">${esc(typeof c === "object" && c !== null ? c.text : c)}</td>`).join("")}</tr>`).join("")}</tbody></table><script>window.onload=()=>window.print()</script></body></html>`);
     w.document.close();
   };
   return (
@@ -35,17 +39,18 @@ function ReportTable({ T, title, sub, note, headers, rows, csvRows, right = [], 
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{title}</div>
         <div style={{ flex: 1 }} />
-        <button className="btn" onClick={() => downloadCSV(`${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv`, headers, csvRows || rows.map(r => r.cells.map(c => (typeof c === "object" && c !== null ? c.text : c))))}>Export CSV</button>
+        <button className="btn" onClick={() => downloadCSV(`${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv`, headers, csvRows || shown.map(r => r.cells.map(c => (typeof c === "object" && c !== null ? c.text : c))))}>Export CSV</button>
         <button className="btn" onClick={print}>Print / PDF</button>
       </div>
       {note && <div style={{ fontSize: 11, color: T.tableHeadText, marginBottom: 10, lineHeight: 1.5 }}>{note}</div>}
       {controls && <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>{controls}</div>}
       {summary}
+      {rows.length > 3 && <div style={{ marginBottom: 8 }}><input value={ts.q} onChange={e => ts.setQ(e.target.value)} placeholder="Filter rows…" style={{ fontSize: 11, height: 26, width: 220 }} /> <span style={{ fontSize: 10, color: T.tableHeadText }}>Click a column heading to sort</span></div>}
       <div style={{ background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 3, overflowX: "auto" }}>
         {!rows.length ? <div style={{ fontSize: 12, color: T.tableHeadText, padding: 12 }}>Nothing to show for these settings.</div> : (
           <table className="data-table">
-            <thead><tr>{headers.map((h, i) => <th key={i} style={{ textAlign: isRight(i) ? "right" : "left", whiteSpace: "nowrap" }}>{h}</th>)}</tr></thead>
-            <tbody>{rows.map((r, i) => (
+            <thead><tr>{headers.map((h, i) => <th key={i} onClick={() => ts.toggle(i)} title="Click to sort" style={{ textAlign: isRight(i) ? "right" : "left", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none" }}>{h}{ts.arrow(i)}</th>)}</tr></thead>
+            <tbody>{shown.map((r, i) => (
               <tr key={i} onClick={r.onClick} style={{ fontWeight: r.bold ? 600 : 400, cursor: r.onClick ? "pointer" : "default", background: r.bg }}>
                 {r.cells.map((c, j) => {
                   const o = typeof c === "object" && c !== null ? c : { text: c };
@@ -114,15 +119,20 @@ function tally(list) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-export function QuoteWinRateReport({ T, quotes, settings, ownOnly, loginName }) {
+export function QuoteWinRateReport({ T, quotes, settings, ownOnly, loginName, initialBy = "by", title = "Quote win rate" }) {
   const rate = Number(settings.usdToCad) || 1.37;
   const all = useQuotes(quotes, rate, ownOnly, loginName);
   const rg = useRange("fytd");
-  const [by, setBy] = useState("by");
+  const [by, setBy] = useState(initialBy);
+  // Distributor / End User the same way Sales Summary decides it for orders (account list + Settings)
+  const typeOf = useMemo(() => {
+    const cache = new Map();
+    return q => { const name = q.company || q.name || "Unknown"; if (!cache.has(name)) cache.set(name, customerOf({ customer: name }, settings.accounts || [], settings.aliases || {}, settings.custTypes || {}).type === "Distributor" ? "Distributors" : "End Users"); return cache.get(name); };
+  }, [settings.accounts, settings.aliases, settings.custTypes]);
   const [from, to] = rg.range;
   const cur = all.filter(x => x.date >= from && x.date <= to);
   const prev = all.filter(x => x.date >= shiftYear(from) && x.date <= shiftYear(to));
-  const keyOf = x => by === "by" ? x.by : by === "month" ? x.date.slice(0, 7) : by === "kind" ? x.kind : by === "currency" ? (x.q.currency || "CAD") : "All quotes";
+  const keyOf = x => by === "by" ? x.by : by === "month" ? x.date.slice(0, 7) : by === "kind" ? x.kind : by === "type" ? typeOf(x.q) : by === "currency" ? (x.q.currency || "CAD") : "All quotes";
   const labelOf = k => by === "month" ? fmtMonth(k + "-01") : k;
   const groups = [...new Set(cur.map(keyOf))].sort((a, b) => (by === "month" ? (a < b ? -1 : 1) : 0));
   const row = (label, list, prevList, bold) => {
@@ -136,17 +146,29 @@ export function QuoteWinRateReport({ T, quotes, settings, ownOnly, loginName }) 
   rows.push(row("Total", cur, prev, true));
   const t = tally(cur), pt = tally(prev);
   const linked = Object.values(settings.quoteLinks || {}).length;
-  return <ReportTable T={T} title="Quote win rate"
+  const typeKpis = by === "type" && (() => {
+    const d = tally(cur.filter(x => typeOf(x.q) === "Distributors")), e = tally(cur.filter(x => typeOf(x.q) === "End Users"));
+    const dw = winRate(d), ew = winRate(e);
+    const better = dw == null || ew == null ? "" : dw === ew ? "Same win rate" : `${dw > ew ? "Distributors" : "End Users"} win ${Math.abs(dw - ew).toFixed(0)} points more often`;
+    return [
+      ["Distributor win rate", fmtPct(dw), `${d.won} won · ${d.lost} lost · ${d.cold} went cold`, dw != null && ew != null ? (dw >= ew ? GREEN : RED) : undefined],
+      ["End User win rate", fmtPct(ew), `${e.won} won · ${e.lost} lost · ${e.cold} went cold`, dw != null && ew != null ? (ew >= dw ? GREEN : RED) : undefined],
+      ["Difference", better || "—", "won ÷ (won + lost + went cold)"],
+      ["Avg quote", `${d.n ? fmtMoney(d.value / d.n) : "—"} / ${e.n ? fmtMoney(e.value / e.n) : "—"}`, "Distributors / End Users"],
+      ["Won $", `${fmtMoney(d.wonValue)} / ${fmtMoney(e.wonValue)}`, "Distributors / End Users"],
+    ];
+  })();
+  return <ReportTable T={T} title={title}
     sub={`Quotes dated ${fmtDate(from)} – ${fmtDate(to)}`}
     note="Win rate = won ÷ (won + lost + went cold). Open quotes aren't counted until they're decided. “Last year” is the same dates one year earlier. Quote values are converted to CAD. Marking quotes Won from Quote Matches keeps this accurate."
     controls={<>
       <RangePicker {...rg} />
       <span style={{ fontSize: 11 }}>by</span>
       <select value={by} onChange={e => setBy(e.target.value)} style={{ fontSize: 11, height: 28 }}>
-        <option value="by">Quoted by</option><option value="month">Month</option><option value="kind">New lead vs existing customer</option><option value="currency">Currency</option><option value="all">All together</option>
+        <option value="by">Quoted by</option><option value="month">Month</option><option value="type">Distributors vs End Users</option><option value="kind">New lead vs existing customer</option><option value="currency">Currency</option><option value="all">All together</option>
       </select>
     </>}
-    summary={<Kpis T={T} items={[
+    summary={<Kpis T={T} items={typeKpis || [
       ["Quotes sent", t.n, `last year same dates: ${pt.n}`],
       ["Win rate", fmtPct(winRate(t)), winRate(pt) == null ? "" : `last year: ${fmtPct(winRate(pt))}`, winRate(t) != null && winRate(pt) != null ? (winRate(t) >= winRate(pt) ? GREEN : RED) : undefined],
       ["Value quoted", fmtMoney(t.value), pt.value ? `${chg(t.value, pt.value)} vs last year` : ""],

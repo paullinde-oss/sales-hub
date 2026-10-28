@@ -7,6 +7,7 @@ import { DEFAULT_ACCOUNTS, REPS, SALES_REP, normName, matchAccount } from "./acc
 import { isDropboxConnected, startDropboxAuth, disconnectDropbox, redirectUri, browseFolder, accountInfo } from "./dropbox";
 import { syncOrders } from "./sync";
 import { Loader } from "../Loader";
+import { useTableSort } from "./tableSort";
 import { writeOrder, removeOrder, listenOrders, buildPacks } from "./orderStore";
 import { useLogos, resizeImage, saveLogo, removeLogo, logoDevUrl, domainOf } from "./logos";
 import { yearCompare, openYearEndReport } from "./yearEndReport";
@@ -989,6 +990,7 @@ const REPORTS = [
   ["city", "Sales by ship-to city"],
   ["__h", "Quotes & pipeline"],
   ["winrate", "Quote win rate"],
+  ["wintype", "Win rate: Distributors vs End Users"],
   ["pipeline", "Open pipeline & expected wins"],
   ["quoteorder", "Won quotes → orders"],
   ["__h", "Leads", "leads"],
@@ -999,10 +1001,12 @@ const REPORTS = [
   ["trends", "Product trends"],
   ["inactive", "Accounts that haven't ordered lately"],
 ];
-const PIPELINE_REPORTS = ["winrate", "pipeline", "quoteorder", "leads", "forecast", "reorder", "trends"];
+const PIPELINE_REPORTS = ["winrate", "wintype", "pipeline", "quoteorder", "leads", "forecast", "reorder", "trends"];
 
 function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, logos, bmpLogo, quotes, leads, adSpend, canSeeLeads, ownOnly, loginName }) {
   const [rep, setRep] = useState("salesrep");
+  const ts = useTableSort();
+  useEffect(() => ts.reset(), [rep]);
   const fl = useFilters("fytd");
   const [fy, setFy] = useState(fyOf(today()));
   const [days, setDays] = useState(60);
@@ -1076,6 +1080,7 @@ function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, log
   const custCol = (rep === "customer" || rep === "custprod" || rep === "inactive") ? 0 : -1;
   const keyFor = label => orders.find(o => o.cust.name === label)?.cust.key || label;
 
+  const shownRows = ts.apply(rows, r => r, r => r[0] === "Total");
   return (
     <div style={{ display: "flex", gap: 16, maxWidth: 1500 }}>
       <div style={{ width: 230, flexShrink: 0, display: "flex", flexDirection: "column", gap: 2 }}>
@@ -1087,7 +1092,8 @@ function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, log
       </div>
       {PIPELINE_REPORTS.includes(rep) ? (() => {
         const pp = { T, orders, opts, currencyMode, settings, quotes, ownOnly, loginName, openAccount };
-        return rep === "winrate" ? <QuoteWinRateReport {...pp} />
+        return rep === "winrate" ? <QuoteWinRateReport key="winrate" {...pp} />
+          : rep === "wintype" ? <QuoteWinRateReport key="wintype" {...pp} initialBy="type" title="Win rate: Distributors vs End Users" />
           : rep === "pipeline" ? <OpenPipelineReport {...pp} />
           : rep === "quoteorder" ? <QuoteToOrderReport {...pp} />
           : rep === "leads" ? <LeadReport {...pp} leads={leads} adSpend={adSpend} />
@@ -1100,7 +1106,7 @@ function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, log
           <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{title}</div>
           <div style={{ flex: 1 }} />
           <button className="btn" onClick={() => downloadCSV(`${rep}-report.csv`, headers, csvRows)}>Export CSV</button>
-          <button className="btn" onClick={() => printReport(title, rep === "monthly" ? `Fiscal ${fy} vs ${fy - 1}` : rep === "inactive" ? `No orders in ${days}+ days` : `${fmtDate(fl.range[0])} – ${fmtDate(fl.range[1])}`, headers, rows)}>Print / PDF</button>
+          <button className="btn" onClick={() => printReport(title, rep === "monthly" ? `Fiscal ${fy} vs ${fy - 1}` : rep === "inactive" ? `No orders in ${days}+ days` : `${fmtDate(fl.range[0])} – ${fmtDate(fl.range[1])}`, headers, shownRows)}>Print / PDF</button>
         </div>
         {rep === "monthly" ? (
           <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -1114,12 +1120,13 @@ function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, log
             <select value={fl.f.type} onChange={e => fl.setF(p => ({ ...p, type: e.target.value }))} style={{ fontSize: 11, height: 28 }}><option value="all">Distributors + End Users</option><option>Distributor</option><option>End User</option></select>
           </div>
         ) : <FilterBar T={T} orders={rep === "salesrep" ? orders.filter(o => o.cust.rep === SALES_REP) : orders} fl={fl} show={rep === "salesrep" ? ["customer", "sku", "location", "type"] : ["customer", "sku", "location", "rep", "type"]} />}
+        {rows.length > 3 && <div style={{ marginBottom: 8 }}><input value={ts.q} onChange={e => ts.setQ(e.target.value)} placeholder="Filter rows…" style={{ fontSize: 11, height: 26, width: 220 }} /> <span style={{ fontSize: 10, color: T.tableHeadText }}>Click a column heading to sort</span></div>}
         <Card T={T} pad={0}>
           {!rows.length ? <div style={{ fontSize: 12, color: T.tableHeadText, padding: 12 }}>No data for these filters.</div> : (
             <div style={{ overflowX: "auto" }}>
               <table className="data-table">
-                <thead><tr>{headers.map((h, i) => <th key={i} style={{ textAlign: i > 0 && /Sales|Qty|Orders|%|Change|Days|FY/.test(h) ? "right" : "left" }}>{h}</th>)}</tr></thead>
-                <tbody>{rows.map((r, i) => (
+                <thead><tr>{headers.map((h, i) => <th key={i} onClick={() => ts.toggle(i)} title="Click to sort" style={{ textAlign: i > 0 && /Sales|Qty|Orders|%|Change|Days|FY/.test(h) ? "right" : "left", cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" }}>{h}{ts.arrow(i)}</th>)}</tr></thead>
+                <tbody>{shownRows.map((r, i) => (
                   <tr key={i} style={{ fontWeight: r[0] === "Total" ? 600 : 400 }}>
                     {r.map((c, j) => <td key={j} onClick={j === custCol && r[0] !== "Total" ? () => openAccount(keyFor(c)) : undefined}
                       style={{ textAlign: j > 0 && /Sales|Qty|Orders|%|Change|Days|FY/.test(headers[j]) ? "right" : "left", cursor: j === custCol ? "pointer" : "default", fontVariantNumeric: "tabular-nums" }}>{c}</td>)}

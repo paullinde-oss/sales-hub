@@ -5905,10 +5905,22 @@ function QuoteGroupedList({quotes, activeQuote, setActiveQuote, setDeleteConfirm
     const groups = [];
     // Always show This Week folder, even if empty (shows placeholder)
     groups.push({id:'thisweek', label:'This Week', quotes:thisWeek, defaultOpen:true, isThisWeek:true});
+    // Fiscal year runs Dec 1 – Nov 30 (Dec 2025 is FY2026). Months of the current FY are
+    // listed on their own; each finished FY folds into one "FY2025"-style folder.
+    const fyOf = mk => { const [y,m] = mk.split('-').map(Number); return m===12 ? y+1 : y; };
+    const currentFY = now.getMonth()===11 ? now.getFullYear()+1 : now.getFullYear();
     monthKeys.forEach(mk => {
       const label = mk==='unsorted' ? 'Unsorted' : getMonthLabel(mk);
-      // Close all month folders when This Week is shown (it always is now)
-      groups.push({id:mk, label, quotes:byMonth[mk], defaultOpen:false});
+      const fy = mk==='unsorted' ? null : fyOf(mk);
+      if (fy && fy < currentFY) {
+        let fyGroup = groups.find(g => g.id === 'fy'+fy);
+        if (!fyGroup) { fyGroup = {id:'fy'+fy, label:'FY'+fy, quotes:[], isFY:true, defaultOpen:false}; groups.push(fyGroup); }
+        fyGroup.quotes.push(...byMonth[mk]);
+        groups.push({id:mk, label, quotes:byMonth[mk], defaultOpen:false, parent:fyGroup.id});
+      } else {
+        // Close all month folders when This Week is shown (it always is now)
+        groups.push({id:mk, label, quotes:byMonth[mk], defaultOpen:false});
+      }
     });
 
     return {groups, thisWeekKey:'thisweek', thisMonthKey};
@@ -5952,11 +5964,11 @@ function QuoteGroupedList({quotes, activeQuote, setActiveQuote, setDeleteConfirm
 
   return (
     <div style={{paddingBottom:8}}>
-      {groups.map(group => (
+      {groups.filter(g => !g.parent || open[g.parent]).map(group => (
         <div key={group.id}>
           {/* Folder header */}
           <div onClick={()=>toggle(group.id)}
-            style={{display:'flex', alignItems:'center', gap:6, padding:'6px 12px',
+            style={{display:'flex', alignItems:'center', gap:6, padding:group.parent?'6px 12px 6px 26px':'6px 12px',
               cursor:'pointer', background:T.tableHead, borderBottom:`1px solid ${T.border}`,
               borderTop:`1px solid ${T.border}`, userSelect:'none',
               position:'sticky', top:0, zIndex:2}}
@@ -5980,7 +5992,7 @@ function QuoteGroupedList({quotes, activeQuote, setActiveQuote, setDeleteConfirm
               No quotes made this week yet
             </div>
           )}
-          {open[group.id] && group.quotes.map(q => {
+          {open[group.id] && !group.isFY && group.quotes.map(q => {
             const isActive = activeQuote?.id === q.id;
             const total = (q.lineItems||[]).reduce((s,li)=>(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0)+s, 0);
             return (

@@ -1207,9 +1207,26 @@ function printReport(title, sub, headers, rows) {
 // ═════════════════════════════════════════════════════════════════════════════
 // Quote matches — orders that look like they came from a quote in the hub
 // ═════════════════════════════════════════════════════════════════════════════
+// When a quote is marked won, its lines become what was actually ordered (products, then
+// freight and fees). The original quoted lines are kept once in quotedLineItems.
+let lineSeq = Date.now();
+function quoteFromOrder(quote, order) {
+  const base = {};
+  (quote.lineItems || []).forEach(li => { if (li.sku) base[String(li.sku).toUpperCase()] = li.basePrice; });
+  const item = (sku, description, qty, unitPrice) => ({ id: ++lineSeq, sku, description, qty, unitPrice: Math.round(unitPrice * 100) / 100,
+    increase: 0, basePrice: base[String(sku).toUpperCase()] ?? Math.round(unitPrice * 100) / 100 });
+  const lines = (order.lines || []).map(l => item(l.sku || "", l.desc || "", l.qty || 1, l.price ?? (l.qty ? (l.amount || 0) / l.qty : l.amount || 0)));
+  (order.charges || []).filter(c => c.amount).forEach(c => lines.push(item("", c.label || "Freight", 1, c.amount)));
+  return {
+    lineItems: lines.length ? lines : quote.lineItems,
+    quotedLineItems: quote.quotedLineItems || quote.lineItems || [],
+    currency: order.currency || quote.currency,
+    wonOrderNo: order.orderNo,
+  };
+}
 function QuoteMatchesView({ T, matches, settings, saveSettings, opts, quotes, updateQuoteStatus, openAccount, orders }) {
   const link = (m, markWon) => {
-    if (markWon && m.quote.quoteStatus !== "won") updateQuoteStatus(m.quote, "won");
+    if (markWon) updateQuoteStatus(m.quote, "won", quoteFromOrder(m.quote, m.order));
     saveSettings({ quoteLinks: { ...(settings.quoteLinks || {}), [m.order.orderNo]: String(m.quote.id) } });
   };
   const dismiss = m => saveSettings({ dismissedMatches: { ...(settings.dismissedMatches || {}), [`${m.order.orderNo}|${m.quote.id}`]: true } });

@@ -1011,10 +1011,11 @@ export default function SalesHub() {
   // Change a quote's status from the Quote Form itself. Persists to Firestore and,
   // like Pipeline's own status dropdown, keeps the matching Lead Tracking entry in
   // sync — matched by quote number (e.g. "BMP44152"), falling back to company name.
-  function updateQuoteStatus(quote, status) {
+  // changes: optional extra fields saved with it (e.g. Quote Matches updates the lines to the final order)
+  function updateQuoteStatus(quote, status, changes = {}) {
     setQuotes(prev => {
-      const next = prev.map(q => q.id===quote.id ? {...q, quoteStatus: status} : q);
-      const updated = next.find(q => q.id===quote.id) || {...quote, quoteStatus: status};
+      const next = prev.map(q => q.id===quote.id ? {...q, ...changes, quoteStatus: status} : q);
+      const updated = next.find(q => q.id===quote.id) || {...quote, ...changes, quoteStatus: status};
       putDoc(db, "quotes", String(quote.id), updated)
         .catch(err => console.error("Firebase save error:", err));
       return next;

@@ -5550,6 +5550,7 @@ function MobileLayout({
 
   const MOBILE_TABS = [
     {id:'quotes',   label:'Quotes',   icon:'quote'},
+    {id:'sales',    label:'Sales',    icon:'sales'},
     {id:'shipping', label:'Shipping', icon:'ship'},
     {id:'stock',    label:'Stock',    icon:'stock'},
     {id:'loadcalc', label:'Load',     icon:'truck'},
@@ -5664,6 +5665,10 @@ function MobileLayout({
           );
         })}
       </div>
+    );
+
+    if (activeTab === 'sales') return (
+      <SalesSummary mobile T={T} db={db} quotes={allQuotes} updateQuoteStatus={onQuoteStatusChange} loginName={loginName} user={currentUser} products={productsCAD}/>
     );
 
     if (activeTab === 'products') return (

@@ -43,11 +43,12 @@ const VIEWS = [
   ["reports", "Reports"], ["quotes", "Quote Matches"], ["settings", "Settings"],
 ];
 
-export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginName, user, bmpLogo, leads = [], adSpend = {}, canSeeLeads = false, products = [] }) {
+// mobile: phone layout — only the Dashboard, no syncing or other sections
+export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginName, user, bmpLogo, leads = [], adSpend = {}, canSeeLeads = false, products = [], mobile = false }) {
   // "own" scope (e.g. John) only sees accounts where they're the rep; admins also get Settings
   const ownOnly = user?.salesScope === "own";
   const isAdmin = !!user?.admin;
-  const canSync = !ownOnly;
+  const canSync = !ownOnly && !mobile;
   const uploadedLogos = useLogos(db);
   const [rawOrders, setRawOrders] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -168,13 +169,13 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
   const openAccount = key => { setAccountKey(key); setView("accounts"); };
   const gaps = useMemo(() => findGaps(rawOrders, issues, settings, listing), [rawOrders, issues, settings, listing]);
   const ctx = { T, db, orders, settings, saveSettings, opts, currencyMode, openAccount, loginName, logos, bmpLogo, ownOnly, products };
-  const views = VIEWS.filter(([id]) => id !== "settings" || isAdmin);
+  const views = mobile ? [] : VIEWS.filter(([id]) => id !== "settings" || isAdmin);
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: T.bg }}>
       {/* Top bar */}
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderBottom: `1px solid ${T.border}`, background: T.panelBg, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: ".06em", marginRight: 12, color: T.text }}>SALES SUMMARY</div>
+        <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: ".06em", marginRight: 12, color: T.text }}>{mobile ? "SALES" : "SALES SUMMARY"}</div>
         {views.map(([id, label]) => (
           <button key={id} onClick={() => { setView(id); if (id === "accounts") setAccountKey(null); }}
             style={{ background: view === id ? T.activeBg : "transparent", border: `1px solid ${view === id ? T.borderLight : "transparent"}`, color: view === id ? T.gold : T.subtext, padding: "5px 11px", fontSize: 11, borderRadius: 2, letterSpacing: ".03em" }}>
@@ -191,10 +192,10 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
           <input type="checkbox" checked={includeFreight} onChange={e => setIncludeFreight(e.target.checked)} /> Include freight
         </label>
         {ownOnly && <span style={{ fontSize: 10, color: T.tableHeadText }}>Showing your accounts only</span>}
-        <div style={{ fontSize: 10, color: T.tableHeadText, textAlign: "right", lineHeight: 1.3, minWidth: 120 }}>
+        {!mobile && <div style={{ fontSize: 10, color: T.tableHeadText, textAlign: "right", lineHeight: 1.3, minWidth: 120 }}>
           {sync ? <span style={{ color: T.gold, display: "inline-flex", alignItems: "center", gap: 6 }}><Loader T={T} size={18} inline />{sync.stage}{sync.total ? ` ${sync.done}/${sync.total}` : ""}</span>
             : settings.lastSync ? <>Last synced {timeAgo(settings.lastSync.at)}<br />by {settings.lastSync.by || "—"}</> : "Never synced"}
-        </div>
+        </div>}
         {canSync && <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} disabled={!!sync} onClick={() => runSync(false)}>
           {sync ? "Syncing…" : connected ? "↻ Refresh" : "Connect Dropbox"}
         </button>}
@@ -230,12 +231,12 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
             </Empty>
           )
           : view === "dashboard" ? <>
-              {isAdmin && gaps.length > 0 && (
+              {isAdmin && !mobile && gaps.length > 0 && (
                 <div onClick={() => setView("settings")} style={{ cursor: "pointer", marginBottom: 12, padding: "8px 12px", fontSize: 12, border: "1px solid #6a5420", background: "rgba(200,160,48,.10)", color: "#c8a030", borderRadius: 3, maxWidth: 1400 }}>
                   ⚠ {gaps.length} order number{gaps.length > 1 ? "s are" : " is"} missing: {gaps.slice(0, 6).map(g => g.no).join(", ")}{gaps.length > 6 ? "…" : ""} — click to see why (Settings → Missing order numbers)
                 </div>
               )}
-              <Dashboard {...ctx} />
+              <Dashboard {...ctx} mobile={mobile} />
             </>
           : view === "orders" ? <OrdersView {...ctx} />
           : view === "accounts" ? (accountKey ? <AccountDetail {...ctx} accountKey={accountKey} back={() => setAccountKey(null)} /> : <AccountsView {...ctx} />)
@@ -250,7 +251,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
 // ═════════════════════════════════════════════════════════════════════════════
 // Dashboard — defaults to the current Mon–Fri week
 // ═════════════════════════════════════════════════════════════════════════════
-function Dashboard({ T, orders, opts, currencyMode, openAccount }) {
+function Dashboard({ T, orders, opts, currencyMode, openAccount, mobile }) {
   const [weekStart, setWeekStart] = useState(mondayOf(today()));
   const [selDay, setSelDay] = useState(null);
   const now = today();
@@ -286,31 +287,54 @@ function Dashboard({ T, orders, opts, currencyMode, openAccount }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 1400 }}>
       {/* Week navigation */}
+      {mobile ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button className="btn" style={{ padding: "6px 12px" }} onClick={() => { setWeekStart(addDays(weekStart, -7)); setSelDay(null); }}>◀</button>
+          <div style={{ flex: 1, textAlign: "center", fontSize: 14, fontWeight: 600, color: T.text }}>Week of {fmtDate(weekStart)}</div>
+          <button className="btn" style={{ padding: "6px 12px", opacity: isCurrent ? .4 : 1 }} disabled={isCurrent} onClick={() => { setWeekStart(addDays(weekStart, 7)); setSelDay(null); }}>▶</button>
+        </div>
+      ) :
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <button className="btn" onClick={() => { setWeekStart(addDays(weekStart, -7)); setSelDay(null); }}>◀ Prev week</button>
         <input type="date" value={weekStart} onChange={e => { if (e.target.value) { setWeekStart(mondayOf(e.target.value)); setSelDay(null); } }} style={{ height: 28, fontSize: 12 }} title="Jump to any week" />
         <button className="btn" disabled={isCurrent} style={{ opacity: isCurrent ? .4 : 1 }} onClick={() => { setWeekStart(addDays(weekStart, 7)); setSelDay(null); }}>Next week ▶</button>
         {!isCurrent && <button className="btn" onClick={() => { setWeekStart(thisWeek); setSelDay(null); }}>This week</button>}
         <div style={{ fontSize: 15, fontWeight: 600, marginLeft: 8, color: T.text }}>Week of {fmtDate(weekStart)}</div>
-      </div>
+      </div>}
 
       {/* Tiles */}
-      <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(220px, 1fr))`, gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr 1fr" : `repeat(auto-fit, minmax(220px, 1fr))`, gap: mobile ? 8 : 12 }}>
         {tiles.map(t => <Tile key={t.label} T={T} {...t} mode={currencyMode} />)}
       </div>
 
       {/* Daily breakdown */}
-      <Card T={T} title="Daily sales" right={selDay ? <button className="btn" onClick={() => setSelDay(null)}>Show whole week</button> : <span style={{ fontSize: 10, color: T.tableHeadText }}>Click a day to see its orders</span>}>
+      <Card T={T} title="Daily sales" right={selDay ? <button className="btn" onClick={() => setSelDay(null)}>Show whole week</button> : <span style={{ fontSize: 10, color: T.tableHeadText }}>{mobile ? "Tap a day" : "Click a day to see its orders"}</span>}>
         <DayBars T={T} days={daySums} mode={currencyMode} sel={selDay} onSel={d => setSelDay(selDay === d ? null : d)} />
       </Card>
 
       <Card T={T} title={selDay ? `Orders on ${weekdayName(selDay)} ${fmtDate(selDay)}` : "Orders this week"}>
-        <OrderTable T={T} orders={detailOrders} opts={opts} openAccount={openAccount} compact />
+        {mobile ? <MobileOrderList T={T} orders={detailOrders} opts={opts} /> : <OrderTable T={T} orders={detailOrders} opts={opts} openAccount={openAccount} compact />}
       </Card>
 
-      <Breakdown T={T} orders={pool} opts={opts} mode={currencyMode} weekStart={weekStart} refDate={ref} openAccount={openAccount} />
+      {!mobile && <Breakdown T={T} orders={pool} opts={opts} mode={currencyMode} weekStart={weekStart} refDate={ref} openAccount={openAccount} />}
     </div>
   );
+}
+
+// Phone: one line per order instead of the wide table
+function MobileOrderList({ T, orders, opts }) {
+  if (!orders.length) return <div style={{ fontSize: 12, color: T.tableHeadText, padding: 8 }}>No orders.</div>;
+  return <div>{[...orders].sort((a, b) => (a.date < b.date ? 1 : -1)).map(o => {
+    const s = sumOrders([o], opts);
+    return (
+      <div key={o.orderNo} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: `1px solid ${T.border}`, alignItems: "baseline" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.cust?.name || o.customer}</div>
+          <div style={{ fontSize: 11, color: T.tableHeadText }}>{o.orderNo} · {fmtShort(o.date)}</div>
+        </div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: T.text, whiteSpace: "nowrap" }}>{fmtMoney(orderCurrency(o) === "USD" ? s.usd : s.cad)} <span style={{ fontSize: 10, color: T.tableHeadText, fontWeight: 400 }}>{orderCurrency(o)}</span></div>
+      </div>);
+  })}</div>;
 }
 
 function Tile({ T, label, sub, sum, cmp, cmpLabel, mode }) {

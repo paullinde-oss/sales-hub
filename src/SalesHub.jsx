@@ -1166,7 +1166,7 @@ ${quoteNumLine}
     {id:"pipeline", label:"Pipeline & Leads",      icon:"pipeline"},
     {id:"products", label:"Products & Price List", icon:"products"},
     {id:"stock",    label:"Stock Levels",          icon:"stock"},
-    {id:"shipping", label:"Shipping",              icon:"ship"},
+    {id:"shipping", label:"Shipping",              icon:"truck"},
     {id:"admin",    label:"Users & Access",        icon:"admin"},
   ];
   const TABS = ALL_SIDEBAR_TABS.filter(t => canSee(currentUser, t.id));

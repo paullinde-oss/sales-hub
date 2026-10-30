@@ -34,7 +34,7 @@ const DEFAULT_SETTINGS = {
   dismissedMatches: {},
   lastSync: null,
 };
-const AUTO_SYNC_HOURS = 12;
+const AUTO_SYNC_HOURS = 1;
 // Bump when the PDF reading changes in a way that should fix orders already synced:
 // the next Refresh then re-reads every PDF in the date range (corrections are kept)
 const PARSER_VERSION = 3; // (problem PDFs listed under Missing order numbers are always retried)
@@ -48,7 +48,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
   // "own" scope (e.g. John) only sees accounts where they're the rep; admins also get Settings
   const ownOnly = user?.salesScope === "own";
   const isAdmin = !!user?.admin;
-  const canSync = !ownOnly && !mobile;
+  const canSync = !ownOnly;
   const uploadedLogos = useLogos(db);
   const [rawOrders, setRawOrders] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -192,7 +192,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
           <input type="checkbox" checked={includeFreight} onChange={e => setIncludeFreight(e.target.checked)} /> Include freight
         </label>
         {ownOnly && <span style={{ fontSize: 10, color: T.tableHeadText }}>Showing your accounts only</span>}
-        {!mobile && <div style={{ fontSize: 10, color: T.tableHeadText, textAlign: "right", lineHeight: 1.3, minWidth: 120 }}>
+        {<div style={{ fontSize: 10, color: T.tableHeadText, textAlign: "right", lineHeight: 1.3, minWidth: mobile ? 0 : 120 }}>
           {sync ? <span style={{ color: T.gold, display: "inline-flex", alignItems: "center", gap: 6 }}><Loader T={T} size={18} inline />{sync.stage}{sync.total ? ` ${sync.done}/${sync.total}` : ""}</span>
             : settings.lastSync ? <>Last synced {timeAgo(settings.lastSync.at)}<br />by {settings.lastSync.by || "—"}</> : "Never synced"}
         </div>}

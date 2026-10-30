@@ -77,7 +77,7 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   or Square invoice (read from file name + pre-tax Subtotal, flagged).
 - File name wins over the PDF for the order number; dates: if PDF and file name differ by >7 days,
   use the one closer to the Dropbox save time. "January 0, 1900" = blank date.
-- Sync runs when someone with Dropbox connected opens Sales Summary (if last sync >12 h) or clicks
+- Sync runs when someone with Dropbox connected opens Sales Summary — computer or phone (if last sync >1 h) or clicks
   ↻ Refresh. It only reads new/changed PDFs. **Never sync unless orders, settings and sync history
   have loaded** (a blind sync can let a BOL overwrite its priced OC).
 - Bump `PARSER_VERSION` in `SalesSummary.jsx` only when a parsing fix must be re-applied to every

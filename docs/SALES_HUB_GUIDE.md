@@ -73,8 +73,8 @@ Every area has the same top bar: the area name, then buttons for its sections.
 Real sales, built from order confirmation PDFs.
 - **Source:** Dropbox folders `/Brooks Division/Brooks BOL/Brooks Order Confirmations` and
   `/Calgary BOL/Calgary Order Confirmations` (subfolders included).
-- **When it reads:** when someone with Dropbox connected opens Sales Summary (if the last sync
-  was more than 12 hours ago), or clicks **↻ Refresh**. Only new or changed PDFs are read.
+- **When it reads:** when someone with Dropbox connected opens Sales Summary on a computer or phone
+  (if the last sync was more than 1 hour ago), or clicks **↻ Refresh**. Only new or changed PDFs are read.
 - **Order numbers:** **BRO…** = Brooks, **CAL…** = Calgary. Numbers run in sequence, so a gap means a
   missing order. Settings → Missing order numbers lists them; cancelled numbers can be marked "Not used".
 - **Sections:**

@@ -730,7 +730,7 @@ export default function SalesHub() {
   const [subCategories, setSubCategories] = useState({});  // sku -> subcat string, Firebase-synced
   const [subCatDefs, setSubCatDefs] = useState({});        // cat -> [subcat, ...], Firebase-synced
   const [theme, setTheme] = useLocalStorage('bmp_theme', 'light');
-  const [mobileTab, setMobileTab] = useState('quotes');
+  const [mobileTab, setMobileTab] = useState(() => activeTab==='sales' ? 'sales' : 'quotes'); // back on Sales after connecting Dropbox
   const [mobileView, setMobileView] = useState('list'); // 'list' | 'detail' for quotes
   const T = theme === "dark" ? DARK : LIGHT;
 

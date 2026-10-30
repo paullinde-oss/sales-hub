@@ -31,7 +31,7 @@ function obviouslyTooOld(file, since) {
  *   existing — { orderNo: order } currently in Firestore
  * Returns { added, updated, skipped, errors: [{file, error}], seen }
  */
-export async function syncOrders({ db, folders, since, seen = {}, old = {}, existing = {}, loginName, onProgress = () => {}, onSeen = null }) {
+export async function syncOrders({ db, folders, since, seen = {}, old = {}, existing = {}, loginName, onProgress = () => {}, onSeen = null, pdfjs: givenPdfjs = null }) {
   onProgress({ stage: "Listing Dropbox folders…", done: 0, total: 0 });
   // A missing folder shouldn't stop the others from syncing — report it and carry on
   let files = [];
@@ -74,7 +74,7 @@ export async function syncOrders({ db, folders, since, seen = {}, old = {}, exis
   for (const f of files) if (byFile[f.id] && obviouslyTooOld(f, since)) await dropStale(f, null);
   if (!todo.length) { onProgress({ stage: "Up to date", done: 0, total: 0 }); return res; }
 
-  const pdfjs = await loadPdfjs();
+  const pdfjs = givenPdfjs || await loadPdfjs(); // the hourly GitHub sync passes Node's PDF reader
   let done = 0, pending = {};
   const worker = async () => {
     while (todo.length) {

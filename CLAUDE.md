@@ -80,7 +80,13 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
 - Sync runs when someone with Dropbox connected opens Sales Summary — computer or phone (if last sync >1 h) or clicks
   ↻ Refresh. It only reads new/changed PDFs. **Never sync unless orders, settings and sync history
   have loaded** (a blind sync can let a BOL overwrite its priced OC).
-- Bump `PARSER_VERSION` in `SalesSummary.jsx` only when a parsing fix must be re-applied to every
+- **Hourly automatic sync**: `.github/workflows/autosync.yml` (cron :17 every hour) runs
+  `npm run autosync` → `scripts/autosync.mjs` (esbuild-bundled; Node pdfjs legacy build) with the
+  `DROPBOX_REFRESH_TOKEN` repo secret (Paul copies it via Settings → Automatic sync). It uses the same
+  `runFullSync` (`src/sales/syncRunner.js`) as ↻ Refresh, reads the 48 packs (~50 reads/run), and
+  writes `config/salesSettings.autoSync` {at, ok, error} for the status shown in Settings.
+  Without the secret it skips harmlessly.
+- Bump `PARSER_VERSION` in `syncRunner.js` only when a parsing fix must be re-applied to every
   synced PDF (it forces a full re-read on the next Refresh).
 
 ## Firestore & read limits (important)

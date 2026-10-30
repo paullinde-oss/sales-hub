@@ -4,10 +4,11 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { collection, doc, onSnapshot, setDoc, deleteDoc, deleteField } from "firebase/firestore";
 import { DEFAULT_ACCOUNTS, REPS, SALES_REP, normName, matchAccount } from "./accounts";
-import { isDropboxConnected, startDropboxAuth, disconnectDropbox, redirectUri, browseFolder, accountInfo } from "./dropbox";
+import { isDropboxConnected, startDropboxAuth, disconnectDropbox, redirectUri, browseFolder, accountInfo, dropboxRefreshToken } from "./dropbox";
 import { syncOrders } from "./sync";
 import { Loader } from "../Loader";
 import { useTableSort } from "./tableSort";
+import { runFullSync, SYNC_DEFAULTS, PARSER_VERSION } from "./syncRunner";
 import { writeOrder, removeOrder, listenOrders, buildPacks } from "./orderStore";
 import { useLogos, resizeImage, saveLogo, removeLogo, logoDevUrl, domainOf } from "./logos";
 import { yearCompare, openYearEndReport } from "./yearEndReport";
@@ -25,19 +26,12 @@ const DEFAULT_SETTINGS = {
   aliases: {},
   custTypes: {},
   usdToCad: 1.37,
-  since: "2025-12-01",
-  folders: [
-    "/Brooks Division/Brooks BOL/Brooks Order Confirmations",
-    "/Calgary BOL/Calgary Order Confirmations",
-  ],
+  ...SYNC_DEFAULTS,
   quoteLinks: {},
   dismissedMatches: {},
   lastSync: null,
 };
 const AUTO_SYNC_HOURS = 1;
-// Bump when the PDF reading changes in a way that should fix orders already synced:
-// the next Refresh then re-reads every PDF in the date range (corrections are kept)
-const PARSER_VERSION = 3; // (problem PDFs listed under Missing order numbers are always retried)
 const VIEWS = [
   ["dashboard", "Dashboard"], ["orders", "Orders"], ["accounts", "Accounts"],
   ["reports", "Reports"], ["quotes", "Quote Matches"], ["settings", "Settings"],
@@ -129,26 +123,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
     setSyncMsg(null);
     setSync({ stage: "Starting…", done: 0, total: 0 });
     try {
-      const existing = Object.fromEntries(rawOrders.map(o => [o.orderNo, o]));
-      // Re-read PDFs that came in without a usable date (e.g. "January 0, 1900")
-      const badDate = new Set(rawOrders.filter(o => !/^20\d\d-/.test(o.override?.date || o.date || "") || !(o.customer || "").trim()).map(o => o.file?.id).filter(Boolean)); // also re-read orders with no customer name
-      // Record finished files every 25 so an interrupted sync (tab closed, laptop asleep) picks up where it left off
-      const saveSeen = batch => setDoc(doc(db, "config", "salesSyncSeen"), { files: batch }, { merge: true });
-      const saveOld = batch => setDoc(doc(db, "config", "salesSyncSeen"), { old: batch }, { merge: true });
-      // One-time: PDFs skipped before problem files were tracked get one more look, so gaps show a real reason
-      const orderFiles = new Set(rawOrders.map(o => o.file?.id).filter(Boolean));
-      const reread = (settings.parserVersion || 0) < PARSER_VERSION;
-      // Start date moved earlier since the last sync: PDFs skipped as "too old" back then get another look
-      const sinceMovedBack = !settings.syncedSince || settings.since < settings.syncedSince;
-      const retry = id => reread || badDate.has(id) || !!issues[id] || ((!settings.issuesTracked || sinceMovedBack) && !orderFiles.has(id));
-      const r = await syncOrders({ db, folders: settings.folders, since: settings.since, seen: Object.fromEntries(Object.entries(seen).filter(([id]) => !retry(id))), old: sinceMovedBack ? {} : oldFiles, existing, loginName, onProgress: setSync, onSeen: saveSeen });
-      if (Object.keys(r.seen).length) await saveSeen(r.seen);
-      if (Object.keys(r.old).length) await saveOld(r.old);
-      if (Object.keys(r.listing).length) await setDoc(doc(db, "config", "salesSyncFiles"), { numbers: r.listing, at: new Date().toISOString() });
-      if (Object.keys(r.issues).length || Object.keys(r.resolved).length)
-        await setDoc(doc(db, "config", "salesSyncIssues"), { files: { ...r.issues, ...Object.fromEntries(Object.keys(r.resolved).map(id => [id, deleteField()])) } }, { merge: true });
-      const lastSync = { at: new Date().toISOString(), by: loginName || "", added: r.added, updated: r.updated, errors: r.errors.length, scanned: r.scanned };
-      await saveSettings({ lastSync, issuesTracked: true, parserVersion: PARSER_VERSION, syncedSince: settings.since });
+      const r = await runFullSync({ db, settings, seen, oldFiles, issues, rawOrders, loginName, onProgress: setSync });
       setSyncMsg({ ok: !r.errors.length, text: `Synced ${r.scanned} PDFs — ${r.added} new, ${r.updated} updated${r.removed.length ? `, ${r.removed.length} out-of-range or duplicate removed` : ""}${r.errors.length ? `, ${r.errors.length} couldn't be read` : ""}.`, errors: r.errors });
     } catch (e) {
       setConnected(isDropboxConnected());
@@ -1308,6 +1283,34 @@ function QuoteMatchesView({ T, matches, settings, saveSettings, opts, quotes, up
 // ═════════════════════════════════════════════════════════════════════════════
 // Settings
 // ═════════════════════════════════════════════════════════════════════════════
+// Hourly automatic sync on GitHub (scripts/autosync.mjs) — status and one-time setup
+const SECRET_URL = "https://github.com/paullinde-oss/sales-hub/settings/secrets/actions/new";
+function AutoSyncCard({ T, settings, connected }) {
+  const [copied, setCopied] = useState(false);
+  const a = settings.autoSync;
+  const fresh = a && Date.now() - new Date(a.at) < 3 * 3600e3;
+  const copy = async () => { try { await navigator.clipboard.writeText(dropboxRefreshToken()); setCopied(true); } catch { prompt("Copy this key:", dropboxRefreshToken()); } };
+  return (
+    <Card T={T} title="Automatic sync (every hour)">
+      <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12, marginBottom: 10 }}>
+        <span style={{ color: !a ? "#c8a030" : a.ok && fresh ? "#5a9e5a" : "#c86a5a" }}>●</span>
+        {!a ? "Not set up yet — new orders only come in when someone with Dropbox connected opens Sales Summary."
+          : a.ok ? <>Running. Last automatic sync {timeAgo(a.at)}{a.added || a.updated ? ` (${a.added} new, ${a.updated} updated)` : ""}.{!fresh && " That's longer ago than expected — check the steps below."}</>
+          : <>Last automatic sync {timeAgo(a.at)} failed: {a.error}</>}
+      </div>
+      <div style={{ fontSize: 11, color: T.tableHeadText, lineHeight: 1.6 }}>
+        Once set up, new order confirmations are read every hour on their own, even when nobody has the hub open. One-time setup (or redo it if the sync says Dropbox expired):
+        <ol style={{ margin: "6px 0 0 18px", padding: 0 }}>
+          <li>Make sure Dropbox is connected on this computer (above).</li>
+          <li><button className="btn" style={{ padding: "2px 10px" }} disabled={!connected} onClick={copy}>{copied ? "✓ Copied" : "Copy Dropbox key"}</button> — keep it private; it gives access to the Dropbox.</li>
+          <li>Open <a href={SECRET_URL} target="_blank" rel="noreferrer" style={{ color: T.gold }}>GitHub → New secret</a>, Name: <code style={{ color: T.text }}>DROPBOX_REFRESH_TOKEN</code>, paste the key into Secret, click <b>Add secret</b>. (If it already exists, open it and click Update.)</li>
+          <li>Done — the first automatic sync runs within the hour and shows here.</li>
+        </ol>
+      </div>
+    </Card>
+  );
+}
+
 function SettingsView({ T, db, orders, settings, saveSettings, connected, setConnected, seenCount, loginName, openAccount, logos, gaps = [], issues = {}, products = [] }) {
   const [folders, setFolders] = useState(settings.folders.join("\n"));
   const [since, setSince] = useState(settings.since);
@@ -1375,6 +1378,8 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
           <button className="btn-del" onClick={() => { if (confirm("Re-read every PDF on the next Refresh? Corrections you've made are kept.")) setDoc(doc(db, "config", "salesSyncSeen"), { files: {} }); }}>Re-read all PDFs on next refresh</button>
         </div>
       </Card>
+
+      <AutoSyncCard T={T} settings={settings} connected={connected} />
 
       {picker && <FolderPicker T={T} title="Pick an Order Confirmations folder"
         onClose={() => setPicker(null)}

@@ -15,6 +15,10 @@ const b64url = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(
 export function isDropboxConnected() {
   try { return !!localStorage.getItem(LS_REFRESH); } catch { return false; }
 }
+// The long-lasting Dropbox key for this browser — copied into GitHub for the hourly automatic sync
+export function dropboxRefreshToken() {
+  try { return localStorage.getItem(LS_REFRESH) || ""; } catch { return ""; }
+}
 export function disconnectDropbox() {
   try { localStorage.removeItem(LS_REFRESH); localStorage.removeItem(LS_ACCESS); } catch {}
 }

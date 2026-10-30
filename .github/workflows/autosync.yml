@@ -1,0 +1,30 @@
+name: Automatic order sync
+
+# Reads new order confirmation PDFs from Dropbox into the Sales Hub every hour
+# (scripts/autosync.mjs). Needs the DROPBOX_REFRESH_TOKEN secret — see Sales Summary → Settings.
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: autosync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-audit --no-fund
+      - name: Sync orders from Dropbox
+        run: npm run autosync
+        env:
+          DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}

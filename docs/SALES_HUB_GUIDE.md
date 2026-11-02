@@ -61,6 +61,10 @@ Every area has the same top bar: the area name, then buttons for its sections.
 - Create, edit, duplicate, delete, print/PDF and email quotes. Numbers look like **BMP44241**.
 - Each quote has: customer name & company, currency (CAD/USD), line items (SKU, description,
   qty, unit price, % change), notes, internal notes, valid-for days (default 30), and status.
+- **Options:** "+ Add options" splits a quote into Option 1…5 (each with its own lines and total) plus
+  "Common to all options" (e.g. freight, added to every option). The customer picks one, so there's
+  no grand total. When marked **Won** the hub asks which option; the quote's value is then that
+  option. Open / lost / cold quotes count as the **average** of their options.
 - **New Lead** tick + lead type/source → the quote is also added to Leads.
 - **Quote list** (left panel), searchable by name, company, date, made by, quote #, SKU, description:
   - **This Week**, then one folder per month of the current fiscal year.

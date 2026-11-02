@@ -8,6 +8,7 @@ import { isDropboxConnected, startDropboxAuth, disconnectDropbox, redirectUri, b
 import { syncOrders } from "./sync";
 import { Loader } from "../Loader";
 import { useTableSort } from "./tableSort";
+import { quoteValue, hasOptions, pickWonOption, closestOption } from "../quoteOptions";
 import { runFullSync, SYNC_DEFAULTS, PARSER_VERSION } from "./syncRunner";
 import { writeOrder, removeOrder, listenOrders, buildPacks } from "./orderStore";
 import { useLogos, resizeImage, saveLogo, removeLogo, logoDevUrl, domainOf } from "./logos";
@@ -1216,7 +1217,7 @@ function printReport(title, sub, headers, rows) {
 // When a quote is marked won, its lines become what was actually ordered (products, then
 // freight and fees). The original quoted lines are kept once in quotedLineItems.
 let lineSeq = Date.now();
-function quoteFromOrder(quote, order) {
+function quoteFromOrder(quote, order, wonOption = null) {
   const base = {};
   (quote.lineItems || []).forEach(li => { if (li.sku) base[String(li.sku).toUpperCase()] = li.basePrice; });
   const item = (sku, description, qty, unitPrice) => ({ id: ++lineSeq, sku, description, qty, unitPrice: Math.round(unitPrice * 100) / 100,
@@ -1226,20 +1227,30 @@ function quoteFromOrder(quote, order) {
   return {
     lineItems: lines.length ? lines : quote.lineItems,
     quotedLineItems: quote.quotedLineItems || quote.lineItems || [],
+    // Options collapse to what was actually ordered; the offered options are kept for reference
+    ...(hasOptions(quote) ? { quotedOptions: quote.options, options: null, wonOption, wonOptionName: quote.options[wonOption - 1]?.name || "" } : {}),
     currency: order.currency || quote.currency,
     wonOrderNo: order.orderNo,
   };
 }
 function QuoteMatchesView({ T, matches, settings, saveSettings, opts, quotes, updateQuoteStatus, openAccount, orders }) {
   const link = (m, markWon) => {
-    if (markWon) updateQuoteStatus(m.quote, "won", quoteFromOrder(m.quote, m.order));
+    if (markWon) {
+      // A quote with options: confirm which option they chose (the closest one is pre-picked)
+      if (hasOptions(m.quote)) return pickWonOption(m.quote, m.option || closestOption(m.quote, m.order.total || 0)).then(n => {
+        if (!n) return;
+        updateQuoteStatus(m.quote, "won", quoteFromOrder(m.quote, m.order, n));
+        saveSettings({ quoteLinks: { ...(settings.quoteLinks || {}), [m.order.orderNo]: String(m.quote.id) } });
+      });
+      updateQuoteStatus(m.quote, "won", quoteFromOrder(m.quote, m.order));
+    }
     saveSettings({ quoteLinks: { ...(settings.quoteLinks || {}), [m.order.orderNo]: String(m.quote.id) } });
   };
   const dismiss = m => saveSettings({ dismissedMatches: { ...(settings.dismissedMatches || {}), [`${m.order.orderNo}|${m.quote.id}`]: true } });
   const linked = Object.entries(settings.quoteLinks || {}).map(([no, qid]) => ({ order: orders.find(o => o.orderNo === no), quote: quotes.find(q => String(q.id) === qid), no }))
     .filter(x => x.order).sort((a, b) => (a.order.date < b.order.date ? 1 : -1));
   const unlink = no => saveSettings({ quoteLinks: { [no]: deleteField() } });
-  const qTotal = q => (q.lineItems || []).reduce((s, li) => s + (parseFloat(li.unitPrice) || 0) * (parseInt(li.qty) || 0), 0);
+  const qTotal = q => quoteValue(q); // options: the average (or the won option)
 
   return (
     <div style={{ maxWidth: 1200, display: "flex", flexDirection: "column", gap: 14 }}>

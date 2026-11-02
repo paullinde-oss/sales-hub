@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, useMemo, useCallback, Component } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback, Component, Fragment } from "react";
+import { valueText, hasOptions, optionTotals, optionLabel, linesOf, quoteValue, commonTotal, enableOptions, removeOption, MAX_OPTIONS, pickWonOption, closestOption, WonOptionPicker } from "./quoteOptions";
 import { initializeApp } from "firebase/app";
 
 const APP_VERSION = "v6.2 — Oct 2026";
@@ -992,7 +993,7 @@ export default function SalesHub() {
 
     // ── Sync to Lead Tracking if isNewLead ────────────────────────────────────
     if (saved.isNewLead) {
-      const total = (saved.lineItems||[]).reduce((s,li)=>(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0)+s, 0);
+      const total = quoteValue(saved); // options: average, or the won option
       const skus  = (saved.lineItems||[]).map(li=>li.sku||"").filter(Boolean).join(", ");
       const yr    = new Date().getFullYear();
       const normStatus = s => s==='won'?'won':s==='lost'?'lost':s==='cold'?'cold':'inprogress';
@@ -1029,6 +1030,10 @@ export default function SalesHub() {
   // sync — matched by quote number (e.g. "BMP44152"), falling back to company name.
   // changes: optional extra fields saved with it (e.g. Quote Matches updates the lines to the final order)
   function updateQuoteStatus(quote, status, changes = {}) {
+    if (status==='won' && hasOptions(quote) && changes.wonOption==null && !('options' in changes)) {
+      pickWonOption(quote).then(n => { if (n) updateQuoteStatus(quote, status, {...changes, wonOption:n}); });
+      return;
+    }
     setQuotes(prev => {
       const next = prev.map(q => q.id===quote.id ? {...q, ...changes, quoteStatus: status} : q);
       const updated = next.find(q => q.id===quote.id) || {...quote, ...changes, quoteStatus: status};
@@ -1069,6 +1074,7 @@ export default function SalesHub() {
       increase:    parseFloat(li.increase)  || 0,
       basePrice:   parseFloat(li.basePrice) || 0,
       priceTier:   li.priceTier || "unit",
+      ...(hasOptions(q) ? {option: isNaN(parseInt(li.option)) ? 1 : parseInt(li.option)} : {}),
     }));
     if (newItems.length === 0) newItems.push({id:newLineItemId(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0,priceTier:"unit"});
     const duped = {
@@ -1088,6 +1094,7 @@ export default function SalesHub() {
       savedBy:       "",
       savedDate:     "",
       lineItems:     newItems,
+      ...(hasOptions(q) ? {options: q.options.map(o=>({name:o.name||""}))} : {}),
     };
     setActiveQuote(duped);
   }
@@ -1096,7 +1103,7 @@ export default function SalesHub() {
     const prods=[...new Set((q.lineItems||[]).map(li=>li.description||li.sku).filter(Boolean))].join(", ");
 
     // HTML version — Outlook-compatible table (inline styles only, no classes)
-    const rowsHtml=(q.lineItems||[]).map(li=>{
+    const rowHtml=li=>{
       const lt=(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0);
       // bgcolor attribute + explicit per-cell colour: Outlook's Dark Mode rewrites
       // colours it thinks are "unset", so every cell states its own background and
@@ -1108,9 +1115,16 @@ export default function SalesHub() {
         <td bgcolor="#FFFFFF" style="border:1px solid #000;padding:5px 8px;text-align:right;font-family:Calibri,Arial,sans-serif;font-size:12px;background-color:#FFFFFF;color:#000000;">${fmtCur(li.unitPrice)}</td>
         <td bgcolor="#FFFFFF" style="border:1px solid #000;padding:5px 8px;text-align:right;font-family:Calibri,Arial,sans-serif;font-size:12px;font-weight:bold;background-color:#FFFFFF;color:#000000;">${fmtCur(lt)}</td>
       </tr>`;
-    }).join("");
+    };
 
-    const bottomRow=`<tr>
+    const opts = hasOptions(q);
+    const cell = (html, extra) => `<td colspan="5" bgcolor="#EFEFEF" style="border:1px solid #000;padding:6px 10px;font-family:Calibri,Arial,sans-serif;font-size:12px;background-color:#EFEFEF;color:#000000;${extra||""}">${html}</td>`;
+    // With options: each option's lines + its total (common lines included), then the common lines
+    const rowsHtml = !opts ? (q.lineItems||[]).map(rowHtml).join("") : [
+      ...optionTotals(q).map(o => `<tr>${cell(`<b>${o.label}</b>`)}</tr>${o.lines.map(rowHtml).join("")}<tr>${cell(`<b>${o.label.split(" — ")[0]} total (${q.currency}): ${fmtCur(o.total)}</b>${linesOf(q,0).length?" &nbsp;<i>incl. items common to all options</i>":""}`,"text-align:right;background-color:#F5F5F5;")}</tr>`),
+      ...(linesOf(q,0).length ? [`<tr>${cell("<b>Common to all options</b> (included in each option total)")}</tr>${linesOf(q,0).map(rowHtml).join("")}`] : []),
+    ].join("");
+    const bottomRow = opts ? `<tr><td colspan="5" bgcolor="#F9F9F9" style="border:1px solid #000;padding:6px 12px;font-family:Calibri,Arial,sans-serif;font-size:12px;color:#555555;font-style:italic;background-color:#F9F9F9;">Please choose one option.${q.notes?" Notes: "+q.notes:""}</td></tr>` : `<tr>
       <td colspan="3" bgcolor="#F9F9F9" style="border:1px solid #000;padding:6px 12px;font-family:Calibri,Arial,sans-serif;font-size:12px;color:#555555;font-style:italic;background-color:#F9F9F9;">${q.notes?"Notes: "+q.notes:""}</td>
       <td bgcolor="#F5F5F5" style="border:1px solid #000;padding:6px 12px;text-align:right;font-family:Calibri,Arial,sans-serif;font-size:13px;font-weight:bold;background-color:#F5F5F5;color:#000000;">Total (${q.currency})</td>
       <td bgcolor="#F5F5F5" style="border:1px solid #000;padding:6px 12px;text-align:right;font-family:Calibri,Arial,sans-serif;font-size:13px;font-weight:bold;background-color:#F5F5F5;color:#000000;">${fmtCur(total)}</td>
@@ -1151,7 +1165,10 @@ ${quoteNumLine}
 </div>`;
 
     // Plain-text fallback
-    const plain=`${(q.lineItems||[]).map(li=>`${li.sku||"—"}  |  ${li.description||"—"}  |  Qty: ${li.qty}  |  Unit: ${fmtCur(li.unitPrice)}  |  Total: ${fmtCur((parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0))}`).join("\n")}\n\nTotal (${q.currency}): ${fmtCur(total)}${q.notes?`\nNotes: ${q.notes}`:""}${q.quoteNum?`\n\nQuote #: ${q.quoteNum}`:""}\n\nLet me know if you have any questions or need additional information.\n\nThank you,`;
+    const lineTxt=li=>`${li.sku||"—"}  |  ${li.description||"—"}  |  Qty: ${li.qty}  |  Unit: ${fmtCur(li.unitPrice)}  |  Total: ${fmtCur((parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0))}`;
+    const plain = opts
+      ? `${optionTotals(q).map(o=>`${o.label}\n${o.lines.map(lineTxt).join("\n")}\n${o.label.split(" — ")[0]} total (${q.currency}): ${fmtCur(o.total)}`).join("\n\n")}${linesOf(q,0).length?`\n\nCommon to all options (included in each option total)\n${linesOf(q,0).map(lineTxt).join("\n")}`:""}\n\nPlease choose one option.${q.notes?`\nNotes: ${q.notes}`:""}${q.quoteNum?`\n\nQuote #: ${q.quoteNum}`:""}\n\nLet me know if you have any questions or need additional information.\n\nThank you,`
+      : `${(q.lineItems||[]).map(lineTxt).join("\n")}\n\nTotal (${q.currency}): ${fmtCur(total)}${q.notes?`\nNotes: ${q.notes}`:""}${q.quoteNum?`\n\nQuote #: ${q.quoteNum}`:""}\n\nLet me know if you have any questions or need additional information.\n\nThank you,`;
 
     setEmailModal({html, plain});
   }
@@ -1305,6 +1322,7 @@ ${quoteNumLine}
         </div>
       </div>
 
+      <WonOptionPicker T={T} fmt={fmtCur}/>
       {/* PDF Modal */}
       {pdfQuote && (
         <PDFModal quote={pdfQuote} onClose={()=>setPdfQuote(null)}/>
@@ -1479,7 +1497,7 @@ function exportQuotesCSV(quotes) {
   const headers = ['Customer Name','Company','Currency','Prepaid','Quote #','SKUs','Total','Saved By','Date Saved','Quote Notes'];
   const rows = (quotes||[]).map(q => {
     const skus = (q.lineItems||[]).map(li=>li.sku||"").filter(Boolean).join(', ');
-    const total = (q.lineItems||[]).reduce((s,li)=>(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0)+s,0);
+    const total = quoteValue(q);
     return [
       escape(q.name),
       escape(q.company),
@@ -1790,6 +1808,14 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
     {v:'lost',       l:'❌ Closed - Lost'},
   ];
   function changeStatus(val){
+    // A quote with options: ask which option they chose before marking it won
+    if (val==='won' && hasOptions(quote)) {
+      pickWonOption(quote).then(n=>{ if(!n) return;
+        setQuote(q=>({...q,quoteStatus:'won',wonOption:n}));
+        if (quote.saved && onStatusChange) onStatusChange(quote, 'won', {wonOption:n});
+      });
+      return;
+    }
     upd('quoteStatus', val);
     // Only an already-saved quote has a Pipeline/Lead Tracking counterpart to sync.
     if (quote.saved && onStatusChange) onStatusChange(quote, val);
@@ -1799,6 +1825,30 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
 
   const total=((quote.lineItems||[])).reduce((s,li)=>s+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0);
   const ro=quote.saved;
+  // Options: Option 1…5 blocks plus "Common to all options" (0); null = a normal quote
+  const opts = hasOptions(quote);
+  const groupKeys = opts ? [...quote.options.map((_,i)=>i+1), ...(!quote.saved || linesOf(quote,0).length ? [0] : [])] : [null];
+  const optTotals = optionTotals(quote);
+  const blankLine = () => ({id:newLineItemId(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0});
+  const addLIto = n => setQuote(q=>({...q,lineItems:[...(q.lineItems||[]),{...blankLine(),...(n!=null?{option:n}:{})}]}));
+  const groupLines = n => n==null ? (quote.lineItems||[]) : linesOf(quote,n);
+  const setOptName = (n,name) => setQuote(q=>({...q,options:q.options.map((o,i)=>i===n-1?{...o,name}:o)}));
+  const groupHeader = (n, mobile) => {
+    if (n==null) return null;
+    const t = optTotals.find(o=>o.n===n);
+    return <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",padding:mobile?"8px 2px":"6px 10px",background:mobile?"transparent":T.tableHead,borderTop:mobile?"none":`2px solid ${n===0?T.border:"#c8a96e"}`}}>
+      <span style={{fontSize:10,fontWeight:700,letterSpacing:".1em",textTransform:"uppercase",color:n===0?T.subtext:"#c8a96e"}}>{n===0?"Common to all options":`Option ${n}`}</span>
+      {n>0 && (ro ? (quote.options[n-1]?.name ? <span style={{fontSize:12,color:T.text}}>— {quote.options[n-1].name}</span> : null)
+        : <input value={quote.options[n-1]?.name||""} onChange={e=>setOptName(n,e.target.value)} placeholder="Name (optional), e.g. Coir blanket" style={{fontSize:11,height:24,width:220}}/>)}
+      {n===0 && <span style={{fontSize:10,color:T.muted}}>added to every option's total (e.g. freight)</span>}
+      <span style={{flex:1}}/>
+      {n>0 && t && <span style={{fontSize:11,color:T.subtext}}>Option total <b style={{color:T.text,fontVariantNumeric:"tabular-nums"}}>{fmtCur(t.total)}</b></span>}
+      {n===0 && <span style={{fontSize:11,color:T.subtext}}>{fmtCur(commonTotal(quote))}</span>}
+      {n>0 && !ro && <button className="btn-del" style={{padding:"1px 7px",fontSize:10}} onClick={()=>{ if(linesOf(quote,n).every(li=>!li.sku&&!li.description) || confirm(`Remove Option ${n} and its lines?`)) setQuote(q=>removeOption(q,n)); }}>Remove option</button>}
+    </div>;
+  };
+  const moveSelect = li => opts && !ro ? <select value={parseInt(li.option)||0} title="Move to another option" onChange={e=>updLI(li.id,"option",parseInt(e.target.value))} style={{fontSize:10,height:22,marginTop:2,width:"100%"}}>
+      {quote.options.map((_,i)=><option key={i} value={i+1}>Opt {i+1}</option>)}<option value={0}>Common</option></select> : null;
   // Guard: if quote is somehow invalid, show nothing
   if (!quote || typeof quote !== 'object') return null;
 
@@ -1878,7 +1928,9 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
             <div style={{fontSize:9,color:T.tableHeadText,letterSpacing:".1em",textTransform:"uppercase"}}>Line Items ({(quote.lineItems||[]).length})</div>
             {!ro&&<button className="btn" style={{fontSize:11,padding:"4px 12px"}} onClick={addLI}>+ Add Item</button>}
           </div>
-          {((quote.lineItems||[])).map((li,idx)=>{
+          {groupKeys.map(n=><Fragment key={"m"+n}>
+            {groupHeader(n,true)}
+            {groupLines(n).map((li,idx)=>{
             const lineTotal=(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0);
             return (
               <div key={li.id} style={{background:T.cardBg,border:`1px solid ${T.border}`,borderRadius:4,padding:12,marginBottom:8}}>
@@ -1939,6 +1991,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
                       {PRICE_INCREASE_OPTIONS.map(o=><option key={o} value={o} style={{color:o<0?"#e8472c":o>0?"#c8a96e":"inherit"}}>{o===0?"No markup":o<0?`${o}%`:`+${o}%`}</option>)}
                     </select>
                   </div>
+                  {opts&&<div style={{width:80}}><div style={{fontSize:9,color:T.tableHeadText,letterSpacing:".08em",marginBottom:4}}>OPTION</div>{moveSelect(li)}</div>}
                   <button onClick={()=>removeLI(li.id)}
                     style={{background:"transparent",border:"1px solid #553",color:"#c84",width:40,height:40,borderRadius:3,cursor:"pointer",fontSize:18,flexShrink:0,marginTop:18}}>
                     ✕
@@ -1947,7 +2000,11 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
               </div>
             );
           })}
-          {!ro&&<button className="btn" style={{width:"100%",padding:"10px",fontSize:13}} onClick={addLI}>+ Add Line Item</button>}
+            {n!=null&&!ro&&<button className="btn" style={{width:"100%",padding:"8px",fontSize:12,marginBottom:10}} onClick={()=>addLIto(n)}>+ Add line to {n===0?"Common":`Option ${n}`}</button>}
+          </Fragment>)}
+          {!ro&&!opts&&<button className="btn" style={{width:"100%",padding:"10px",fontSize:13}} onClick={addLI}>+ Add Line Item</button>}
+          {!ro&&!opts&&<button className="btn" style={{width:"100%",padding:"10px",fontSize:13,marginTop:6}} onClick={()=>setQuote(q=>enableOptions(q,blankLine))}>+ Add options</button>}
+          {!ro&&opts&&quote.options.length<MAX_OPTIONS&&<button className="btn" style={{width:"100%",padding:"10px",fontSize:13}} onClick={()=>setQuote(q=>({...q,options:[...q.options,{name:""}],lineItems:[...(q.lineItems||[]),{...blankLine(),option:q.options.length+1}]}))}>+ Add option {quote.options.length+1}</button>}
         </div>
       ) : (
       /* ── Desktop: horizontal table ── */
@@ -1959,9 +2016,11 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
             <th style={{width:105}}>Unit Price</th>
             <th style={{width:105}}>Total</th>
             <th style={{width:110}}>Change (%)</th>
-            {!ro&&<th style={{width:36}}/>}
+            {!ro&&<th style={{width:opts?72:36}}/>}
           </tr></thead>
-          <tbody>{((quote.lineItems||[])).map((li,idx)=>{
+          <tbody>{groupKeys.map(n=><Fragment key={"g"+n}>
+            {n!=null&&<tr><td colSpan={ro?6:7} style={{padding:0}}>{groupHeader(n)}</td></tr>}
+            {groupLines(n).map((li,idx)=>{
             const lineTotal=(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0);
             return <tr key={li.id}>
               <td>
@@ -2013,12 +2072,16 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
                       {PRICE_INCREASE_OPTIONS.map(o=><option key={o} value={o} style={{color:o<0?"#e8472c":o>0?"#c8a96e":"inherit"}}>{o===0?"0%":o<0?`${o}%`:`+${o}%`}</option>)}
                     </select>}
               </td>
-              {!ro&&<td>{((quote.lineItems||[])).length>1&&<button className="btn-del" style={{padding:"1px 7px"}} onClick={()=>removeLI(li.id)}>✕</button>}</td>}
+              {!ro&&<td>{((quote.lineItems||[])).length>1&&<button className="btn-del" style={{padding:"1px 7px"}} onClick={()=>removeLI(li.id)}>✕</button>}{moveSelect(li)}</td>}
             </tr>;
-          })}</tbody>
+          })}
+            {n!=null&&!ro&&<tr><td colSpan={7} style={{padding:"4px 10px"}}><button className="btn" style={{fontSize:10,padding:"2px 10px"}} onClick={()=>addLIto(n)}>+ Add line to {n===0?"Common":`Option ${n}`}</button></td></tr>}
+          </Fragment>)}</tbody>
         </table>
-        {!ro&&<div style={{padding:"7px 10px",borderTop:"1px solid #161616",background:"#0a0a0a"}}>
-          <button className="btn" style={{fontSize:10,padding:"4px 12px"}} onClick={addLI}>+ Add Line Item</button>
+        {!ro&&<div style={{padding:"7px 10px",borderTop:"1px solid #161616",background:"#0a0a0a",display:"flex",gap:8}}>
+          {!opts&&<button className="btn" style={{fontSize:10,padding:"4px 12px"}} onClick={addLI}>+ Add Line Item</button>}
+          {!opts&&<button className="btn" style={{fontSize:10,padding:"4px 12px"}} title="Give the customer up to 5 options to choose from" onClick={()=>setQuote(q=>enableOptions(q,blankLine))}>+ Add options</button>}
+          {opts&&quote.options.length<MAX_OPTIONS&&<button className="btn" style={{fontSize:10,padding:"4px 12px"}} onClick={()=>setQuote(q=>({...q,options:[...q.options,{name:""}],lineItems:[...(q.lineItems||[]),{...blankLine(),option:q.options.length+1}]}))}>+ Add option {quote.options.length+1}</button>}
         </div>}
       </div>
       )} {/* end ternary */}
@@ -2208,8 +2271,15 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
         </div>
         <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",justifyContent:"space-between",minWidth:190}}>
           <div style={{textAlign:"right"}}>
+            {opts ? <>
+              <div style={{fontSize:9,color:"#666",letterSpacing:".08em"}}>OPTION TOTALS ({quote.currency})</div>
+              {optTotals.map(o=><div key={o.n} style={{fontSize:13,fontVariantNumeric:"tabular-nums",color:quote.quoteStatus==="won"&&quote.wonOption===o.n?"#5a9e5a":T.text}}>
+                Option {o.n}{quote.quoteStatus==="won"&&quote.wonOption===o.n?" ✓ won":""}: <b style={{color:"#c8a96e"}}>{fmtCur(o.total)}</b></div>)}
+              <div style={{fontSize:9,color:T.muted,marginTop:2}}>Customer picks one — no combined total</div>
+            </> : <>
             <div style={{fontSize:9,color:"#666",letterSpacing:".08em"}}>TOTAL ({quote.currency})</div>
             <div style={{fontSize:20,fontWeight:600,color:"#c8a96e",fontVariantNumeric:"tabular-nums"}}>{fmtCur(total)}</div>
+            </>}
           </div>
           {ro
             ? <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"stretch"}}>
@@ -4415,9 +4485,10 @@ function PDFModal({quote:q, onClose}) {
   const fmt = v=>`$${parseFloat(v||0).toLocaleString("en-CA",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 
   function buildHTML() {
-    // Max 9 line items
-    const items = (q.lineItems||[]).slice(0,9);
-    const rows = items.map((li,i)=>{
+    // Max 9 line items (a quote with options prints every option, up to 20 lines)
+    const opts = hasOptions(q);
+    const items = opts ? (q.lineItems||[]) : (q.lineItems||[]).slice(0,9);
+    const rowOf = (li,i)=>{
       const lt=(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0);
       const bg = i%2===0?"#ffffff":"#f7f7f7";
       return `<tr style="background:${bg};">
@@ -4427,19 +4498,29 @@ function PDFModal({quote:q, onClose}) {
         <td style="padding:7px 10px;border-bottom:1px solid #e8e8e4;font-size:11px;text-align:center;color:#333;">${li.qty||""}</td>
         <td style="padding:7px 10px;border-bottom:1px solid #e8e8e4;font-size:11px;text-align:right;font-weight:600;color:#111;">${lt?fmt(lt):"$ —"}</td>
       </tr>`;
-    }).join("");
+    };
+    const band = (html, extra="") => `<tr><td colspan="5" style="padding:6px 8px;border-bottom:1px solid #e8e8e4;background:#f2f2ef;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#1a1a1a;${extra}">${html}</td></tr>`;
+    const adj = t => t + freightVal - discountVal;
+    const rows = !opts ? items.map(rowOf).join("") : [
+      ...optionTotals(q).map(o => band(o.label) + o.lines.map(rowOf).join("") +
+        `<tr><td colspan="4" style="text-align:right;padding:5px 10px;font-size:10px;color:#555;">${o.label.split(" — ")[0]} total${linesOf(q,0).length?" (incl. common items)":""}</td><td style="text-align:right;padding:5px 10px;font-size:11px;font-weight:700;">${fmt(o.total)}</td></tr>`),
+      ...(linesOf(q,0).length ? [band("Common to all options <span style='font-weight:400;text-transform:none;letter-spacing:0;color:#666'>(included in each option total)</span>") + linesOf(q,0).map(rowOf).join("")] : []),
+    ].join("");
 
     // Pad to 9 rows
-    const padCount = Math.max(0, 9 - items.length);
+    const padCount = opts ? 0 : Math.max(0, 9 - items.length);
     const padRows = Array(padCount).fill(`<tr style="background:#fff;"><td style="padding:7px 10px;border-bottom:1px solid #e8e8e4;">&nbsp;</td><td style="padding:7px 10px;border-bottom:1px solid #e8e8e4;"></td><td style="padding:7px 10px;border-bottom:1px solid #e8e8e4;"></td><td style="padding:7px 10px;border-bottom:1px solid #e8e8e4;"></td><td style="padding:7px 10px;border-bottom:1px solid #e8e8e4;"></td></tr>`).join("");
 
     const totalRows = `
       ${freightVal>0?`<tr><td colspan="4" style="text-align:right;padding:5px 10px;font-size:11px;color:#555;">Freight / Shipping</td><td style="text-align:right;padding:5px 10px;font-size:11px;font-weight:500;">${fmt(freightVal)}</td></tr>`:""}
       ${discountVal>0?`<tr><td colspan="4" style="text-align:right;padding:5px 10px;font-size:11px;color:#555;">Discount</td><td style="text-align:right;padding:5px 10px;font-size:11px;font-weight:500;">-${fmt(discountVal)}</td></tr>`:""}
+      ${opts ? optionTotals(q).map(o=>`<tr style="background:#1a1a1a;">
+        <td colspan="4" style="padding:7px 10px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#aaa;font-weight:600;">${o.label.split(" — ")[0]} total :</td>
+        <td style="padding:7px 10px;text-align:right;font-size:14px;font-weight:700;color:#fff;white-space:nowrap;">$ ${adj(o.total).toLocaleString("en-CA",{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>`).join("")+`<tr><td colspan="5" style="padding:6px 10px;text-align:right;font-size:10px;color:#555;font-style:italic;">Please choose one option${freightVal>0||discountVal>0?" — freight / discount above apply to each option":""}.</td></tr>` : `
       <tr style="background:#1a1a1a;">
         <td colspan="4" style="padding:9px 10px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#aaa;font-weight:600;">Total :</td>
         <td style="padding:9px 10px;text-align:right;font-size:15px;font-weight:700;color:#fff;white-space:nowrap;">$ ${grandTotal.toLocaleString("en-CA",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-      </tr>`;
+      </tr>`}`;
 
     const DISCLAIMER = "The Information provided by BMP Supplies Inc. has shown to be correct and is generally based on information supplied by the manufacturers of the product offered. Any recommendations made by BMP Supplies Inc. concerning uses or applications of our products are also believed to be reliable; however, as BMP Supplies Inc. has no control over design, execution, and field conditions of the project which incorporate the product, BMP Supplies Inc. disclaims all warranties, expressed or implied, including, without limitation, the warranties of merchantability and/ or fitness for a particular purpose.";
 
@@ -5642,7 +5723,7 @@ function MobileLayout({
           const nb=parseInt((b.quoteNum||'').replace(/\D/g,''))||0;
           return quoteSort==='asc'?na-nb:nb-na;
         }).map(q=>{
-          const total = (q.lineItems||[]).reduce((s,li)=>s+(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0),0);
+          const total = quoteValue(q);
           return (
             <div key={q.id} style={{borderBottom:`1px solid ${T.border}`, padding:'14px 16px', cursor:'pointer', background:T.cardBg, display:'flex', alignItems:'center', gap:12}}
               onClick={()=>setActiveQuote(q)}>
@@ -5652,7 +5733,7 @@ function MobileLayout({
                   <span className={`pill ${q.saved?'pill-saved':'pill-open'}`}>{q.saved?'Saved':'Open'}</span>
                 </div>
                 <div style={{fontSize:13, color:T.subtext, marginBottom:2}}>{q.name||'—'}</div>
-                <div style={{fontSize:12, color:T.muted}}>{q.company||'—'} · {total>0?fmtCur(total)+' ':''}{q.currency}</div>
+                <div style={{fontSize:12, color:T.muted}}>{q.company||'—'} · {total>0?valueText(q,fmtCur)+' ':''}{q.currency}</div>
               </div>
               <div style={{display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end', flexShrink:0}}>
                 <button style={{background:'none', border:'none', color:T.accent, fontSize:20, cursor:'pointer', lineHeight:1}} onClick={e=>{e.stopPropagation();duplicateQuote(q);}}>⧉</button>
@@ -5777,6 +5858,7 @@ function MobileLayout({
         ))}
       </div>
 
+      <WonOptionPicker T={T} fmt={fmtCur}/>
       {/* Modals */}
       {deleteConfirm && (
         <div className="modal-overlay" onClick={()=>setDeleteConfirm(null)}>
@@ -6022,7 +6104,7 @@ function QuoteGroupedList({quotes, activeQuote, setActiveQuote, setDeleteConfirm
           )}
           {open[group.id] && !group.isFY && group.quotes.map(q => {
             const isActive = activeQuote?.id === q.id;
-            const total = (q.lineItems||[]).reduce((s,li)=>(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0)+s, 0);
+            const total = quoteValue(q);
             return (
               <div key={q.id}
                 onClick={()=>setActiveQuote(q)}
@@ -6042,7 +6124,7 @@ function QuoteGroupedList({quotes, activeQuote, setActiveQuote, setDeleteConfirm
                       {q.company||'—'}
                     </div>
                     <div style={{fontSize:10, color:T.muted, whiteSpace:'nowrap'}}>
-                      {total>0 ? <span style={{color:T.accent, fontWeight:600}}>{fmtCur(total)}</span> : '—'}
+                      {total>0 ? <span style={{color:T.accent, fontWeight:600}}>{valueText(q,fmtCur)}</span> : '—'}
                       {' '}{q.currency}
                     </div>
                   </div>
@@ -6198,7 +6280,11 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
   }
 
   function setStatus(q, status){
-    updateQuote(q.id, {quoteStatus:status});
+    if (status==='won' && hasOptions(q)) { pickWonOption(q).then(n=>{ if(n) applyStatus(q, status, {wonOption:n}); }); return; }
+    applyStatus(q, status);
+  }
+  function applyStatus(q, status, extra={}){
+    updateQuote(q.id, {quoteStatus:status, ...extra});
     // Sync to Lead Tracking — match by quoteNum (e.g. "BMP44006") or company name fallback
     if (setLeads) {
       const quoteNum   = String(q.quoteNum||"").trim();
@@ -6244,7 +6330,7 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
   function QuoteCard({q}){
     const days = daysSince(q.savedDate);
     const expDays = daysUntilExpiry(q);
-    const total = (q.lineItems||[]).reduce((s,li)=>(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0)+s,0);
+    const total = quoteValue(q);
     const followUps = q.followUps||[];
     const isOpen = followUpOpen[q.id];
     const status = q.quoteStatus||'inprogress';
@@ -6258,7 +6344,7 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
               <span style={{fontSize:13, fontWeight:700, color:'#c8a96e'}}>{q.quoteNum}</span>
               <span style={{fontSize:11, color:T.subtext, fontWeight:600}}>{q.company||q.name||'—'}</span>
               {q.company&&q.name&&<span style={{fontSize:11, color:T.muted}}>{q.name}</span>}
-              {total>0&&<span style={{fontSize:11, color:T.accent, fontWeight:600, marginLeft:'auto'}}>{fmtCur(total)} {q.currency}</span>}
+              {total>0&&<span style={{fontSize:11, color:T.accent, fontWeight:600, marginLeft:'auto'}}>{valueText(q,fmtCur)} {q.currency}</span>}
             </div>
             <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
               <span style={{fontSize:10, color:T.muted}}>{days}d ago · saved {q.savedDate}</span>
@@ -6384,7 +6470,7 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
         const won      = inPeriod.filter(q=>q.quoteStatus==='won');
         const inprog   = inPeriod.filter(q=>!q.quoteStatus||q.quoteStatus==='inprogress'||q.quoteStatus==='followed');
         const lostcold = inPeriod.filter(q=>q.quoteStatus==='lost'||q.quoteStatus==='cold'||daysSince(q.savedDate)>=60);
-        const sumVal   = qs => qs.reduce((s,q)=>(q.lineItems||[]).reduce((a,li)=>(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0)+a,0)+s,0);
+        const sumVal   = qs => qs.reduce((s,q)=>quoteValue(q)+s,0);
         const periodLabel = statPeriod==='week'?'This Week':statPeriod==='month'?'This Month':'This Year';
         return (
           <div style={{background:T.panelBg,borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
@@ -6640,6 +6726,12 @@ function LeadTrackingTab({leads, setLeads, adSpend, setAdSpend, quotes, setQuote
         if (matchByNum || matchByComp) {
           const updated = {...q, quoteStatus: qStatus};
           putDoc(db, 'quotes', String(q.id), updated).catch(console.error);
+          // A won quote with options: ask which option they chose (until then it counts as the average)
+          if (qStatus==='won' && hasOptions(q) && !q.wonOption) setTimeout(()=>pickWonOption(q).then(n=>{ if(!n) return;
+            const w = {...updated, wonOption:n};
+            putDoc(db, 'quotes', String(q.id), w).catch(console.error);
+            setQuotes(p=>p.map(x=>x.id===q.id?w:x));
+          }));
           return updated;
         }
         return q;

@@ -1,4 +1,5 @@
 // ─── Sales Summary: dates, money, grouping, quote matching ──────────────────
+import { hasOptions, optionTotals, quoteValue } from "../quoteOptions";
 import { normName, matchAccount, customerOf } from "./accounts";
 import { cleanOrder } from "./ocParser";
 import { normalizeCities } from "./cities";
@@ -192,7 +193,8 @@ export function findQuoteMatches(orders, quotes, settings) {
   const qs = (quotes || []).filter(q => q.saved !== false && q.quoteStatus !== "won" && (q.lineItems || []).length).map(q => ({
     q, date: quoteDate(q), name: q.company || q.name || "",
     skus: new Set((q.lineItems || []).map(li => String(li.sku || "").toUpperCase().trim()).filter(Boolean)),
-    total: (q.lineItems || []).reduce((s, li) => s + (parseFloat(li.unitPrice) || 0) * (parseInt(li.qty) || 0), 0),
+    // A quote with options offers several totals — the order can match any one of them
+    totals: hasOptions(q) ? optionTotals(q).map(t => t.total) : [quoteValue(q)],
     currency: q.currency || "CAD",
   }));
   const rate = Number(settings.usdToCad) || 1.37;
@@ -210,9 +212,14 @@ export function findQuoteMatches(orders, quotes, settings) {
       }
       // Dollar amounts must be close (within $3,000), with or without freight
       const oc = orderCurrency(o);
-      const qv = inCad(x.total, x.currency);
-      const diff = Math.min(Math.abs(qv - inCad(o.productTotal || 0, oc)), Math.abs(qv - inCad(o.total || 0, oc)));
-      if (!x.total || diff > MATCH_TOLERANCE) continue;
+      let diff = Infinity, option = null;
+      x.totals.forEach((t, i) => {
+        if (!t) return;
+        const qv = inCad(t, x.currency);
+        const d = Math.min(Math.abs(qv - inCad(o.productTotal || 0, oc)), Math.abs(qv - inCad(o.total || 0, oc)));
+        if (d < diff) { diff = d; option = x.totals.length > 1 ? i + 1 : null; }
+      });
+      if (diff > MATCH_TOLERANCE) continue;
       const ns = Math.max(nameScore(o.customer, x.name, settings.accounts, settings.aliases), nameScore(o.cust.name, x.name, settings.accounts, settings.aliases));
       const hit = oskus.filter(s => x.skus.has(s)).length;
       const ss = oskus.length ? hit / oskus.length : 0;
@@ -221,9 +228,9 @@ export function findQuoteMatches(orders, quotes, settings) {
       const reasons = [];
       reasons.push(ns >= 1 ? "Same customer" : "Similar customer name");
       if (oskus.length) reasons.push(`${hit} of ${oskus.length} SKU${oskus.length > 1 ? "s" : ""} on the quote`);
-      reasons.push(diff < 1 ? "Same dollar amount" : `Amounts within ${fmtMoney(diff)}`);
+      reasons.push((diff < 1 ? "Same dollar amount" : `Amounts within ${fmtMoney(diff)}`) + (option ? ` (Option ${option})` : ""));
       if (x.date && o.date) reasons.push(`Quoted ${daysBetween(x.date, o.date)} days before order`);
-      const cand = { order: o, quote: x.q, quoteDate: x.date, score, reasons };
+      const cand = { order: o, quote: x.q, quoteDate: x.date, score, reasons, option };
       if (!best || score > best.score) best = cand;
     }
     if (best) out.push(best);

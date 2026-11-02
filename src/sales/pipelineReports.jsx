@@ -7,13 +7,14 @@ import {
   sumOrders, displayValue, groupBy, downloadCSV, quoteDate, presetRange, PRESETS,
 } from "./salesUtils";
 import { useTableSort } from "./tableSort";
+import { quoteValue as optValue } from "../quoteOptions";
 import { customerOf } from "./accounts";
 
 const GREEN = "#5a9e5a", RED = "#c86a5a";
 const STATUS_LABEL = { won: "Won", lost: "Lost", cold: "Went cold", inprogress: "Open" };
 const qStatus = q => (["won", "lost", "cold"].includes(q.quoteStatus) ? q.quoteStatus : "inprogress");
 export const quoteValue = (q, rate) => {
-  const v = (q.lineItems || []).reduce((s, li) => s + (parseFloat(li.unitPrice) || 0) * (parseInt(li.qty) || 0), 0);
+  const v = optValue(q); // options: the won option, otherwise their average
   return q.currency === "USD" ? v * rate : v;
 };
 const pct = (a, b) => (b ? (a / b) * 100 : null);

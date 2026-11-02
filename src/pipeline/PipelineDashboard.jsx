@@ -2,6 +2,7 @@
 // One glance at the quote pipeline (from Quote Maker) and, for people allowed to see
 // them, the leads (Lead Tracking + ad spend). Values are in CAD (USD quotes converted).
 import { useMemo } from "react";
+import { quoteValue } from "../quoteOptions";
 import { fmtMoney, quoteDate, today, fyOf, fyStart } from "../sales/salesUtils";
 
 const GREEN = "#5a9e5a", RED = "#c86a5a";
@@ -30,7 +31,7 @@ const Heading = ({ T, children, right }) => (
 export default function PipelineDashboard({ T, quotes, leads, adSpend, canSeeLeads, usdToCad = 1.37, ownOnly, loginName, go }) {
   const d = useMemo(() => {
     const now = Date.now(), t = today();
-    const value = q => (q.lineItems || []).reduce((s, li) => s + (parseFloat(li.unitPrice) || 0) * (parseInt(li.qty) || 0), 0) * (q.currency === "USD" ? usdToCad : 1);
+    const value = q => quoteValue(q) * (q.currency === "USD" ? usdToCad : 1);
     const qs = (quotes || []).filter(q => q.saved && (!ownOnly || q.savedBy === loginName)).map(q => ({ q, date: quoteDate(q), v: value(q), s: status(q), age: (now - lastActivity(q)) / day }));
     const monStart = (() => { const x = new Date(); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; })();
     const week = qs.filter(x => x.date && new Date(x.date + "T00:00") >= monStart);

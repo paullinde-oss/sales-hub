@@ -59,6 +59,11 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
 - SKUs are standardised to the **Products list** (Settings → Product SKU clean-up for the rest).
   Renaming a SKU on the Products tab also maps past orders' old SKU to the new one.
 - Ship-to cities roll up to one "City, PR" (e.g. every Calgary variant → "Calgary, AB").
+- **Quote options** (`src/quoteOptions.jsx`): a quote can offer up to 5 options (`quote.options`,
+  `li.option` 1–5, 0 = common to all, added to each option's total). No grand total. Dollar value
+  everywhere = `quoteValue()`: won → chosen option (`wonOption`, asked via `pickWonOption`), otherwise
+  the **average** of the options. Win/loss counts are per quote. Quote Matches matches any option;
+  "Mark quote won" pre-picks the closest option and collapses the quote to the actual order.
 - Quote Matches: only suggest when the quote total is **within $3,000** of the order; skip quotes
   already marked Won.
 - Year in Review PDF file name: `Customer — FY2026 BMP Supplies Year in Review`.

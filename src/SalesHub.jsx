@@ -978,7 +978,7 @@ export default function SalesHub() {
 
   function createNewQuote() {
     const q={id:Date.now(),quoteNum:nextQNum(quotes),name:"",company:"",prepaid:false,currency:"CAD",
-      lineItems:[{id:newLineItemId(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}],
+      email:"",lineItems:[{id:newLineItemId(),sku:"",description:"",qty:1,unitPrice:0,increase:0,basePrice:0}],
       notes:"",internalNotes:"",validFor:30,quoteStatus:"inprogress",followUps:[],isNewLead:false,leadType:"",leadSource:"",shipTo:{address:"",phone:""},saved:false,savedBy:"",savedDate:""};
     setActiveQuote(q);
   }
@@ -1075,6 +1075,7 @@ export default function SalesHub() {
       id:            newId,
       quoteNum:      newNum,
       name:          q.name          || "",
+      email:         q.email         || "",
       company:       q.company       || "",
       prepaid:       q.prepaid       || false,
       currency:      q.currency      || "CAD",
@@ -1827,13 +1828,16 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
 
       {/* Customer fields */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",border:"1px solid #1e1e1e",marginBottom:10}}>
-        {[["Name","name"],["Company","company"]].map(([label,field])=>(
-          <div key={field} style={{borderRight:"1px solid #1a1a1a",borderBottom:"1px solid #1a1a1a",display:"flex",alignItems:"center"}}>
-            <div style={{fontSize:10,color:"#666",padding:"5px 10px",width:80,flexShrink:0,borderRight:"1px solid #161616"}}>{label}</div>
-            <input disabled={ro} value={quote[field]} onChange={e=>upd(field,e.target.value)}
-              style={{flex:1,border:"none",background:"var(--input-bg)",height:28,paddingLeft:8,fontSize:12,color:"var(--text)"}}/>
+        {/* Name · Email · Company across the top row (email is kept on the quote only) */}
+        <div style={{gridColumn:"1 / -1",display:"grid",gridTemplateColumns:"1fr 1fr 1fr"}}>
+        {[["Name","name"],["Email","email"],["Company","company"]].map(([label,field])=>(
+          <div key={field} style={{borderRight:"1px solid #1a1a1a",borderBottom:"1px solid #1a1a1a",display:"flex",alignItems:"center",minWidth:0}}>
+            <div style={{fontSize:10,color:"#666",padding:"5px 10px",width:field==="email"?60:80,flexShrink:0,borderRight:"1px solid #161616"}}>{label}</div>
+            <input disabled={ro} type={field==="email"?"email":"text"} value={quote[field]||""} onChange={e=>upd(field,e.target.value)}
+              style={{flex:1,minWidth:0,border:"none",background:"var(--input-bg)",height:28,paddingLeft:8,fontSize:12,color:"var(--text)"}}/>
           </div>
         ))}
+        </div>
         <div style={{borderBottom:"1px solid #1a1a1a",display:"flex",alignItems:"center",padding:"4px 12px",gap:8}}>
           <span style={{fontSize:10,color:"#666"}}>Currency</span>
           <select disabled={ro} value={quote.currency} onChange={e=>upd("currency",e.target.value)}

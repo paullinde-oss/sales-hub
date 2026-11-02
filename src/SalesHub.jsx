@@ -1677,11 +1677,16 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
   // Compute load warnings live from line items
   const loadWarnings = useMemo(() => {
     try {
+      // With options, each option is checked on its own (its lines + the common lines)
+      if (hasOptions(quote)) return quote.options.flatMap((_,i)=>{
+        const r = validateQuoteLoad([...linesOf(quote,i+1),...linesOf(quote,0)], products);
+        return (Array.isArray(r)?r:[]).map(w=>({...w, product:`Option ${i+1} · ${w.product}`}));
+      });
       const result = validateQuoteLoad(quote.lineItems, products);
       return Array.isArray(result) ? result : [];
     }
     catch(e) { return []; }
-  }, [quote.lineItems, products]);
+  }, [quote.lineItems, quote.options, products]);
   const [qtyWarnings,setQtyWarnings] = useState({});
   const [priceFlash, setPriceFlash] = useState({}); // lineItemId -> bool
   const [stockOpen, setStockOpen] = useState(false);
@@ -2086,9 +2091,8 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
       </div>
       )} {/* end ternary */}
 
-      {/* Coverage Totals — Turbidity Curtains, Straw Wattles, ECB/TRM */}
-      {(()=>{
-        const items = quote.lineItems || [];
+      {/* Coverage Totals — Turbidity Curtains, Straw Wattles, ECB/TRM (one box per option when the quote has options) */}
+      {(opts ? quote.options.map((_,i)=>({items:[...linesOf(quote,i+1),...linesOf(quote,0)],title:`Option ${i+1}`})) : [{items:quote.lineItems||[],title:""}]).map(({items,title})=><Fragment key={"cov"+title}>{(()=>{
 
         // Turbidity Curtains: SKU contains "TBC" — each section = 50ft / 15m
         const curtainQty = items.filter(li => /TBC/i.test(li.sku||'')).reduce((s,li)=>s+(parseInt(li.qty)||0),0);
@@ -2125,7 +2129,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
         return (
           <div style={{border:`1px solid ${T.border}`,marginBottom:8,overflow:"hidden"}}>
             <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".12em",color:T.muted,padding:"5px 10px",background:T.tableHead,borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:6}}>
-              <span>📐</span> Coverage Totals
+              <span>📐</span> Coverage Totals{title&&<b style={{color:"#c8a96e",marginLeft:4}}>— {title}</b>}
             </div>
             <div style={{display:"flex",flexWrap:"wrap",gap:0}}>
               {hasCurtains && (
@@ -2161,7 +2165,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
             </div>
           </div>
         );
-      })()}
+      })()}</Fragment>)}
 
       {/* Load Validation Warnings */}
       {Array.isArray(loadWarnings) && loadWarnings.length > 0 && (

@@ -4773,7 +4773,9 @@ function isECB8(sku)  { return /BMP-.*08/.test(sku||''); }
 function isECB16(sku) { return /BMP-.*16/.test(sku||''); }
 function isECB(sku)   { return isECB8(sku)||isECB16(sku); }
 function isJR(sku)    { return /JR/i.test(sku||''); } // jumbo rolls: 4 per pallet
-function isWattle(sku){ return /^(STW|BSTW|AESTW)/i.test(sku||''); }
+// Every wattle family: standard (STW), rapid degradable (RDSTW), burlap (BSTW), aspen excelsior (AEW),
+// burlap aspen excelsior (BAEW) … — i.e. "…W" followed by the 0925 / 1220 size, or a known prefix
+function isWattle(sku){ return /W-?(0925|1220)/i.test(sku||'') || /^(STW|BSTW|AESTW|RDSTW|AEW|BAEW)/i.test(sku||''); }
 function isW9(sku)    { return isWattle(sku) && /09|0925|9x|9"/i.test(sku||''); }
 function isW12(sku)   { return isWattle(sku) && /12|1220|12x/i.test(sku||''); }
 

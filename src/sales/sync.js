@@ -58,7 +58,7 @@ export async function syncOrders({ db, folders, since, seen = {}, old = {}, exis
     .sort((a, b) => (a.modified < b.modified ? -1 : 1));
 
   // issues: files we couldn't turn into an order (shown under "Missing order numbers"); resolved: ones that now read fine
-  const res = { added: 0, updated: 0, skipped: 0, errors: [...folderErrors], seen: {}, old: {}, scanned: files.length, issues: {}, resolved: {}, removed: [], listing: {} };
+  const res = { read: todo.length, added: 0, updated: 0, skipped: 0, errors: [...folderErrors], seen: {}, old: {}, scanned: files.length, issues: {}, resolved: {}, removed: [], listing: {} };
   // Every BRO/CAL number that has a PDF, with the date in its file name — used by "Missing order numbers"
   for (const f of files) { const no = orderNoFrom(f.name); if (no) res.listing[no] = parseLongDate(f.name.replace(/_/g, " ")) || "?"; }
   const issue = (file, reason) => { res.issues[file.id] = { name: file.name, path: file.path, reason, at: new Date().toISOString() }; };

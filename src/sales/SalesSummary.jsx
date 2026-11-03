@@ -125,7 +125,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
     setSync({ stage: "Starting…", done: 0, total: 0 });
     try {
       const r = await runFullSync({ db, settings, seen, oldFiles, issues, rawOrders, loginName, onProgress: setSync });
-      setSyncMsg({ ok: !r.errors.length, text: `Synced ${r.scanned} PDFs — ${r.added} new, ${r.updated} updated${r.removed.length ? `, ${r.removed.length} out-of-range or duplicate removed` : ""}${r.errors.length ? `, ${r.errors.length} couldn't be read` : ""}.`, errors: r.errors });
+      setSyncMsg({ ok: !r.errors.length, text: `${r.read ? `Read ${r.read} new or changed PDF${r.read === 1 ? "" : "s"}` : "No new PDFs"} (out of ${r.scanned.toLocaleString("en-CA")} in Dropbox) — ${r.added} new order${r.added === 1 ? "" : "s"}, ${r.updated} updated${r.removed.length ? `, ${r.removed.length} out-of-range or duplicate removed` : ""}${r.errors.length ? `, ${r.errors.length} couldn't be read` : ""}.`, errors: r.errors });
     } catch (e) {
       setConnected(isDropboxConnected());
       setSyncMsg({ ok: false, text: String(e.message || e) });

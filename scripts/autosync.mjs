@@ -36,7 +36,7 @@ try {
     db, settings, seen: seenDoc.files || {}, oldFiles: seenDoc.old || {}, issues, rawOrders, loginName: "Auto-sync", pdfjs: lib,
     onProgress: p => { const line = `${p.stage}${p.total ? ` ${p.done}/${p.total}` : ""}`; if (line !== last && (!p.total || p.done % 10 === 0 || p.done === p.total)) { console.log(line); last = line; } },
   });
-  console.log(`Done: ${r.scanned} PDFs in Dropbox — ${r.added} new, ${r.updated} updated, ${r.removed.length} removed, ${r.errors.length} couldn't be read.`);
+  console.log(`Done: read ${r.read} new/changed of ${r.scanned} PDFs in Dropbox — ${r.added} new, ${r.updated} updated, ${r.removed.length} removed, ${r.errors.length} couldn't be read.`);
   r.errors.forEach(e => console.log("  ✗", e.file, "—", e.error));
   await setDoc(doc(db, "config", "salesSettings"), { autoSync: { at: new Date().toISOString(), ok: true, added: r.added, updated: r.updated } }, { merge: true });
   await terminate(db);

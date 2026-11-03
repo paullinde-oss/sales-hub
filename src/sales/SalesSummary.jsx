@@ -1089,7 +1089,7 @@ const REPORTS = [
   ["customer", "Sales by customer"],
   ["product", "Sales by product / SKU"],
   ["custprod", "Customer × product (who ordered what)"],
-  ["skubuyers", "Who buys a product (by SKU / category)"],
+  ["skubuyers", "Who buys a product (by category / SKU)"],
   ["monthly", "Monthly sales — fiscal year vs last year"],
   ["location", "Sales by location (BRO vs CAL)"],
   ["type", "Distributors vs End Users"],
@@ -1109,20 +1109,19 @@ const REPORTS = [
 ];
 const PIPELINE_REPORTS = ["winrate", "wintype", "pipeline", "quoteorder", "leads", "forecast", "reorder", "trends"];
 
-// Pick a whole category, a sub-category (both from the Products & Price List page) or one SKU
-function SkuGroupPicker({ T, value, onChange, products, categories, subCategories, orders }) {
+// Pick a whole category (from the Products & Price List page) or one SKU
+function SkuGroupPicker({ T, value, onChange, products, categories, orders }) {
   const catOf = sku => categories[sku] || products.find(p => p.sku === sku)?.category || "";
   const cats = [...new Set(products.map(p => catOf(p.sku)).filter(Boolean))].sort();
-  const subs = [...new Set(Object.values(subCategories || {}).filter(Boolean))].sort();
-  const known = new Set(products.map(p => String(p.sku).toUpperCase()));
-  const extra = [...new Set(orders.flatMap(o => (o.lines || []).map(l => l.sku)).filter(s => s && !known.has(String(s).toUpperCase()) && !/^(CUSTOM|LABELS)$/i.test(s)))].sort();
+  // Every SKU on the Products list plus any other SKU that appears on orders, A → Z
+  const names = new Map(products.map(p => [String(p.sku).toUpperCase(), [p.sku, p.product || p.description || ""]]));
+  orders.forEach(o => (o.lines || []).forEach(l => { const k = String(l.sku || "").toUpperCase(); if (k && !names.has(k) && !/^(CUSTOM|LABELS)$/.test(k)) names.set(k, [l.sku, ""]); }));
+  const skus = [...names.values()].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
   return (
     <select value={value} onChange={e => onChange(e.target.value)} style={{ fontSize: 12, height: 30, minWidth: 320, borderColor: value ? undefined : T.gold }}>
-      <option value="">Choose a product, category or sub-category…</option>
-      {cats.length > 0 && <optgroup label="Categories">{cats.map(c => <option key={c} value={"cat:" + c}>{c} (all)</option>)}</optgroup>}
-      {subs.length > 0 && <optgroup label="Sub-categories">{subs.map(c => <option key={c} value={"sub:" + c}>{c}</option>)}</optgroup>}
-      <optgroup label="SKUs">{[...products].sort((a, b) => a.sku.localeCompare(b.sku)).map(p => <option key={p.sku} value={"sku:" + p.sku}>{p.sku} — {p.product || p.description}</option>)}</optgroup>
-      {extra.length > 0 && <optgroup label="Other SKUs on orders">{extra.map(s => <option key={s} value={"sku:" + s}>{s}</option>)}</optgroup>}
+      <option value="">Choose a category or SKU…</option>
+      {cats.length > 0 && <optgroup label="Categories (all SKUs in it)">{cats.map(c => <option key={c} value={"cat:" + c}>{c}</option>)}</optgroup>}
+      <optgroup label="SKUs (A–Z)">{skus.map(([sku, name]) => <option key={sku} value={"sku:" + sku}>{sku}{name ? ` — ${name}` : ""}</option>)}</optgroup>
     </select>
   );
 }
@@ -1268,13 +1267,13 @@ function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, log
           </div>
         ) : rep === "skubuyers" ? (
           <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
-            <SkuGroupPicker T={T} value={pick} onChange={setPick} products={products} categories={categories} subCategories={subCategories} orders={orders} />
+            <SkuGroupPicker T={T} value={pick} onChange={setPick} products={products} categories={categories} orders={orders} />
             <FilterBar T={T} orders={orders} fl={fl} show={["location", "rep", "type"]} />
           </div>
         ) : <FilterBar T={T} orders={rep === "salesrep" ? orders.filter(o => o.cust.rep === SALES_REP) : orders} fl={fl} show={rep === "salesrep" ? ["customer", "sku", "location", "type"] : ["customer", "sku", "location", "rep", "type"]} />}
         {rows.length > 3 && <div style={{ marginBottom: 8 }}><input value={ts.q} onChange={e => ts.setQ(e.target.value)} placeholder="Filter rows…" style={{ fontSize: 11, height: 26, width: 220 }} /> <span style={{ fontSize: 10, color: T.tableHeadText }}>Click a column heading to sort</span></div>}
         <Card T={T} pad={0}>
-          {!rows.length ? <div style={{ fontSize: 12, color: T.tableHeadText, padding: 12 }}>{rep === "skubuyers" && !pick ? "Choose a SKU, category or sub-category above to see who buys it." : "No data for these filters."}</div> : (
+          {!rows.length ? <div style={{ fontSize: 12, color: T.tableHeadText, padding: 12 }}>{rep === "skubuyers" && !pick ? "Choose a category or SKU above to see who buys it." : "No data for these filters."}</div> : (
             <div style={{ overflowX: "auto" }}>
               <table className="data-table">
                 <thead><tr>{headers.map((h, i) => <th key={i} onClick={() => ts.toggle(i)} title="Click to sort" style={{ textAlign: i > 0 && /Sales|Qty|Orders|%|Change|Days|FY/.test(h) ? "right" : "left", cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" }}>{h}{ts.arrow(i)}</th>)}</tr></thead>

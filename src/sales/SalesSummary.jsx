@@ -1231,9 +1231,10 @@ function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, log
     <div style={{ display: "flex", gap: 16, maxWidth: 1500 }}>
       <div style={{ width: 230, flexShrink: 0, display: "flex", flexDirection: "column", gap: 2 }}>
         {REPORTS.filter(r => r[2] !== "leads" || canSeeLeads).map(([k, l], i) => k === "__h" ? (
-          <div key={"h" + i} style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".08em", color: T.tableHeadText, padding: i ? "14px 10px 4px" : "2px 10px 4px", fontWeight: 600 }}>{l}</div>
+          // Section heading: gold title with a rule running under it, extra space above each new section
+          <div key={"h" + i} style={{ margin: i ? "20px 0 6px" : "0 0 6px", padding: "0 10px 6px", borderBottom: `2px solid ${T.gold}`, fontSize: 11, textTransform: "uppercase", letterSpacing: ".12em", color: T.gold, fontWeight: 700 }}>{l}</div>
         ) : (
-          <button key={k} onClick={() => setRep(k)} style={{ textAlign: "left", background: rep === k ? T.activeBg : "transparent", border: "none", borderLeft: `2px solid ${rep === k ? T.gold : "transparent"}`, color: rep === k ? T.text : T.subtext, padding: "8px 10px", fontSize: 12 }}>{l}</button>
+          <button key={k} onClick={() => setRep(k)} style={{ textAlign: "left", background: rep === k ? T.activeBg : "transparent", border: "none", borderLeft: `2px solid ${rep === k ? T.gold : "transparent"}`, color: rep === k ? T.text : T.subtext, padding: "7px 10px 7px 14px", fontSize: 12 }}>{l}</button>
         ))}
       </div>
       {PIPELINE_REPORTS.includes(rep) ? (() => {

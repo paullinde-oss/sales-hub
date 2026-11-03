@@ -125,7 +125,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
     setSync({ stage: "Starting…", done: 0, total: 0 });
     try {
       const r = await runFullSync({ db, settings, seen, oldFiles, issues, rawOrders, loginName, onProgress: setSync });
-      setSyncMsg({ ok: !r.errors.length, text: `${r.read ? `Read ${r.read} new or changed PDF${r.read === 1 ? "" : "s"}` : "No new PDFs"} (out of ${r.scanned.toLocaleString("en-CA")} in Dropbox) — ${r.added} new order${r.added === 1 ? "" : "s"}, ${r.updated} updated${r.removed.length ? `, ${r.removed.length} out-of-range or duplicate removed` : ""}${r.errors.length ? `, ${r.errors.length} couldn't be read` : ""}.`, errors: r.errors });
+      setSyncMsg({ ok: !r.errors.length, text: `${r.read ? `Read ${r.read} new or changed PDF${r.read === 1 ? "" : "s"} — ${r.added} new, ${r.updated} updated` : "No new PDFs"}${r.removed.length ? `, ${r.removed.length} out-of-range or duplicate removed` : ""}${r.errors.length ? `, ${r.errors.length} couldn't be read` : ""}.`, errors: r.errors });
     } catch (e) {
       setConnected(isDropboxConnected());
       setSyncMsg({ ok: false, text: String(e.message || e) });
@@ -229,6 +229,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
 // ═════════════════════════════════════════════════════════════════════════════
 function Dashboard({ T, orders, opts, currencyMode, openAccount, mobile }) {
   const [weekStart, setWeekStart] = useState(mondayOf(today()));
+  const [chart, setChart] = useState("daily"); // daily | fy | best
   const [selDay, setSelDay] = useState(null);
   const now = today();
   const thisWeek = mondayOf(now);
@@ -284,8 +285,15 @@ function Dashboard({ T, orders, opts, currencyMode, openAccount, mobile }) {
       </div>
 
       {/* Daily breakdown */}
-      <Card T={T} title="Daily sales" right={selDay ? <button className="btn" onClick={() => setSelDay(null)}>Show whole week</button> : <span style={{ fontSize: 10, color: T.tableHeadText }}>{mobile ? "Tap a day" : "Click a day to see its orders"}</span>}>
-        <DayBars T={T} days={daySums} mode={currencyMode} sel={selDay} onSel={d => setSelDay(selDay === d ? null : d)} />
+      <Card T={T} title={<div style={{ display: "flex", gap: 4 }}>
+          {[["daily", "Daily sales"], ["fy", `FY${fy} sales`], ["best", "Best of"]].map(([k, l]) => (
+            <button key={k} onClick={() => setChart(k)} style={{ background: chart === k ? T.activeBg : "transparent", border: `1px solid ${chart === k ? T.borderLight : "transparent"}`, color: chart === k ? T.gold : T.tableHeadText, padding: "3px 10px", fontSize: 11, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", borderRadius: 2 }}>{l}</button>
+          ))}
+        </div>}
+        right={chart !== "daily" ? <span style={{ fontSize: 10, color: T.tableHeadText }}>vs FY{fy - 1}</span> : selDay ? <button className="btn" onClick={() => setSelDay(null)}>Show whole week</button> : <span style={{ fontSize: 10, color: T.tableHeadText }}>{mobile ? "Tap a day" : "Click a day to see its orders"}</span>}>
+        {chart === "daily" ? <DayBars T={T} days={daySums} mode={currencyMode} sel={selDay} onSel={d => setSelDay(selDay === d ? null : d)} />
+          : chart === "fy" ? <FyMonthBars T={T} pool={pool} opts={opts} mode={currencyMode} fy={fy} mobile={mobile} />
+          : <BestOf T={T} pool={pool} opts={opts} mode={currencyMode} fy={fy} mobile={mobile} />}
       </Card>
 
       <Card T={T} title={selDay ? `Orders on ${weekdayName(selDay)} ${fmtDate(selDay)}` : "Orders this week"}>
@@ -332,6 +340,103 @@ function Tile({ T, label, sub, sum, cmp, cmpLabel, mode }) {
       {sum.noPrice > 0 && <div style={{ fontSize: 10, color: "#c8a030", marginTop: 4 }}>⚠ {sum.noPrice} order{sum.noPrice > 1 ? "s" : ""} with no pricing</div>}
     </div>
   );
+}
+
+// ── FY sales by month vs the previous fiscal year ───────────────────────────
+const GREEN = "#4f9a5a", RED = "#c8553f";
+const shiftYr = (s, n) => `${+s.slice(0, 4) + n}${s.slice(4)}`;
+function Change({ cur, prev, size = 11, stack = false }) {
+  if (!prev && !cur) return <span style={{ fontSize: size, color: "#999" }}>—</span>;
+  if (!prev) return <span style={{ fontSize: size, color: GREEN, fontWeight: 600 }}>new</span>;
+  const d = cur - prev, up = d >= 0;
+  return <span style={{ fontSize: size, color: up ? GREEN : RED, fontWeight: 700, whiteSpace: "nowrap" }}>{up ? "▲ +" : "▼ −"}{fmtMoney(Math.abs(d))}{stack ? <br /> : " "}<span style={{ fontWeight: 500 }}>({up ? "+" : "−"}{Math.abs((d / prev) * 100).toFixed(0)}%)</span></span>;
+}
+function FyMonthBars({ T, pool, opts, mode, fy, mobile }) {
+  const now = today();
+  const months = useMemo(() => Array.from({ length: 12 }, (_, i) => {
+    const d = parseYmd(fyStart(fy)); d.setMonth(d.getMonth() + i);
+    const ms = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`, me = monthEnd(ms);
+    const future = ms > now, partial = !future && me > now;
+    const end = partial ? now : me; // the month so far is compared with the same days last year
+    const val = (a, b) => { const l = pool.filter(o => o.date >= a && o.date <= b); return { v: displayValue(sumOrders(l, opts), mode), n: l.length }; };
+    return { ms, future, partial, cur: future ? null : val(ms, end), prev: val(shiftYr(ms, -1), shiftYr(end, -1)), prevFull: val(shiftYr(ms, -1), shiftYr(me, -1)) };
+  }), [pool, opts, mode, fy, now]);
+  const max = Math.max(1, ...months.flatMap(m => [m.cur?.v || 0, m.prevFull.v]));
+  const done = months.filter(m => !m.future);
+  const tot = done.reduce((s, m) => s + m.cur.v, 0), ptot = done.reduce((s, m) => s + m.prev.v, 0);
+  const H = mobile ? 90 : 130;
+  return <div>
+    <div style={{ display: "flex", gap: 14, alignItems: "baseline", flexWrap: "wrap", marginBottom: 10, fontSize: 12, color: T.subtext }}>
+      <span>FY{fy} to date <b style={{ color: T.text, fontSize: 15 }}>{fmtMoney(tot)}</b></span>
+      <span>FY{fy - 1} same point {fmtMoney(ptot)}</span>
+      <Change cur={tot} prev={ptot} size={12} />
+      <span style={{ flex: 1 }} />
+      <span style={{ fontSize: 10, display: "flex", gap: 10 }}>
+        <span><i style={{ display: "inline-block", width: 9, height: 9, background: T.borderMid, marginRight: 4 }} />FY{fy - 1}</span>
+        <span><i style={{ display: "inline-block", width: 9, height: 9, background: GREEN, marginRight: 4 }} />FY{fy} up</span>
+        <span><i style={{ display: "inline-block", width: 9, height: 9, background: RED, marginRight: 4 }} />FY{fy} down</span>
+      </span>
+    </div>
+    <div style={{ display: "grid", gridTemplateColumns: `repeat(${mobile ? 6 : 12}, 1fr)`, gap: mobile ? 6 : 8 }}>
+      {months.map(m => {
+        const up = m.cur && m.cur.v >= m.prev.v;
+        const hp = Math.max(m.prevFull.v ? 3 : 0, (m.prevFull.v / max) * H), hc = m.cur ? Math.max(m.cur.v ? 3 : 0, (m.cur.v / max) * H) : 0;
+        return <div key={m.ms} title={`${fmtMonth(m.ms)}: ${m.cur ? fmtMoney(m.cur.v) + ` (${m.cur.n} orders)` : "not yet"} · FY${fy - 1}: ${fmtMoney(m.prevFull.v)}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 0 }}>
+          <div style={{ height: 30, display: "flex", alignItems: "flex-end", textAlign: "center", lineHeight: 1.2 }}>
+            {m.cur ? <span style={{ fontSize: mobile ? 9 : 10 }}><Change cur={m.cur.v} prev={m.prev.v} size={mobile ? 9 : 10} stack /></span> : null}
+          </div>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: H + 4, width: "100%", justifyContent: "center", borderBottom: `1px solid ${T.borderMid}` }}>
+            <div style={{ width: "34%", maxWidth: 26, height: hp, background: T.borderMid, borderRadius: "3px 3px 0 0" }} />
+            <div style={{ width: "34%", maxWidth: 26, height: hc, background: !m.cur ? "transparent" : m.prev.v ? (up ? GREEN : RED) : GREEN, borderRadius: "3px 3px 0 0", opacity: m.partial ? .75 : 1 }} />
+          </div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: T.subtext, marginTop: 5 }}>{fmtMonth(m.ms).split(" ")[0]}</div>
+          <div style={{ fontSize: mobile ? 9 : 11, fontWeight: 600, color: T.text, fontVariantNumeric: "tabular-nums" }}>{m.cur ? fmtMoney(m.cur.v) : "—"}</div>
+          <div style={{ fontSize: mobile ? 8 : 10, color: T.tableHeadText, fontVariantNumeric: "tabular-nums" }}>LY {fmtMoney(m.prevFull.v)}</div>
+          {m.partial && <div style={{ fontSize: 8, color: T.tableHeadText }}>to date</div>}
+        </div>;
+      })}
+    </div>
+  </div>;
+}
+
+// ── Best month / week / day this fiscal year vs last ────────────────────────
+function BestOf({ T, pool, opts, mode, fy, mobile }) {
+  const now = today();
+  const best = (from, to) => {
+    const l = pool.filter(o => o.date >= from && o.date <= to);
+    const top = keyOf => {
+      const g = new Map();
+      l.forEach(o => { const k = keyOf(o.date); (g.get(k) || g.set(k, []).get(k)).push(o); });
+      let b = null;
+      for (const [k, os] of g) { const v = displayValue(sumOrders(os, opts), mode); if (!b || v > b.v) b = { k, v, n: os.length }; }
+      return b;
+    };
+    return { month: top(d => d.slice(0, 7)), week: top(mondayOf), day: top(d => d) };
+  };
+  const cur = useMemo(() => best(fyStart(fy), now < fyEnd(fy) ? now : fyEnd(fy)), [pool, opts, mode, fy, now]);
+  const prev = useMemo(() => best(fyStart(fy - 1), fyEnd(fy - 1)), [pool, opts, mode, fy]);
+  const label = { month: k => fmtMonth(k + "-01"), week: k => `Week of ${fmtShort(k)}, ${k.slice(0, 4)}`, day: k => `${weekdayName(k)} ${fmtDate(k)}` };
+  const Side = ({ b, kind, title, strong }) => (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ fontSize: 10, color: T.tableHeadText, textTransform: "uppercase", letterSpacing: ".08em" }}>{title}</div>
+      {b ? <>
+        <div style={{ fontSize: strong ? 22 : 16, fontWeight: 600, color: strong ? T.text : T.subtext, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(b.v)}</div>
+        <div style={{ fontSize: 11, color: T.subtext }}>{label[kind](b.k)} · {b.n} order{b.n === 1 ? "" : "s"}</div>
+      </> : <div style={{ fontSize: 13, color: T.tableHeadText, marginTop: 4 }}>No sales yet</div>}
+    </div>
+  );
+  return <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "repeat(3, 1fr)", gap: 12 }}>
+    {[["month", "Best month"], ["week", "Best week"], ["day", "Best day"]].map(([k, l]) => (
+      <div key={k} style={{ border: `1px solid ${T.border}`, borderRadius: 3, padding: "12px 14px" }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: T.gold, letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 8 }}>{l}</div>
+        <div style={{ display: "flex", gap: 12 }}>
+          <Side b={cur[k]} kind={k} title={`FY${fy}${now < fyEnd(fy) ? " so far" : ""}`} strong />
+          <Side b={prev[k]} kind={k} title={`FY${fy - 1}`} />
+        </div>
+        {cur[k] && prev[k] && <div style={{ marginTop: 8 }}><Change cur={cur[k].v} prev={prev[k].v} /> <span style={{ fontSize: 10, color: T.tableHeadText }}>vs FY{fy - 1} best</span></div>}
+      </div>
+    ))}
+  </div>;
 }
 
 function DayBars({ T, days, mode, sel, onSel }) {

@@ -1295,7 +1295,7 @@ ${quoteNumLine}
             productsCAD={productsCAD} productsUSD={productsUSD} effectiveProductsUSD={effectiveProductsUSD} createNewQuote={createNewQuote}
             setActiveQuote={setActiveQuote} saveQuote={saveQuote} editQuote={q=>setActiveQuote({...q,saved:false})}
             openEmailModal={openEmailModal} generatePDF={generatePDF} deleteConfirm={deleteConfirm} setDeleteConfirm={setDeleteConfirm} deleteQuote={deleteQuote} duplicateQuote={duplicateQuote} quoteSort={quoteSort} setQuoteSort={setQuoteSort} closeConfirm={closeConfirm} setCloseConfirm={setCloseConfirm} exchangeRate={exchangeRate} onQuoteStatusChange={updateQuoteStatus} T={T}/></TabPage>}
-          {activeTab==="sales"&&canSee(currentUser,"sales")&&<SalesSummary T={T} db={db} quotes={quotes} updateQuoteStatus={updateQuoteStatus} loginName={loginName} user={currentUser} bmpLogo={BMP_LOGO_FULL} leads={leads} adSpend={adSpend} canSeeLeads={canSee(currentUser,"leads")} products={productsCAD}/>}
+          {activeTab==="sales"&&canSee(currentUser,"sales")&&<SalesSummary T={T} db={db} quotes={quotes} updateQuoteStatus={updateQuoteStatus} loginName={loginName} user={currentUser} bmpLogo={BMP_LOGO_FULL} leads={leads} adSpend={adSpend} canSeeLeads={canSee(currentUser,"leads")} products={productsCAD} categories={categories} subCategories={subCategories}/>}
           {activeTab==="pipeline"&&(()=>{
             const sections=[["dashboard","Dashboard"],["pipeline","Pipeline"],...(canSee(currentUser,"leads")?[["leads","Leads"]]:[])];
             const sec=sections.some(x=>x[0]===pipeSection)?pipeSection:"dashboard";

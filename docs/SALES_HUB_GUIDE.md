@@ -88,7 +88,7 @@ Real sales, built from order confirmation PDFs.
   - **Accounts** — every customer, with a page showing this year vs last year, logo, and a
     Year in Review PDF.
   - **Reports** — sales (John's sales, by customer, by product/SKU, customer × product,
-    monthly vs last year, by location, Distributors vs End Users, by city), quotes & pipeline
+    monthly vs last year, who buys a product (SKU / category / sub-category, ranked by $), by location, Distributors vs End Users, by city), quotes & pipeline
     (win rate, win rate Distributors vs End Users, open pipeline, won quotes → orders), leads,
     and forecasting (forecast, customers due to reorder, product trends, inactive accounts).
     Click a column heading to sort; use "Filter rows…" to narrow down.

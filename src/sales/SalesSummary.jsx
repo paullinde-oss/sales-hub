@@ -39,7 +39,7 @@ const VIEWS = [
 ];
 
 // mobile: phone layout — only the Dashboard, no syncing or other sections
-export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginName, user, bmpLogo, leads = [], adSpend = {}, canSeeLeads = false, products = [], mobile = false }) {
+export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginName, user, bmpLogo, leads = [], adSpend = {}, canSeeLeads = false, products = [], categories = {}, subCategories = {}, mobile = false }) {
   // "own" scope (e.g. John) only sees accounts where they're the rep; admins also get Settings
   const ownOnly = user?.salesScope === "own";
   const isAdmin = !!user?.admin;
@@ -144,7 +144,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
 
   const openAccount = key => { setAccountKey(key); setView("accounts"); };
   const gaps = useMemo(() => findGaps(rawOrders, issues, settings, listing), [rawOrders, issues, settings, listing]);
-  const ctx = { T, db, orders, settings, saveSettings, opts, currencyMode, openAccount, loginName, logos, bmpLogo, ownOnly, products };
+  const ctx = { T, db, orders, settings, saveSettings, opts, currencyMode, openAccount, loginName, logos, bmpLogo, ownOnly, products, categories, subCategories };
   const views = mobile ? [] : VIEWS.filter(([id]) => id !== "settings" || isAdmin);
 
   return (
@@ -1089,6 +1089,7 @@ const REPORTS = [
   ["customer", "Sales by customer"],
   ["product", "Sales by product / SKU"],
   ["custprod", "Customer × product (who ordered what)"],
+  ["skubuyers", "Who buys a product (by SKU / category)"],
   ["monthly", "Monthly sales — fiscal year vs last year"],
   ["location", "Sales by location (BRO vs CAL)"],
   ["type", "Distributors vs End Users"],
@@ -1108,8 +1109,27 @@ const REPORTS = [
 ];
 const PIPELINE_REPORTS = ["winrate", "wintype", "pipeline", "quoteorder", "leads", "forecast", "reorder", "trends"];
 
-function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, logos, bmpLogo, quotes, leads, adSpend, canSeeLeads, ownOnly, loginName }) {
+// Pick a whole category, a sub-category (both from the Products & Price List page) or one SKU
+function SkuGroupPicker({ T, value, onChange, products, categories, subCategories, orders }) {
+  const catOf = sku => categories[sku] || products.find(p => p.sku === sku)?.category || "";
+  const cats = [...new Set(products.map(p => catOf(p.sku)).filter(Boolean))].sort();
+  const subs = [...new Set(Object.values(subCategories || {}).filter(Boolean))].sort();
+  const known = new Set(products.map(p => String(p.sku).toUpperCase()));
+  const extra = [...new Set(orders.flatMap(o => (o.lines || []).map(l => l.sku)).filter(s => s && !known.has(String(s).toUpperCase()) && !/^(CUSTOM|LABELS)$/i.test(s)))].sort();
+  return (
+    <select value={value} onChange={e => onChange(e.target.value)} style={{ fontSize: 12, height: 30, minWidth: 320, borderColor: value ? undefined : T.gold }}>
+      <option value="">Choose a product, category or sub-category…</option>
+      {cats.length > 0 && <optgroup label="Categories">{cats.map(c => <option key={c} value={"cat:" + c}>{c} (all)</option>)}</optgroup>}
+      {subs.length > 0 && <optgroup label="Sub-categories">{subs.map(c => <option key={c} value={"sub:" + c}>{c}</option>)}</optgroup>}
+      <optgroup label="SKUs">{[...products].sort((a, b) => a.sku.localeCompare(b.sku)).map(p => <option key={p.sku} value={"sku:" + p.sku}>{p.sku} — {p.product || p.description}</option>)}</optgroup>
+      {extra.length > 0 && <optgroup label="Other SKUs on orders">{extra.map(s => <option key={s} value={"sku:" + s}>{s}</option>)}</optgroup>}
+    </select>
+  );
+}
+
+function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, logos, bmpLogo, quotes, leads, adSpend, canSeeLeads, ownOnly, loginName, products = [], categories = {}, subCategories = {} }) {
   const [rep, setRep] = useState("salesrep");
+  const [pick, setPick] = useState(""); // "cat:Name" | "sub:Name" | "sku:SKU" for "Who buys a product"
   const ts = useTableSort();
   useEffect(() => ts.reset(), [rep]);
   const fl = useFilters("fytd");
@@ -1152,6 +1172,27 @@ function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, log
     headers = ["Customer", "Held by", "SKU", "Description", "Qty", "Orders", "Last ordered", `Sales ${cur}`];
     rows = g.map(r => [r.cust, r.rep, r.sku, r.desc, fmtQty(r.qty), r.orders.size, fmtDate(r.last), fmtMoney(money(r), 2)]);
     csvRows = g.map(r => [r.cust, r.rep, r.sku, r.desc, r.qty, r.orders.size, r.last, money(r).toFixed(2)]);
+  } else if (rep === "skubuyers") {
+    // Everyone who ordered the chosen SKU / category / sub-category, ranked by sales
+    const [kind, val] = [pick.slice(0, 3), pick.slice(4)];
+    const up = x => String(x || "").trim().toUpperCase();
+    const catOf = sku => categories[sku] || products.find(p => p.sku === sku)?.category || "";
+    const want = !pick ? null : kind === "sku" ? new Set([up(val)])
+      : new Set(products.map(p => p.sku).filter(sku => (kind === "cat" ? catOf(sku) : subCategories[sku] || "") === val).map(up));
+    const m = new Map();
+    if (want) list.forEach(o => (o.lines || []).forEach(l => {
+      if (!want.has(up(l.sku))) return;
+      let r = m.get(o.cust.key); if (!r) { r = { key: o.cust.key, cust: o.cust.name, type: o.cust.type, rep: o.cust.rep, qty: 0, cad: 0, usd: 0, combined: 0, orders: new Set(), last: "" }; m.set(o.cust.key, r); }
+      const c = orderCurrency(o), a = l.amount || 0;
+      r.qty += l.qty || 0; if (c === "USD") r.usd += a; else r.cad += a; r.combined += c === "USD" ? a * opts.usdToCad : a;
+      r.orders.add(o.orderNo); if (o.date > r.last) r.last = o.date;
+    }));
+    const g = [...m.values()].filter(r => r.qty > 0 || money(r) > 0).sort((a, b) => money(b) - money(a));
+    const total = g.reduce((s, r) => s + money(r), 0), tq = g.reduce((s, r) => s + r.qty, 0);
+    headers = ["Customer", "Type", "Held by", "Qty", `Sales ${cur}`, "% of sales", "Avg price", "Orders", "Last ordered"];
+    rows = g.map(r => [r.cust, r.type, r.rep, fmtQty(r.qty), fmtMoney(money(r), 2), total ? ((money(r) / total) * 100).toFixed(1) + "%" : "", r.qty ? fmtMoney(money(r) / r.qty, 2) : "—", r.orders.size, fmtDate(r.last)]);
+    csvRows = g.map(r => [r.cust, r.type, r.rep, r.qty, money(r).toFixed(2), total ? ((money(r) / total) * 100).toFixed(1) : "", r.qty ? (money(r) / r.qty).toFixed(2) : "", r.orders.size, r.last]);
+    if (g.length) rows.push(["Total", `${g.length} customer${g.length === 1 ? "" : "s"}`, "", fmtQty(tq), fmtMoney(total, 2), "100%", tq ? fmtMoney(total / tq, 2) : "—", new Set(g.flatMap(r => [...r.orders])).size, ""]);
   } else if (rep === "monthly") {
     const pool = filterOrders(orders, { ...fl.filters, from: "", to: "", currency: currencyMode });
     headers = ["Month", `FY${fy} ${cur}`, `FY${fy - 1} ${cur}`, "Change", `FY${fy} orders`, `FY${fy - 1} orders`];
@@ -1182,7 +1223,7 @@ function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, log
   }
   const fys = [...new Set([fyOf(today()), ...orders.map(o => fyOf(o.date))])].sort((a, b) => b - a);
   const title = REPORTS.find(r => r[0] === rep)[1];
-  const custCol = (rep === "customer" || rep === "custprod" || rep === "inactive") ? 0 : -1;
+  const custCol = (rep === "customer" || rep === "custprod" || rep === "inactive" || rep === "skubuyers") ? 0 : -1;
   const keyFor = label => orders.find(o => o.cust.name === label)?.cust.key || label;
 
   const shownRows = ts.apply(rows, r => r, r => r[0] === "Total");
@@ -1224,10 +1265,15 @@ function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, log
             <select value={fl.f.rep} onChange={e => fl.setF(p => ({ ...p, rep: e.target.value }))} style={{ fontSize: 11, height: 28 }}><option value="all">All account holders</option>{REPS.map(r => <option key={r}>{r}</option>)}</select>
             <select value={fl.f.type} onChange={e => fl.setF(p => ({ ...p, type: e.target.value }))} style={{ fontSize: 11, height: 28 }}><option value="all">Distributors + End Users</option><option>Distributor</option><option>End User</option></select>
           </div>
+        ) : rep === "skubuyers" ? (
+          <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <SkuGroupPicker T={T} value={pick} onChange={setPick} products={products} categories={categories} subCategories={subCategories} orders={orders} />
+            <FilterBar T={T} orders={orders} fl={fl} show={["location", "rep", "type"]} />
+          </div>
         ) : <FilterBar T={T} orders={rep === "salesrep" ? orders.filter(o => o.cust.rep === SALES_REP) : orders} fl={fl} show={rep === "salesrep" ? ["customer", "sku", "location", "type"] : ["customer", "sku", "location", "rep", "type"]} />}
         {rows.length > 3 && <div style={{ marginBottom: 8 }}><input value={ts.q} onChange={e => ts.setQ(e.target.value)} placeholder="Filter rows…" style={{ fontSize: 11, height: 26, width: 220 }} /> <span style={{ fontSize: 10, color: T.tableHeadText }}>Click a column heading to sort</span></div>}
         <Card T={T} pad={0}>
-          {!rows.length ? <div style={{ fontSize: 12, color: T.tableHeadText, padding: 12 }}>No data for these filters.</div> : (
+          {!rows.length ? <div style={{ fontSize: 12, color: T.tableHeadText, padding: 12 }}>{rep === "skubuyers" && !pick ? "Choose a SKU, category or sub-category above to see who buys it." : "No data for these filters."}</div> : (
             <div style={{ overflowX: "auto" }}>
               <table className="data-table">
                 <thead><tr>{headers.map((h, i) => <th key={i} onClick={() => ts.toggle(i)} title="Click to sort" style={{ textAlign: i > 0 && /Sales|Qty|Orders|%|Change|Days|FY/.test(h) ? "right" : "left", cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" }}>{h}{ts.arrow(i)}</th>)}</tr></thead>

@@ -3,7 +3,7 @@
 // Only people with "Edit price lists" in Users & Access get here (Paul, Mark, Jeff by default).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { listenPriceLists, updateVersion, setUpCurrent, startDraft, deleteDraft, makeActive, publishCustomerPrices, path, pathParts } from "./store";
-import { PRICE_FIELDS, FIELD_LABEL, versionProducts, customerLists, pctFor, priceNum, up, fmtEffective, yearOf, DEFAULT_NOTES } from "./priceLists";
+import { PRICE_FIELDS, FIELD_LABEL, versionProducts, customerLists, pctFor, priceNum, up, fmtEffective, yearOf, DEFAULT_NOTES, readPriceCSV } from "./priceLists";
 import { buildPriceListHTML, pdfFileName } from "./pdf";
 import { downloadCSV } from "../sales/salesUtils";
 
@@ -275,6 +275,8 @@ function Customers({ T, db, v, draft, editable, save, priced, catOf, base }) {
   const names = Object.keys(v.customers || {}).sort();
   const [sel, setSel] = useState(names[0] || "");
   const [addSku, setAddSku] = useState("");
+  const [imp, setImp] = useState(null); // CSV import preview
+  const fileRef = useRef(null);
   const l = (v.customers || {})[sel];
   const shown = lists[sel];
   const bySku = new Map(priced.map(p => [up(p.sku), p]));
@@ -330,7 +332,24 @@ function Customers({ T, db, v, draft, editable, save, priced, catOf, base }) {
             })}</tbody>
           </table>
         </div>
-        {editable && <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
+        {editable && <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} onClick={() => fileRef.current?.click()}>⬆ Import {sel}'s prices from CSV</button>
+          <input ref={fileRef} type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={async e => {
+            const f = e.target.files?.[0]; e.target.value = ""; if (!f) return;
+            // Compare against the master prices this list starts from (for a draft: the current list,
+            // so a customer's old prices then get the same % increase as everything else)
+            const ref = draft && base ? base : bySku;
+            const { rows, unknown } = readPriceCSV(await f.text(), [...ref.values()]);
+            // Keep only prices that differ from the master; SKUs that match the master go back to master pricing
+            const diff = [], same = [];
+            rows.forEach(r => {
+              const m = ref.get(r.sku); const d = {};
+              Object.entries(r.prices).forEach(([fld, val]) => { if (Math.abs((priceNum(m?.[fld]) || 0) - val) > 0.004) d[fld] = val; });
+              if (Object.keys(d).length) diff.push({ sku: r.sku, prices: { ...Object.fromEntries(PRICE_FIELDS.filter(x => (priceNum(m[x]) || 0) > 0).map(x => [x, priceNum(m[x])])), ...d }, changed: d, master: m }); else same.push(r.sku);
+            });
+            setImp({ file: f.name, diff, same, unknown, total: rows.length });
+          }} />
+          <span style={{ fontSize: 11, color: T.tableHeadText, flexBasis: "100%" }}>Use your price list spreadsheet (File → Save As → CSV, just the {sel} tab) or a CSV exported from the hub. Only prices that differ from the master are kept.</span>
           <input list="pl-skus" value={addSku} onChange={e => setAddSku(e.target.value)} placeholder="Add a SKU with a special price…" style={{ height: 28, width: 260, fontSize: 12 }} />
           <datalist id="pl-skus">{priced.map(p => <option key={p.sku} value={p.sku}>{p.description}</option>)}</datalist>
           <button className="btn" onClick={() => {
@@ -341,6 +360,35 @@ function Customers({ T, db, v, draft, editable, save, priced, catOf, base }) {
           <span style={{ fontSize: 11, color: T.tableHeadText }}>Starts at the master prices — then change the ones that differ.</span>
         </div>}
       </>}
+      {imp && <ImportPreview T={T} imp={imp} sel={sel} bySku={bySku} onCancel={() => setImp(null)} onImport={async () => {
+        const where = draft ? "exact" : "prices";
+        const patch = {};
+        imp.diff.forEach(r => { patch[path("customers", sel, "prices", r.sku)] = r.prices; if (draft && l?.exact?.[r.sku]) patch[path("customers", sel, "exact", r.sku)] = null; });
+        imp.same.forEach(sku => { if (l?.prices?.[sku]) patch[path("customers", sel, "prices", sku)] = null; if (draft && l?.exact?.[sku]) patch[path("customers", sel, "exact", sku)] = null; });
+        await persist(patch, `${sel}: imported ${imp.diff.length} special prices from ${imp.file}`); setImp(null); void where;
+      }} />}
+    </div>
+  );
+}
+
+function ImportPreview({ T, imp, sel, bySku, onCancel, onImport }) {
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal" style={{ maxWidth: 760 }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Import {sel} prices from {imp.file}</div>
+        <div style={{ fontSize: 12, color: T.subtext, marginBottom: 10 }}>Read {imp.total} SKUs: <b>{imp.diff.length} differ</b> from the master, {imp.same.length} match it (they'll use master prices){imp.unknown.length ? `, ${imp.unknown.length} not on the product list (skipped: ${imp.unknown.slice(0, 8).join(", ")}${imp.unknown.length > 8 ? "…" : ""})` : ""}.</div>
+        <div style={{ maxHeight: 380, overflow: "auto", border: `1px solid ${T.border}` }}>
+          <table className="data-table"><thead><tr><th>SKU</th><th>Price</th><th style={{ textAlign: "right" }}>Master</th><th style={{ textAlign: "right" }}>{sel}</th><th style={{ textAlign: "right" }}>Difference</th></tr></thead>
+            <tbody>{imp.diff.flatMap(r => Object.entries(r.changed).map(([f, val], i) => {
+              const m = priceNum(r.master?.[f]) || 0, d = m ? ((val - m) / m) * 100 : 0;
+              return <tr key={r.sku + f}><td style={{ fontFamily: "monospace", fontSize: 11 }}>{i ? "" : r.sku}</td><td>{FIELD_LABEL[f]}</td><td style={{ textAlign: "right" }}>{fmt(m)}</td><td style={{ textAlign: "right", fontWeight: 600 }}>{fmt(val)}</td><td style={{ textAlign: "right", color: d < 0 ? GREEN : RED }}>{d ? `${d > 0 ? "+" : ""}${d.toFixed(1)}%` : ""}</td></tr>;
+            }))}</tbody></table>
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+          <button className="btn" onClick={onCancel}>Cancel</button>
+          <button className="btn-gold" disabled={!imp.diff.length && !imp.same.length} onClick={onImport}>Import {imp.diff.length} special price{imp.diff.length === 1 ? "" : "s"}</button>
+        </div>
+      </div>
     </div>
   );
 }

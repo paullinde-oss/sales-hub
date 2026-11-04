@@ -109,3 +109,64 @@ export const onList = (v, sku) => (v.onList || {})[up(sku)] === true;
 
 export const fmtEffective = iso => { if (!iso) return ""; const d = new Date(iso + "T12:00:00"); return isNaN(d) ? iso : d.toLocaleDateString("en-CA", { month: "long", day: "numeric", year: "numeric" }); };
 export const yearOf = v => String(v.year || (v.effectiveDate || "").slice(0, 4) || new Date().getFullYear());
+
+// ── Customer price list import (CSV) ─────────────────────────────────────────
+// Accepts either the hub's own CSV export (columns by heading) or Paul's price list spreadsheet
+// saved as CSV (a row per SKU: quantities, then the prices in the sheet's order —
+// FTL then LTL for blankets/wattles; Collect Package, Collect Pallet, Prepaid Package, Prepaid Pallet
+// for catch basin etc.; one price for curtains/TRMs).
+export function parseCSV(text) {
+  const rows = []; let row = [], cell = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; } else if (c === '"') q = false; else cell += c; }
+    else if (c === '"') q = true;
+    else if (c === ",") { row.push(cell); cell = ""; }
+    else if (c === "\n" || c === "\r") { if (c === "\r" && text[i + 1] === "\n") i++; row.push(cell); rows.push(row); row = []; cell = ""; }
+    else cell += c;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows.map(r => r.map(x => x.trim()));
+}
+
+const HEAD = [["truckPrice", /ftl/i], ["prepaidPallet", /prepaid\s*pallet/i], ["prepaid", /prepaid/i], ["palletPrice", /pallet\s*\/\s*ltl|ltl|pallet price/i], ["price", /price/i]];
+// products: the version's master products. Returns { rows: [{ sku, prices }], unknown: [sku…] }
+export function readPriceCSV(text, products) {
+  const rows = parseCSV(text);
+  const bySku = new Map(products.map(p => [up(p.sku), p]));
+  const out = [], unknown = [];
+  // Hub export: a header row naming the price columns
+  const hi = rows.findIndex(r => r.some(c => /^sku$/i.test(c)) && r.some(c => /price|ftl|ltl|prepaid/i.test(c)) && r.some(c => /\(cad\)|\(usd\)|price \/ package/i.test(c)));
+  if (hi >= 0) {
+    const h = rows[hi], skuCol = h.findIndex(c => /^sku$/i.test(c));
+    const cols = h.map(c => (/qty/i.test(c) ? null : HEAD.find(([, re]) => re.test(c))?.[0] || null));
+    rows.slice(hi + 1).forEach(r => {
+      const sku = up(r[skuCol]); if (!sku) return;
+      if (!bySku.has(sku)) { unknown.push(sku); return; }
+      const prices = {};
+      cols.forEach((f, i) => { if (f) { const n = num(r[i]); if (n !== null && n > 0) prices[f] = n; } });
+      if (Object.keys(prices).length) out.push({ sku, prices });
+    });
+    return { rows: out, unknown };
+  }
+  // Price list spreadsheet layout
+  rows.forEach(r => {
+    const i = r.findIndex(c => bySku.has(up(c)));
+    if (i < 0) { const c = r.find(x => /^[A-Z0-9][A-Z0-9-]{4,}$/.test(x) && /\d/.test(x) && /[A-Z]/.test(x)); if (c && r.slice(r.indexOf(c) + 1).some(x => num(x) > 0)) unknown.push(c); return; }
+    const p = bySku.get(up(r[i]));
+    const nums = r.slice(i + 1).map(num).filter(n => n !== null && n > 0);
+    const used = PRICE_FIELDS.filter(f => (num(p[f]) || 0) > 0);
+    if (!nums.length || !used.length) return;
+    const distinct = new Set(used.map(f => num(p[f])));
+    let prices = {};
+    if (distinct.size === 1) used.forEach(f => { prices[f] = nums[nums.length - 1]; }); // one price (curtains, TRMs, HydroNest)
+    else {
+      const order = used.includes("truckPrice") ? ["truckPrice", "palletPrice"].filter(f => used.includes(f)) : ["price", "palletPrice", "prepaid", "prepaidPallet"].filter(f => used.includes(f));
+      const vals = nums.slice(-order.length);
+      if (vals.length < order.length) return;
+      order.forEach((f, k) => { prices[f] = vals[k]; });
+    }
+    out.push({ sku: up(p.sku), prices });
+  });
+  return { rows: out, unknown: [...new Set(unknown)] };
+}

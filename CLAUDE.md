@@ -29,8 +29,16 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   `config/customerPrices` (quotes for a matching company — e.g. White Cap — use those prices). Edits
   go through `updateVersion` (who/when + change log; use `path()` for nested fields — names contain
   dots/spaces). PDF: `pdf.js` (notes on page 1, file "BMP Supplies - 2027 Price List - Customer").
-  **The GitHub repo is public — never commit price sheets, customer prices or costs.** Costs/margins
-  wait for the security upgrade (per-person logins + Firestore rules) Paul approved.
+  **The GitHub repo is public — never commit price sheets, customer prices or costs.**
+- **Costs & margins** (`src/pricelist/costs.js`, `CostsView.jsx`, `Projection.jsx`): users with "Costs &
+  margins" (Paul, Mark, Jeff, Grant). Costs are **AES-encrypted** in `config/productCosts` with a key from
+  a separate cost password (typed once per browser, kept in localStorage `bmp_cost_pass`, never stored
+  online) because Firestore is open — Paul postponed per-person email logins. "Refresh costs from
+  calculators" reads the ECB + Turbidity Curtain calculators (xlsx, SheetJS) from Dropbox
+  `/Documents/Cost Calculators` or an upload: Canada "Total Cost"; 16'/jumbo blankets estimated from the
+  8' roll (×2/×5/×10, marked estimate). Margin = (price − cost) ÷ price at the lowest price; optional
+  target per category (`__targets`). Draft "Margins & projection": last 12 months / FY of real product
+  lines re-priced by each SKU's average % change, with gross profit where costs exist.
 - `src/pipeline/PipelineDashboard.jsx` — Pipeline & Leads dashboard (lead tiles hidden without "leads").
 - `src/admin/` — Users & Access: per-user area access (+ "leads" sub-permission; old ids loadcalc/dims
   map to shipping via `userTabs`), sales-data scope, master password (viewable — stored readable

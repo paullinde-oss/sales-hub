@@ -6,6 +6,9 @@ import { listenPriceLists, updateVersion, setUpCurrent, startDraft, deleteDraft,
 import { PRICE_FIELDS, FIELD_LABEL, versionProducts, customerLists, pctFor, priceNum, up, fmtEffective, yearOf, DEFAULT_NOTES, readPriceCSV } from "./priceLists";
 import { buildPriceListHTML, pdfFileName } from "./pdf";
 import { downloadCSV } from "../sales/salesUtils";
+import CostsView, { CostGate, marginColor } from "./CostsView";
+import Projection from "./Projection";
+import { costOf, marginPct } from "./costs";
 
 const fmt = v => { const n = priceNum(v); return n === null || n <= 0 ? "—" : "$" + n.toLocaleString("en-CA", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }); };
 const when = iso => iso ? new Date(iso).toLocaleString("en-CA", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : "";
@@ -22,7 +25,7 @@ function Card({ T, title, right, children, pad = 14 }) {
   );
 }
 
-export default function PriceListsView({ T, db, products, categories = {}, subCategories = {}, subCatDefs = {}, categoryOrder = [], loginName, logo, usdRate }) {
+export default function PriceListsView({ T, db, products, categories = {}, subCategories = {}, subCatDefs = {}, categoryOrder = [], loginName, logo, usdRate, costs, canCosts }) {
   const [lists, setLists] = useState(null);
   const [openId, setOpenId] = useState(null);
   useEffect(() => listenPriceLists(db, setLists, () => setLists([])), [db]);
@@ -31,7 +34,7 @@ export default function PriceListsView({ T, db, products, categories = {}, subCa
   const drafts = lists.filter(v => v.status === "draft").sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
   const history = lists.filter(v => v.status === "archived").sort((a, b) => ((a.activatedAt || "") < (b.activatedAt || "") ? 1 : -1));
   const open = lists.find(v => v.id === openId);
-  const common = { T, db, products, categories, subCategories, subCatDefs, categoryOrder, loginName, logo, current };
+  const common = { T, db, products, categories, subCategories, subCatDefs, categoryOrder, loginName, logo, current, costs, canCosts };
 
   if (open) return <VersionEditor {...common} v={open} back={() => setOpenId(null)} />;
   return (
@@ -93,7 +96,7 @@ function SetUp({ T, db, loginName, usdRate }) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-const TABS = [["increases", "Increases"], ["prices", "Review prices"], ["customers", "Customer price lists"], ["notes", "Notes page"], ["output", "PDF & CSV"], ["log", "Change log"]];
+const TABS = [["increases", "Increases"], ["prices", "Review prices"], ["margins", "Margins & projection"], ["customers", "Customer price lists"], ["notes", "Notes page"], ["output", "PDF & CSV"], ["log", "Change log"]];
 
 function VersionEditor(props) {
   const { T, db, v, back, products, categories, current, loginName } = props;
@@ -107,7 +110,7 @@ function VersionEditor(props) {
     if (!draft) return null; // compare drafts against the current list
     return new Map((products || []).map(p => [up(p.sku), p]));
   }, [draft, products]);
-  const tabs = TABS.filter(([k]) => k !== "increases" || draft);
+  const tabs = TABS.filter(([k]) => (k !== "increases" || draft) && (k !== "margins" || draft || props.canCosts));
   const ctx = { ...props, draft, editable, save, catOf, priced, base };
 
   return (
@@ -132,6 +135,7 @@ function VersionEditor(props) {
       <div style={{ flex: 1, overflow: "auto", padding: 16 }}>
         {tab === "increases" ? <Increases {...ctx} />
           : tab === "prices" ? <Prices {...ctx} />
+          : tab === "margins" ? <Margins {...ctx} />
           : tab === "customers" ? <Customers {...ctx} />
           : tab === "notes" ? <Notes {...ctx} />
           : tab === "output" ? <Output {...ctx} />
@@ -195,7 +199,8 @@ function Summary({ T, priced, base, categories }) {
 }
 
 // ── Review prices: every SKU, old → new, SKU %, exact prices, customer-list tick ─
-function Prices({ T, v, draft, editable, save, priced, base, categories, categoryOrder }) {
+function Prices({ T, v, draft, editable, save, priced, base, categories, categoryOrder, costs, canCosts }) {
+  const costReady = canCosts && costs?.status === "ready", costMap = costs?.costs || {};
   const [cat, setCat] = useState("All");
   const [q, setQ] = useState("");
   const [onlyList, setOnlyList] = useState(false);
@@ -245,6 +250,7 @@ function Prices({ T, v, draft, editable, save, priced, base, categories, categor
                   <span style={{ color: T.tableHeadText, fontSize: 10 }}>{fmt(o)} → </span>
                   <PriceInput value={n} exact={exact} T={T} onCommit={val => save({ [path("overrides", up(p.sku), f)]: val }, `${p.sku} ${FIELD_LABEL[f]}: ${val === null ? "back to %" : "$" + val}`)} />
                   {ch ? <div style={{ fontSize: 9, color: ch > 0 ? GREEN : RED }}>{ch > 0 ? "+" : ""}{ch.toFixed(1)}%</div> : null}
+                  {costReady && costOf(costMap, p.sku) && n ? (() => { const m = marginPct(n, costOf(costMap, p.sku)); return <div style={{ fontSize: 9, fontWeight: 600, color: marginColor(m, costMap.__targets?.[categories[p.sku] || "Uncategorized"]) || T.subtext }}>margin {m.toFixed(1)}%</div>; })() : null}
                 </td>;
               })}
             </tr>;
@@ -267,6 +273,22 @@ function PriceInput({ value, exact, onCommit, T }) {
   return <input type="number" step="1" value={t} onChange={e => setT(e.target.value)} title={exact ? "Exact price typed in — clear it to use the % again" : "Type to set an exact price"}
     onBlur={() => { if (String(t) === String(value ?? "")) return; onCommit(t === "" ? null : Number(t)); }} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
     style={{ width: 72, height: 24, textAlign: "right", fontSize: 11, fontWeight: 600, color: exact ? T.gold : undefined, borderColor: exact ? T.gold : undefined }} />;
+}
+
+// ── Margins & projection ─────────────────────────────────────────────────────
+function Margins({ T, db, v, draft, priced, products, categories, categoryOrder, costs, canCosts, loginName }) {
+  return <>
+    {draft && <div style={{ marginBottom: 18 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Projection from real orders</div>
+      <Projection T={T} db={db} current={products} draft={priced} categories={categories} costs={canCosts && costs?.status === "ready" ? costs.costs : {}} showCosts={canCosts && costs?.status === "ready"} />
+    </div>}
+    {canCosts && <>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Costs & margins by SKU</div>
+      <CostGate T={T} costs={costs} loginName={loginName}>
+        <CostsView T={T} costs={costs} loginName={loginName} products={products} draftProducts={draft ? priced : null} categories={categories} categoryOrder={categoryOrder} />
+      </CostGate>
+    </>}
+  </>;
 }
 
 // ── Customer price lists (White Cap, US customers …) ─────────────────────────

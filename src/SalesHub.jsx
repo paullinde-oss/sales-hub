@@ -11,11 +11,13 @@ import { listenCollection, putDoc, dropDoc, stamp, deletedMarker, applyLocal } f
 import { Loader, BMP_LOGO, onDark } from "./Loader";
 import PipelineDashboard from "./pipeline/PipelineDashboard";
 import PriceListsView from "./pricelist/PriceListsView";
+import CostsView, { CostGate } from "./pricelist/CostsView";
+import { useCosts } from "./pricelist/costs";
 import { listenCustomerPrices } from "./pricelist/store";
 import { customerListFor, withCustomerPrices } from "./pricelist/priceLists";
 import SalesSummary from "./sales/SalesSummary";
 import AdminTab from "./admin/AdminTab";
-import { useUsers, findUser, canSee, DEFAULT_USERS, canEditPriceLists } from "./admin/users";
+import { useUsers, findUser, canSee, DEFAULT_USERS, canEditPriceLists, canSeeCosts } from "./admin/users";
 import { checkPassword, currentPasswordHash } from "./sales/auth";
 import { SS_OPEN_TAB } from "./sales/dropbox";
 
@@ -713,6 +715,8 @@ export default function SalesHub() {
   // Customer price lists of the current price list (e.g. White Cap) — quotes use them automatically
   const [customerPrices, setCustomerPrices] = useState({});
   useEffect(() => listenCustomerPrices(db, setCustomerPrices), []);
+  // Product costs (encrypted; only for people with "Costs & margins")
+  const costs = useCosts(db, canSeeCosts(currentUser));
   CUSTOMER_PRICES = customerPrices;
   const [productsCAD, setProductsCAD] = useLocalStorage('bmp_products_cad', INITIAL_PRODUCTS_CAD);
   const [productsUSD, setProductsUSD] = useLocalStorage('bmp_products_usd',
@@ -1319,17 +1323,20 @@ ${quoteNumLine}
           })()}
           {activeTab==="products"&&(()=>{
             // Price Lists (versions, drafts, customer price lists) only for people with "Edit price lists"
-            const plOk = canEditPriceLists(currentUser);
-            const sec = plOk ? productsSection : "products";
-            return <TabPage T={T} title="PRODUCTS & PRICE LIST" sections={plOk?[["products","Products"],["pricelists","Price Lists"]]:null} active={sec} onSelect={setProductsSection}>
-              {sec==="products" ? <ProductsTab products={filteredProducts} setProducts={setCurrentProducts}
+            const plOk = canEditPriceLists(currentUser), costOk = canSeeCosts(currentUser);
+            const secs = [["products","Products"], ...(plOk?[["pricelists","Price Lists"]]:[]), ...(costOk?[["costs","Costs & Margins"]]:[])];
+            const sec = secs.some(x=>x[0]===productsSection) ? productsSection : "products";
+            const catOrder = Array.isArray(subCatDefs?.categoryOrder)&&subCatDefs.categoryOrder.length?subCatDefs.categoryOrder:CATEGORY_ORDER;
+            return <TabPage T={T} title="PRODUCTS & PRICE LIST" sections={secs.length>1?secs:null} active={sec} onSelect={setProductsSection}>
+              {sec==="costs" ? <div style={{flex:1,overflow:"auto",padding:16}}><CostGate T={T} costs={costs} loginName={loginName}><CostsView T={T} costs={costs} loginName={loginName} products={productsCAD} categories={categories} categoryOrder={catOrder}/></CostGate></div>
+              : sec==="products" ? <ProductsTab products={filteredProducts} setProducts={setCurrentProducts}
             currency={productCurrency} setCurrency={setProductCurrency} search={productSearch} setSearch={setProductSearch}
             categories={categories} setCategories={setCurrentCategories}
             subCategories={subCategories} setSubCategories={setCurrentSubCategories}
             subCatDefs={subCatDefs} setSubCatDefs={setCurrentSubCatDefs}
             exchangeRate={exchangeRate} setExchangeRate={setExchangeRate} T={T} onSkuRenamed={renameProductSku}/> : <PriceListsView T={T} db={db} products={productsCAD} categories={categories} subCategories={subCategories} subCatDefs={subCatDefs}
                 categoryOrder={Array.isArray(subCatDefs?.categoryOrder)&&subCatDefs.categoryOrder.length?subCatDefs.categoryOrder:CATEGORY_ORDER}
-                loginName={loginName} logo={BMP_LOGO_FULL} usdRate={exchangeRate}/>}
+                loginName={loginName} logo={BMP_LOGO_FULL} usdRate={exchangeRate} costs={costs} canCosts={canSeeCosts(currentUser)}/>}
             </TabPage>;
           })()}
           {activeTab==="stock"&&<TabPage T={T} title="STOCK LEVELS"><StockLevelsTab T={T}/></TabPage>}

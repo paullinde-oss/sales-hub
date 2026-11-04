@@ -1,6 +1,6 @@
 // ─── Admin tab: users, what they can see, and the master password ───────────
 import { useState, useEffect } from "react";
-import { ALL_TABS, saveUsers, userTabs } from "./users";
+import { ALL_TABS, saveUsers, userTabs, canEditPriceLists, canSeeCosts } from "./users";
 import { setPassword, readPassword } from "../sales/auth";
 
 export default function AdminTab({ T, db, users, loginName }) {
@@ -51,7 +51,7 @@ export default function AdminTab({ T, db, users, loginName }) {
           <div style={{ padding: "10px 14px", fontSize: 11, color: T.tableHeadText, lineHeight: 1.5 }}>
             People sign in with their first name and the master password. Tick the areas each person can see. "↳ Leads section" shows Lead Tracking inside Pipeline &amp; Leads (and lead numbers on its dashboard).
             <b> Sales data</b>: "All customers" or "Own accounts only" (only customers where they're the rep in Sales Summary → Settings → Customer accounts).
-            <b> Admin</b> can open this page and Sales Summary settings.
+            <b> Edit price lists</b>: see and build new price list drafts. <b>Costs &amp; margins</b>: see product costs (coming soon).<b> Admin</b> can open this page and Sales Summary settings.
             {msg && <div style={{ marginTop: 6, color: T.text }}>{msg}</div>}
           </div>
           <div style={{ overflowX: "auto" }}>
@@ -59,7 +59,7 @@ export default function AdminTab({ T, db, users, loginName }) {
               <thead><tr>
                 <th>Name</th>
                 {ALL_TABS.map(t => <th key={t.id} style={{ textAlign: "center", whiteSpace: "nowrap", fontStyle: t.sub ? "italic" : "normal" }}>{t.label}</th>)}
-                <th>Sales data</th><th style={{ textAlign: "center" }}>Admin</th><th></th>
+                <th>Sales data</th><th style={{ textAlign: "center", whiteSpace: "nowrap" }}>Edit price lists</th><th style={{ textAlign: "center", whiteSpace: "nowrap" }}>Costs &amp; margins</th><th style={{ textAlign: "center" }}>Admin</th><th></th>
               </tr></thead>
               <tbody>{list.map((u, i) => (
                 <tr key={i}>
@@ -70,6 +70,8 @@ export default function AdminTab({ T, db, users, loginName }) {
                   <td><select value={u.salesScope || "own"} onChange={e => upd(i, { salesScope: e.target.value })} style={{ height: 26, fontSize: 11 }}>
                     <option value="all">All customers</option><option value="own">Own accounts only</option>
                   </select></td>
+                  <td style={{ textAlign: "center" }}><input type="checkbox" checked={canEditPriceLists(u)} onChange={e => upd(i, { priceDrafts: e.target.checked })} /></td>
+                  <td style={{ textAlign: "center" }}><input type="checkbox" checked={canSeeCosts(u)} onChange={e => upd(i, { costs: e.target.checked })} /></td>
                   <td style={{ textAlign: "center" }}><input type="checkbox" checked={!!u.admin} onChange={e => upd(i, { admin: e.target.checked })} /></td>
                   <td><button className="btn-del" onClick={() => { setDirty(true); setList(list.filter((_, j) => j !== i)); }}>×</button></td>
                 </tr>))}</tbody>

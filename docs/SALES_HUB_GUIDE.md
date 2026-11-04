@@ -123,6 +123,12 @@ Real sales, built from order confirmation PDFs.
 - Sales Summary uses it to standardise SKUs on orders.
 - Renaming a SKU here also renames it on past orders.
 
+- **Price Lists** (Paul, Mark, Jeff): the **Current** list quotes use, **Drafts** for the next list
+  (category / SKU % increases, exact prices, whole-dollar rounding, which SKUs are on the customer
+  list, notes page, customer price lists such as White Cap), and **History**. Save a customer PDF or
+  CSV from any version (file name "BMP Supplies - 2027 Price List - Customer"), then **Make active**
+  on the effective date. Quotes for a company with its own price list use those prices automatically.
+
 ### Stock Levels
 - Live stock read from Google Sheets: Calgary stock, Turbidity Curtains, and ECB/Wattles
   (pallets/rolls/trucks).

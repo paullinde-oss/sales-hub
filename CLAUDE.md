@@ -20,6 +20,17 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   Pipeline / Leads) · Products & Price List · Stock Levels · Shipping (Load Calculator / Turbidity
   Curtain Shipping / Package Dimensions) · Users & Access. Every area uses `TabPage` (in
   `SalesHub.jsx`) for the same top bar as Sales Summary — keep new areas consistent with it.
+- `src/pricelist/` — **Price Lists** (Products & Price List → Price Lists; only users with "Edit price
+  lists": Paul, Mark, Jeff by default). Firestore `priceLists/{id}`: status current | draft | archived.
+  Drafts store only decisions (category/SKU %, exact prices, on-list ticks, notes, customer price
+  lists) and are worked out on the live `config/productsCAD`; every price is rounded to the whole
+  dollar; USD = CAD × `usdMultiplier` (0.95). "Make active" writes the worked-out list to
+  `config/productsCAD`, freezes the old current into history, and publishes customer price lists to
+  `config/customerPrices` (quotes for a matching company — e.g. White Cap — use those prices). Edits
+  go through `updateVersion` (who/when + change log; use `path()` for nested fields — names contain
+  dots/spaces). PDF: `pdf.js` (notes on page 1, file "BMP Supplies - 2027 Price List - Customer").
+  **The GitHub repo is public — never commit price sheets, customer prices or costs.** Costs/margins
+  wait for the security upgrade (per-person logins + Firestore rules) Paul approved.
 - `src/pipeline/PipelineDashboard.jsx` — Pipeline & Leads dashboard (lead tiles hidden without "leads").
 - `src/admin/` — Users & Access: per-user area access (+ "leads" sub-permission; old ids loadcalc/dims
   map to shipping via `userTabs`), sales-data scope, master password (viewable — stored readable

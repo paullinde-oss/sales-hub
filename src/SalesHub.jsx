@@ -10,9 +10,12 @@ import { getFirestore, doc, setDoc, getDoc, onSnapshot, writeBatch } from "fireb
 import { listenCollection, putDoc, dropDoc, stamp, deletedMarker, applyLocal } from "./cachedCollection";
 import { Loader, BMP_LOGO, onDark } from "./Loader";
 import PipelineDashboard from "./pipeline/PipelineDashboard";
+import PriceListsView from "./pricelist/PriceListsView";
+import { listenCustomerPrices } from "./pricelist/store";
+import { customerListFor, withCustomerPrices } from "./pricelist/priceLists";
 import SalesSummary from "./sales/SalesSummary";
 import AdminTab from "./admin/AdminTab";
-import { useUsers, findUser, canSee, DEFAULT_USERS } from "./admin/users";
+import { useUsers, findUser, canSee, DEFAULT_USERS, canEditPriceLists } from "./admin/users";
 import { checkPassword, currentPasswordHash } from "./sales/auth";
 import { SS_OPEN_TAB } from "./sales/dropbox";
 
@@ -528,6 +531,10 @@ const SHIPPING_DATA = {
 let __nextLineItemId = Date.now();
 function newLineItemId() { return ++__nextLineItemId; }
 
+// Customer price lists of the current price list ({ lists: { "White Cap": { terms, prices } } }),
+// kept up to date by the app from config/customerPrices and read by QuoteForm
+let CUSTOMER_PRICES = {};
+
 // ─── Shared top bar for every left-hand area (same look as Sales Summary) ────
 function TabPage({T, title, sections, active, onSelect, right, children}) {
   return (
@@ -702,6 +709,11 @@ export default function SalesHub() {
   // Section shown inside the grouped areas (remembered on this computer)
   const [pipeSection, setPipeSection] = useLocalStorage('bmp_pipe_section', 'dashboard');
   const [shipSection, setShipSection] = useLocalStorage('bmp_ship_section', 'loadcalc');
+  const [productsSection, setProductsSection] = useLocalStorage('bmp_products_section', 'products');
+  // Customer price lists of the current price list (e.g. White Cap) — quotes use them automatically
+  const [customerPrices, setCustomerPrices] = useState({});
+  useEffect(() => listenCustomerPrices(db, setCustomerPrices), []);
+  CUSTOMER_PRICES = customerPrices;
   const [productsCAD, setProductsCAD] = useLocalStorage('bmp_products_cad', INITIAL_PRODUCTS_CAD);
   const [productsUSD, setProductsUSD] = useLocalStorage('bmp_products_usd',
     INITIAL_PRODUCTS_CAD.map(p=>({...p,price:"",palletPrice:"",prepaid:"",prepaidPallet:"",truckPrice:""}))
@@ -1305,12 +1317,21 @@ ${quoteNumLine}
               {sec==="leads"&&<LeadTrackingTab leads={leads} setLeads={setLeads} adSpend={adSpend} setAdSpend={setAdSpend} quotes={quotes} setQuotes={setQuotes} T={T} loginName={loginName}/>}
             </TabPage>;
           })()}
-          {activeTab==="products"&&<TabPage T={T} title="PRODUCTS & PRICE LIST"><ProductsTab products={filteredProducts} setProducts={setCurrentProducts}
+          {activeTab==="products"&&(()=>{
+            // Price Lists (versions, drafts, customer price lists) only for people with "Edit price lists"
+            const plOk = canEditPriceLists(currentUser);
+            const sec = plOk ? productsSection : "products";
+            return <TabPage T={T} title="PRODUCTS & PRICE LIST" sections={plOk?[["products","Products"],["pricelists","Price Lists"]]:null} active={sec} onSelect={setProductsSection}>
+              {sec==="products" ? <ProductsTab products={filteredProducts} setProducts={setCurrentProducts}
             currency={productCurrency} setCurrency={setProductCurrency} search={productSearch} setSearch={setProductSearch}
             categories={categories} setCategories={setCurrentCategories}
             subCategories={subCategories} setSubCategories={setCurrentSubCategories}
             subCatDefs={subCatDefs} setSubCatDefs={setCurrentSubCatDefs}
-            exchangeRate={exchangeRate} setExchangeRate={setExchangeRate} T={T} onSkuRenamed={renameProductSku}/></TabPage>}
+            exchangeRate={exchangeRate} setExchangeRate={setExchangeRate} T={T} onSkuRenamed={renameProductSku}/> : <PriceListsView T={T} db={db} products={productsCAD} categories={categories} subCategories={subCategories} subCatDefs={subCatDefs}
+                categoryOrder={Array.isArray(subCatDefs?.categoryOrder)&&subCatDefs.categoryOrder.length?subCatDefs.categoryOrder:CATEGORY_ORDER}
+                loginName={loginName} logo={BMP_LOGO_FULL} usdRate={exchangeRate}/>}
+            </TabPage>;
+          })()}
           {activeTab==="stock"&&<TabPage T={T} title="STOCK LEVELS"><StockLevelsTab T={T}/></TabPage>}
           {activeTab==="shipping"&&<TabPage T={T} title="SHIPPING" sections={[["loadcalc","Load Calculator"],["curtain","Turbidity Curtain Shipping"],["dims","Package Dimensions"]]} active={shipSection} onSelect={setShipSection}>
             {shipSection==="loadcalc"&&<LoadCalcTab T={T}/>}
@@ -1673,7 +1694,17 @@ function CoverageInput({value, unit, label, disabled, onCommit, T}) {
 
 // ─── Quote Form ────────────────────────────────────────────────────────────────
 function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail,onPDF,onClose,onNewQuote,onStatusChange,isMobile,exchangeRate=0.73,T}) {
-  const products = quote.currency==="CAD"?productsCAD:productsUSD; // productsUSD prop is already auto-converted
+  // A customer with its own price list (e.g. White Cap) gets those prices on this quote.
+  // They're kept in CAD; USD quotes convert them like every other price.
+  const custList = customerListFor(CUSTOMER_PRICES.lists, quote.company);
+  const custCAD = useMemo(() => withCustomerPrices(productsCAD||[], custList), [productsCAD, custList?.name, CUSTOMER_PRICES]); // eslint-disable-line
+  const products = useMemo(() => {
+    if (quote.currency==="CAD") return custCAD;
+    if (!custList) return productsUSD;
+    const rate = parseFloat(exchangeRate||0.73) || 0.73;
+    const usdList = {prices:Object.fromEntries(Object.entries(custList.prices||{}).map(([sku,f])=>[sku,Object.fromEntries(Object.entries(f).map(([k,v])=>[k,Math.round(parseFloat(v)*rate*100)/100]))]))};
+    return withCustomerPrices(productsUSD||[], usdList);
+  }, [quote.currency, custCAD, productsUSD, custList?.name, exchangeRate]); // eslint-disable-line
   // Compute load warnings live from line items
   const loadWarnings = useMemo(() => {
     try {
@@ -1733,7 +1764,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
         const rate = parseFloat(exchangeRate||0.73) || 0.73;
         updated.lineItems = (q.lineItems||[]).map(li => {
           // Always get the base CAD price first
-          const cadProd = (productsCAD||[]).find(p=>p.sku===li.sku);
+          const cadProd = (custCAD||[]).find(p=>p.sku===li.sku);
           if (!cadProd) return li;
           const cadTier = getPriceTier(cadProd, li.qty, updated.prepaid);
           if (!cadTier.price) return li;
@@ -1742,7 +1773,7 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
           if (val==='USD') {
             // Check if USD product list has a specific price for this SKU
             const usdProd = (productsUSD||[]).find(p=>p.sku===li.sku);
-            const usdTier = usdProd ? getPriceTier(usdProd, li.qty, updated.prepaid) : null;
+            const usdTier = usdProd && !cadProd.customerPrice ? getPriceTier(usdProd, li.qty, updated.prepaid) : null;
             // Use explicit USD price if set, otherwise convert from CAD
             newBase = (usdTier && usdTier.price > 0)
               ? usdTier.price
@@ -1924,6 +1955,19 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
           </select>
         </div>
       </div>
+
+      {/* Customer price list in use (e.g. White Cap) */}
+      {custList && (
+        <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"6px 10px",marginBottom:8,border:`1px solid ${T.gold}`,background:"rgba(200,169,110,.08)",fontSize:11,color:T.subtext}}>
+          <b style={{color:T.gold,letterSpacing:".04em"}}>{custList.name.toUpperCase()} PRICING</b>
+          <span>SKUs on {custList.name}'s price list use their prices ({Object.keys(custList.prices||{}).length} SKUs differ from the master list).</span>
+          {!ro && (quote.lineItems||[]).some(li=>li.sku && custList.prices?.[String(li.sku).toUpperCase()]) && <button className="btn" style={{fontSize:10,padding:"2px 10px"}} onClick={()=>setQuote(q=>({...q,lineItems:(q.lineItems||[]).map(li=>{
+            const prod=(products||[]).find(p=>p.sku===li.sku); if(!prod||!prod.customerPrice) return li;
+            const tier=getPriceTier(prod,li.qty,q.prepaid); if(!tier.price) return li;
+            return {...li,basePrice:tier.price,priceTier:tier.tier,unitPrice:Math.round(tier.price*(1+(li.increase||0)/100)*100)/100};
+          })}))}>Update line prices to {custList.name} pricing</button>}
+        </div>
+      )}
 
       {/* Line items */}
       {isMobile ? (

@@ -25,7 +25,7 @@ const leadDate = l => { const d = l.lastContact ? new Date(l.lastContact) : null
 const winRate = g => pct(g.won, g.won + g.lost + g.cold);
 
 // ── Shared table with CSV / print ───────────────────────────────────────────
-function ReportTable({ T, title, sub, note, headers, rows, csvRows, right = [], controls, summary }) {
+export function ReportTable({ T, title, sub, note, headers, rows, csvRows, right = [], controls, summary }) {
   const isRight = i => right.includes(i);
   const ts = useTableSort();
   const shown = ts.apply(rows, r => r.cells, r => r.bold);
@@ -65,7 +65,7 @@ function ReportTable({ T, title, sub, note, headers, rows, csvRows, right = [], 
   );
 }
 
-function Kpis({ T, items }) {
+export function Kpis({ T, items }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(170px, 1fr))`, gap: 10, marginBottom: 12 }}>
       {items.map(([label, value, sub, color]) => (
@@ -79,7 +79,7 @@ function Kpis({ T, items }) {
   );
 }
 
-function RangePicker({ preset, setPreset, custom, setCustom }) {
+export function RangePicker({ preset, setPreset, custom, setCustom }) {
   return <>
     <select value={preset} onChange={e => setPreset(e.target.value)} style={{ fontSize: 11, height: 28 }}>
       {PRESETS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
@@ -90,7 +90,7 @@ function RangePicker({ preset, setPreset, custom, setCustom }) {
     </span>}
   </>;
 }
-const useRange = (initial = "fytd") => {
+export const useRange = (initial = "fytd") => {
   const [preset, setPreset] = useState(initial);
   const [custom, setCustom] = useState(presetRange("fytd"));
   const range = preset === "custom" ? custom : presetRange(preset);

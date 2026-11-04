@@ -39,6 +39,8 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   8' roll (×2/×5/×10, marked estimate). Margin = (price − cost) ÷ price at the lowest price; optional
   target per category (`__targets`). Draft "Margins & projection": last 12 months / FY of real product
   lines re-priced by each SKU's average % change, with gross profit where costs exist.
+  Sales Summary → Reports → **Margins** (`src/sales/marginReports.jsx`, cost viewers only): profit by
+  product / customer / category / month on product lines (CAD), with "sales with a cost" coverage.
 - `src/pipeline/PipelineDashboard.jsx` — Pipeline & Leads dashboard (lead tiles hidden without "leads").
 - `src/admin/` — Users & Access: per-user area access (+ "leads" sub-permission; old ids loadcalc/dims
   map to shipping via `userTabs`), sales-data scope, master password (viewable — stored readable

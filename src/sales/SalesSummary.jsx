@@ -8,6 +8,8 @@ import { isDropboxConnected, startDropboxAuth, disconnectDropbox, redirectUri, b
 import { syncOrders } from "./sync";
 import { Loader } from "../Loader";
 import { useTableSort } from "./tableSort";
+import { MarginReport, MARGIN_REPORTS } from "./marginReports";
+import { CostGate } from "../pricelist/CostsView";
 import { quoteValue, hasOptions, pickWonOption, closestOption } from "../quoteOptions";
 import { runFullSync, SYNC_DEFAULTS, PARSER_VERSION } from "./syncRunner";
 import { writeOrder, removeOrder, listenOrders, buildPacks } from "./orderStore";
@@ -39,7 +41,7 @@ const VIEWS = [
 ];
 
 // mobile: phone layout — only the Dashboard, no syncing or other sections
-export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginName, user, bmpLogo, leads = [], adSpend = {}, canSeeLeads = false, products = [], categories = {}, subCategories = {}, mobile = false }) {
+export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginName, user, bmpLogo, leads = [], adSpend = {}, canSeeLeads = false, products = [], categories = {}, subCategories = {}, mobile = false, costs = null, canCosts = false }) {
   // "own" scope (e.g. John) only sees accounts where they're the rep; admins also get Settings
   const ownOnly = user?.salesScope === "own";
   const isAdmin = !!user?.admin;
@@ -144,7 +146,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
 
   const openAccount = key => { setAccountKey(key); setView("accounts"); };
   const gaps = useMemo(() => findGaps(rawOrders, issues, settings, listing), [rawOrders, issues, settings, listing]);
-  const ctx = { T, db, orders, settings, saveSettings, opts, currencyMode, openAccount, loginName, logos, bmpLogo, ownOnly, products, categories, subCategories };
+  const ctx = { T, db, orders, settings, saveSettings, opts, currencyMode, openAccount, loginName, logos, bmpLogo, ownOnly, products, categories, subCategories, costs, canCosts };
   const views = mobile ? [] : VIEWS.filter(([id]) => id !== "settings" || isAdmin);
 
   return (
@@ -1099,6 +1101,11 @@ const REPORTS = [
   ["wintype", "Win rate: Distributors vs End Users"],
   ["pipeline", "Open pipeline & expected wins"],
   ["quoteorder", "Won quotes → orders"],
+  ["__h", "Margins", "margins"],
+  ["mproduct", "Profit by product (SKU)", "margins"],
+  ["mcustomer", "Profit by customer", "margins"],
+  ["mcategory", "Profit by category", "margins"],
+  ["mmonth", "Profit by month", "margins"],
   ["__h", "Leads", "leads"],
   ["leads", "Lead tracking (End Users)", "leads"],
   ["__h", "Forecasting"],
@@ -1126,7 +1133,7 @@ function SkuGroupPicker({ T, value, onChange, products, categories, orders }) {
   );
 }
 
-function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, logos, bmpLogo, quotes, leads, adSpend, canSeeLeads, ownOnly, loginName, products = [], categories = {}, subCategories = {} }) {
+function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, logos, bmpLogo, quotes, leads, adSpend, canSeeLeads, ownOnly, loginName, products = [], categories = {}, subCategories = {}, costs, canCosts }) {
   const [rep, setRep] = useState("salesrep");
   const [pick, setPick] = useState(""); // "cat:Name" | "sub:Name" | "sku:SKU" for "Who buys a product"
   const ts = useTableSort();
@@ -1229,14 +1236,15 @@ function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, log
   return (
     <div style={{ display: "flex", gap: 16, maxWidth: 1500 }}>
       <div style={{ width: 230, flexShrink: 0, display: "flex", flexDirection: "column", gap: 2 }}>
-        {REPORTS.filter(r => r[2] !== "leads" || canSeeLeads).map(([k, l], i) => k === "__h" ? (
+        {REPORTS.filter(r => (r[2] !== "leads" || canSeeLeads) && (r[2] !== "margins" || canCosts)).map(([k, l], i) => k === "__h" ? (
           // Section heading: gold title with a rule running under it, extra space above each new section
           <div key={"h" + i} style={{ margin: i ? "20px 0 6px" : "0 0 6px", padding: "0 10px 6px", borderBottom: `2px solid ${T.gold}`, fontSize: 11, textTransform: "uppercase", letterSpacing: ".12em", color: T.gold, fontWeight: 700 }}>{l}</div>
         ) : (
           <button key={k} onClick={() => setRep(k)} style={{ textAlign: "left", background: rep === k ? T.activeBg : "transparent", border: "none", borderLeft: `2px solid ${rep === k ? T.gold : "transparent"}`, color: rep === k ? T.text : T.subtext, padding: "7px 10px 7px 14px", fontSize: 12 }}>{l}</button>
         ))}
       </div>
-      {PIPELINE_REPORTS.includes(rep) ? (() => {
+      {MARGIN_REPORTS.includes(rep) && canCosts ? <div style={{ flex: 1, minWidth: 0 }}><CostGate T={T} costs={costs} loginName={loginName}><MarginReport key={rep} T={T} rep={rep} orders={orders} settings={settings} costs={costs?.costs || {}} categories={categories} /></CostGate></div>
+      : PIPELINE_REPORTS.includes(rep) ? (() => {
         const pp = { T, orders, opts, currencyMode, settings, quotes, ownOnly, loginName, openAccount };
         return rep === "winrate" ? <QuoteWinRateReport key="winrate" {...pp} />
           : rep === "wintype" ? <QuoteWinRateReport key="wintype" {...pp} initialBy="type" title="Win rate: Distributors vs End Users" />

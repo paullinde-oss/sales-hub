@@ -6,6 +6,7 @@ import { listenPriceLists, updateVersion, setUpCurrent, startDraft, deleteDraft,
 import { PRICE_FIELDS, FIELD_LABEL, versionProducts, customerLists, pctFor, priceNum, up, fmtEffective, yearOf, DEFAULT_NOTES, readPriceCSV } from "./priceLists";
 import { buildPriceListHTML, pdfFileName } from "./pdf";
 import { downloadCSV } from "../sales/salesUtils";
+import { doc, setDoc } from "firebase/firestore";
 import CostsView, { CostGate, marginColor } from "./CostsView";
 import Projection from "./Projection";
 import { costOf, marginPct } from "./costs";
@@ -110,6 +111,7 @@ function VersionEditor(props) {
     if (!draft) return null; // compare drafts against the current list
     return new Map((products || []).map(p => [up(p.sku), p]));
   }, [draft, products]);
+  const [restore, setRestore] = useState(false);
   const tabs = TABS.filter(([k]) => (k !== "increases" || draft) && (k !== "margins" || draft || props.canCosts));
   const ctx = { ...props, draft, editable, save, catOf, priced, base };
 
@@ -118,14 +120,16 @@ function VersionEditor(props) {
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: `1px solid ${T.border}`, flexWrap: "wrap" }}>
         <button className="btn" onClick={back}>← All price lists</button>
         <span style={{ fontSize: 16, fontWeight: 700, color: T.text }}>{v.name}</span>
+        {<button className="btn" style={{ padding: "2px 8px" }} title="Rename" onClick={() => { const n = prompt("Name:", v.name); if (n && n !== v.name) save({ name: n }, `Renamed to ${n}`); }}>✎</button>}
         <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".08em", color: draft ? "#c8a030" : v.status === "current" ? GREEN : "#888" }}>{v.status.toUpperCase()}</span>
-        {draft ? <label style={{ fontSize: 11, color: T.subtext }}>Effective <input type="date" value={v.effectiveDate || ""} onChange={e => save({ effectiveDate: e.target.value }, `Effective date → ${e.target.value}`)} style={{ height: 26 }} /></label>
-          : <span style={{ fontSize: 12, color: T.subtext }}>Effective {fmtEffective(v.effectiveDate)}</span>}
+        <label style={{ fontSize: 11, color: T.subtext }}>Effective <input type="date" value={v.effectiveDate || ""} onChange={e => save({ effectiveDate: e.target.value }, `Effective date → ${e.target.value}`)} style={{ height: 26 }} /></label>
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: 11, color: T.tableHeadText }}>Last edited by <b style={{ color: T.text }}>{v.updatedBy || "—"}</b> · {when(v.updatedAt)}</span>
-        {draft && <button className="btn-del" onClick={async () => { if (confirm(`Delete the draft ${v.name}? This can't be undone.`)) { await deleteDraft(db, v.id); back(); } }}>Delete draft</button>}
+        {v.status === "archived" && <button className="btn" onClick={() => setRestore(true)} title="Put this version's exact prices back on the current list">↺ Restore these prices…</button>}
+        {v.status !== "current" && <button className="btn-del" onClick={async () => { if (confirm(`Delete ${draft ? "the draft" : "the saved price list"} ${v.name}? This can't be undone.`)) { await deleteDraft(db, v.id); back(); } }}>Delete {draft ? "draft" : "from history"}</button>}
         {draft && <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} onClick={async () => {
-          if (!confirm(`Make ${v.name} the current price list?\n\nFrom now on new quotes use these prices. Quotes already made keep their prices. ${current ? current.name + " moves to History." : ""}`)) return;
+          const changes = priced.reduce((nn, p) => nn + PRICE_FIELDS.filter(f => priceNum(base?.get(up(p.sku))?.[f]) !== priceNum(p[f])).length, 0);
+          if (!confirm(`Make ${v.name} the current price list?\n\n${changes} prices will change (increases and whole-dollar rounding) — these become the prices quotes use. Quotes already made keep their prices. ${current ? current.name + " moves to History, where it can be restored." : ""}`)) return;
           await makeActive(db, v, current, products, categories, loginName); back();
         }}>Make active</button>}
       </div>
@@ -140,6 +144,44 @@ function VersionEditor(props) {
           : tab === "notes" ? <Notes {...ctx} />
           : tab === "output" ? <Output {...ctx} />
           : <Log {...ctx} />}
+      </div>
+      {restore && <RestorePrices T={T} db={db} v={v} live={products} current={current} loginName={loginName} onClose={() => setRestore(false)} />}
+    </div>
+  );
+}
+
+// ── Restore a saved version's exact prices onto the current list ─────────────
+// e.g. a list made active by mistake rounded the prices — the version it replaced still holds them
+function RestorePrices({ T, db, v, live, current, loginName, onClose }) {
+  const saved = new Map((v.products || []).map(p => [up(p.sku), p]));
+  const changes = [];
+  (live || []).forEach(p => {
+    const o = saved.get(up(p.sku)); if (!o) return;
+    PRICE_FIELDS.forEach(f => { const a = priceNum(o[f]), b = priceNum(p[f]); if (a !== null && b !== null && a !== b) changes.push({ sku: p.sku, f, now: b, was: a, rounded: Math.round(a) === b }); });
+  });
+  const [sel, setSel] = useState(() => new Set(changes.filter(c => c.rounded).map(c => c.sku + "|" + c.f)));
+  const [busy, setBusy] = useState(false);
+  const toggle = k => setSel(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const apply = async () => {
+    setBusy(true);
+    const items = live.map(p => { const q = { ...p }; changes.forEach(c => { if (c.sku === p.sku && sel.has(c.sku + "|" + c.f)) q[c.f] = saved.get(up(p.sku))[c.f]; }); return q; });
+    await setDoc(doc(db, "config", "productsCAD"), JSON.parse(JSON.stringify({ items })));
+    if (current) await updateVersion(db, current.id, {}, loginName, `Restored ${sel.size} prices from ${v.name}`);
+    setBusy(false); onClose();
+  };
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 720 }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Restore prices from {v.name}</div>
+        <div style={{ fontSize: 12, color: T.subtext, marginBottom: 10, lineHeight: 1.5 }}>{changes.length} prices on the current list differ from {v.name}. Ticked by default: the ones that look like they were only <b>rounded</b> to the whole dollar. Anything you changed on purpose is unticked — tick it to restore it too.</div>
+        <div style={{ maxHeight: 380, overflow: "auto", border: `1px solid ${T.border}` }}>
+          <table className="data-table"><thead><tr><th><input type="checkbox" checked={sel.size === changes.length && changes.length > 0} onChange={e => setSel(new Set(e.target.checked ? changes.map(c => c.sku + "|" + c.f) : []))} /></th><th>SKU</th><th>Price</th><th style={{ textAlign: "right" }}>Now</th><th style={{ textAlign: "right" }}>Restore to</th><th /></tr></thead>
+            <tbody>{changes.map(c => { const k = c.sku + "|" + c.f; return <tr key={k}><td><input type="checkbox" checked={sel.has(k)} onChange={() => toggle(k)} /></td><td style={{ fontFamily: "monospace", fontSize: 11 }}>{c.sku}</td><td>{FIELD_LABEL[c.f]}</td><td style={{ textAlign: "right" }}>{fmt(c.now)}</td><td style={{ textAlign: "right", fontWeight: 600 }}>{fmt(c.was)}</td><td style={{ fontSize: 10, color: T.tableHeadText }}>{c.rounded ? "rounded" : "changed"}</td></tr>; })}</tbody></table>
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn-gold" disabled={!sel.size || busy} onClick={apply}>{busy ? "Restoring…" : `Restore ${sel.size} price${sel.size === 1 ? "" : "s"}`}</button>
+        </div>
       </div>
     </div>
   );

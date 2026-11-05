@@ -56,7 +56,7 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   - `salesUtils.js` — dates/fiscal year, money, filters, grouping, quote matching, `enrichOrders()`
   - `accounts.js` — customer accounts & name matching; `cities.js` — ship-to city clean-up
   - `skus.js` — SKU standardising against the Products list
-  - `pipelineReports.jsx` — quote/lead/forecast reports; `yearEndReport.js` — Year in Review PDFs
+  - `pipelineReports.jsx` — quote/lead/forecast reports; `yearEndReport.js` — fiscal-year comparison on the customer page
   - `logos.js` — customer logos (logo.dev + manual uploads); `auth.js` — master password
 
 ## Business rules Paul has confirmed
@@ -90,7 +90,12 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   "Mark quote won" pre-picks the closest option and collapses the quote to the actual order.
 - Quote Matches: only suggest when the quote total is **within $3,000** of the order; skip quotes
   already marked Won.
-- Year in Review PDF file name: `Customer — FY2026 BMP Supplies Year in Review`.
+- **Year in Review** (`src/sales/yearInReview.js`, Reports → Year-End customer reports and the customer
+  page button): two pages, **calendar year vs previous calendar year** (year in progress = Jan 1 →
+  today vs same dates), dollars shown, mainly for distributors. Page 1: KPIs, month chart, spending by
+  category; page 2: top 10 products, new this year, "Popular with distributors like you" (SKUs bought
+  by ≥2 other distributors who share products with them, on the current product list; never names
+  others). No "bought less / stopped" section (Paul). File: `Customer — 2026 BMP Supplies Year in Review`.
 - Must keep working for many years: nothing hard-coded to a year; FY lists grow from the data.
 
 ## Dropbox & order confirmations

@@ -14,7 +14,8 @@ import { quoteValue, hasOptions, pickWonOption, closestOption } from "../quoteOp
 import { runFullSync, SYNC_DEFAULTS, PARSER_VERSION } from "./syncRunner";
 import { writeOrder, removeOrder, listenOrders, buildPacks } from "./orderStore";
 import { useLogos, resizeImage, saveLogo, removeLogo, logoDevUrl, domainOf } from "./logos";
-import { yearCompare, openYearEndReport } from "./yearEndReport";
+import { yearCompare } from "./yearEndReport";
+import { openYearInReview, reviewPeriod } from "./yearInReview";
 import { buildCatalog, suggestSkus, isGenericSku } from "./skus";
 import { QuoteWinRateReport, OpenPipelineReport, QuoteToOrderReport, LeadReport, SalesForecastReport, ReorderReport, ProductTrendsReport } from "./pipelineReports";
 import {
@@ -824,7 +825,7 @@ function AccountsView({ T, orders, settings, opts, currencyMode, openAccount, lo
   );
 }
 
-function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMode, accountKey, back, openAccount, logos, bmpLogo, ownOnly }) {
+function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMode, accountKey, back, openAccount, logos, bmpLogo, ownOnly, products: productList = [], categories = {} }) {
   const acct = settings.accounts.find(a => a.name === accountKey);
   const allMine = orders.filter(o => o.cust.key === accountKey);
   const mine = allMine.filter(o => currencyMode === "combined" || orderCurrency(o) === currencyMode);
@@ -917,7 +918,9 @@ function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMo
     try { await saveLogo(db, accountKey, await resizeImage(f), "manual", { fileName: f.name }); }
     catch (err) { alert("Couldn't use that image: " + err.message); }
   };
-  const report = () => openYearEndReport({ customers: [{ key: accountKey, name, rep: acct?.rep || "Unassigned", type: custType, orders: allMine }], fy, usdToCad: opts.usdToCad, logos, bmpLogo });
+  // Year in Review = calendar year: the current year from November on, otherwise last year
+  const reviewYear = (() => { const t = today(); return +t.slice(5, 7) >= 11 ? +t.slice(0, 4) : +t.slice(0, 4) - 1; })();
+  const report = () => openYearInReview({ customers: [{ key: accountKey, name, orders: allMine }], year: reviewYear, allOrders: orders, products: productList, categories, usdToCad: opts.usdToCad, logos, bmpLogo });
   const kpi = (label, v, pv, fmt) => {
     const p = pv ? ((v - pv) / pv) * 100 : null;
     return (
@@ -1256,7 +1259,7 @@ function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, log
           : rep === "forecast" ? <SalesForecastReport {...pp} />
           : rep === "reorder" ? <ReorderReport {...pp} />
           : <ProductTrendsReport {...pp} />;
-      })() : rep === "yearend" ? <YearEndPicker T={T} orders={orders} settings={settings} opts={opts} logos={logos} bmpLogo={bmpLogo} openAccount={openAccount} /> :
+      })() : rep === "yearend" ? <YearEndPicker T={T} orders={orders} settings={settings} opts={opts} logos={logos} bmpLogo={bmpLogo} openAccount={openAccount} products={products} categories={categories} /> :
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
           <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{title}</div>
@@ -1302,9 +1305,12 @@ function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, log
 }
 
 // Pick customers and a fiscal year → one PDF with a "Year in Review" for each
-function YearEndPicker({ T, orders, settings, opts, logos, bmpLogo, openAccount }) {
-  const fys = [...new Set([fyOf(today()), ...orders.map(o => fyOf(o.date))])].sort((a, b) => b - a);
-  const [fy, setFy] = useState(today() < `${fyOf(today())}-11-15` ? fyOf(today()) - 1 : fyOf(today()));
+function YearEndPicker({ T, orders, settings, opts, logos, bmpLogo, openAccount, products = [], categories = {} }) {
+  // Calendar years (Paul: "2027 compared to 2026", not fiscal). Default: this year from November on.
+  const thisYear = +today().slice(0, 4);
+  const years = [...new Set([thisYear, ...orders.map(o => +o.date.slice(0, 4))])].sort((a, b) => b - a);
+  const [fy, setFy] = useState(+today().slice(5, 7) >= 11 ? thisYear : thisYear - 1);
+  const per = reviewPeriod(fy);
   const [typeF, setTypeF] = useState("Distributor");
   const [repF, setRepF] = useState("all");
   const [sel, setSel] = useState({});
@@ -1315,12 +1321,12 @@ function YearEndPicker({ T, orders, settings, opts, logos, bmpLogo, openAccount 
       if (!r) { r = { key: o.cust.key, name: o.cust.name, rep: o.cust.rep, type: o.cust.type, orders: [] }; m.set(o.cust.key, r); }
       r.orders.push(o);
     });
-    return [...m.values()].map(r => ({ ...r, cur: sumOrders(r.orders.filter(o => fyOf(o.date) === fy), opts).combined, prev: sumOrders(r.orders.filter(o => fyOf(o.date) === fy - 1), opts).combined }))
+    return [...m.values()].map(r => ({ ...r, cur: sumOrders(r.orders.filter(o => o.date >= per.from && o.date <= per.to), opts).combined, prev: sumOrders(r.orders.filter(o => o.date >= per.pfrom && o.date <= per.pto), opts).combined }))
       .filter(r => (r.cur || r.prev) && (typeF === "all" || r.type === typeF) && (repF === "all" || r.rep === repF))
       .sort((a, b) => b.cur - a.cur);
-  }, [orders, fy, typeF, repF, opts]);
+  }, [orders, fy, typeF, repF, opts]); // eslint-disable-line
   const chosen = rows.filter(r => sel[r.key]);
-  const make = list => openYearEndReport({ customers: list, fy, usdToCad: opts.usdToCad, logos, bmpLogo });
+  const make = list => openYearInReview({ customers: list, year: fy, allOrders: orders, products, categories, usdToCad: opts.usdToCad, logos, bmpLogo });
   const all = rows.length && chosen.length === rows.length;
   return (
     <div style={{ flex: 1, minWidth: 0 }}>
@@ -1330,20 +1336,20 @@ function YearEndPicker({ T, orders, settings, opts, logos, bmpLogo, openAccount 
         <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11, opacity: chosen.length ? 1 : .5 }} disabled={!chosen.length} onClick={() => make(chosen)}>Create PDF for {chosen.length || ""} selected</button>
       </div>
       <div style={{ fontSize: 11, color: T.tableHeadText, marginBottom: 10, lineHeight: 1.5 }}>
-        Each customer gets a "Year in Review": totals and month-by-month purchases vs the year before, top products, a page showing what they ordered more or less of, and their order history.
+        Each customer gets a two-page "Year in Review" for the calendar year vs the year before: total purchases, orders and average order, month by month, spending by category, their top 10 products, what's new for them, and products popular with distributors like them.
         The report opens in a new window — choose "Save as PDF" in the print dialog.
       </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-        <select value={fy} onChange={e => setFy(+e.target.value)} style={{ fontSize: 11, height: 28 }}>{fys.map(y => <option key={y} value={y}>Fiscal {y} (Dec {y - 1} – Nov {y})</option>)}</select>
+        <select value={fy} onChange={e => setFy(+e.target.value)} style={{ fontSize: 11, height: 28 }}>{years.map(y => <option key={y} value={y}>{y}{y === thisYear ? " (so far)" : ""} vs {y - 1}</option>)}</select>
         <select value={typeF} onChange={e => setTypeF(e.target.value)} style={{ fontSize: 11, height: 28 }}><option value="Distributor">Distributors</option><option value="End User">End Users</option><option value="all">Distributors + End Users</option></select>
         <select value={repF} onChange={e => setRepF(e.target.value)} style={{ fontSize: 11, height: 28 }}><option value="all">All account holders</option>{REPS.map(r => <option key={r}>{r}</option>)}</select>
       </div>
       <Card T={T} pad={0}>
-        {!rows.length ? <div style={{ fontSize: 12, color: T.tableHeadText, padding: 12 }}>No customers with purchases in FY{fy} or FY{fy - 1}.</div> : (
+        {!rows.length ? <div style={{ fontSize: 12, color: T.tableHeadText, padding: 12 }}>No customers with purchases in {fy} or {fy - 1}.</div> : (
           <table className="data-table">
             <thead><tr>
               <th style={{ width: 30 }}><input type="checkbox" checked={!!all} onChange={() => setSel(all ? {} : Object.fromEntries(rows.map(r => [r.key, true])))} /></th>
-              <th>Customer</th><th>Held by</th><th style={{ textAlign: "right" }}>FY{fy} (CAD)</th><th style={{ textAlign: "right" }}>FY{fy - 1} (CAD)</th><th style={{ textAlign: "right" }}>Change</th><th></th>
+              <th>Customer</th><th>Held by</th><th style={{ textAlign: "right" }}>{fy}{per.inProgress ? " so far" : ""} (CAD)</th><th style={{ textAlign: "right" }}>{fy - 1}{per.inProgress ? " same dates" : ""} (CAD)</th><th style={{ textAlign: "right" }}>Change</th><th></th>
             </tr></thead>
             <tbody>{rows.map(r => {
               const ch = r.prev ? ((r.cur - r.prev) / r.prev) * 100 : null;

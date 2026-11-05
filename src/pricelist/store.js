@@ -75,8 +75,8 @@ export async function makeActive(db, draft, current, liveProducts, categories, b
   const catOf = sku => categories[sku] || "Uncategorized";
   const products = versionProducts(draft, liveProducts, categories);
   const customers = customerLists(draft, catOf);
-  if (current) await updateDoc(doc(db, COL, current.id), clean({ status: "archived", products: liveProducts, archivedAt: at, archivedBy: by, log: arrayUnion({ at, by, what: `Replaced by ${draft.name}` }) }));
+  if (current) await updateDoc(doc(db, COL, current.id), { ...clean({ status: "archived", products: liveProducts, archivedAt: at, archivedBy: by }), log: arrayUnion({ at, by, what: `Replaced by ${draft.name}` }) });
   await setDoc(doc(db, "config", "productsCAD"), clean({ items: products }));
-  await updateDoc(doc(db, COL, draft.id), clean({ status: "current", customers, activatedAt: at, activatedBy: by, updatedAt: at, updatedBy: by, log: arrayUnion({ at, by, what: `Made active — quotes now use ${draft.name}` }) }));
+  await updateDoc(doc(db, COL, draft.id), { ...clean({ status: "current", customers, activatedAt: at, activatedBy: by, updatedAt: at, updatedBy: by }), log: arrayUnion({ at, by, what: `Made active — quotes now use ${draft.name}` }) });
   await publishCustomerPrices(db, { ...draft, status: "current", customers }, catOf);
 }

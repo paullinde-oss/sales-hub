@@ -44,10 +44,12 @@ export function pctFor(v, sku, cat) {
 
 // One price: an exact price typed in wins; otherwise base × (1 + %), rounded to the whole dollar
 // (Paul: whole dollars from the 2027 list on — so prices with no increase are rounded too)
-function newPrice(base, pct, exact) {
+// round = false (a draft's "Round every price" switch turned off): only increased prices change
+function newPrice(base, pct, exact, round = true) {
   if (exact !== undefined && exact !== null && exact !== "") return num(exact);
   const b = num(base);
   if (b === null || b <= 0) return base === undefined ? "" : base;
+  if (!round && !pct) return b;
   return roundDollar(b * (1 + (pct || 0) / 100));
 }
 
@@ -60,7 +62,7 @@ export function versionProducts(v, liveProducts, categories = {}) {
     const cat = categories[p.sku] || p.category || "Uncategorized";
     const pct = pctFor(v, p.sku, cat), ov = v.overrides?.[up(p.sku)] || {};
     const out = { ...p };
-    PRICE_FIELDS.forEach(f => { out[f] = newPrice(p[f], pct, ov[f]); });
+    PRICE_FIELDS.forEach(f => { out[f] = newPrice(p[f], pct, ov[f], v.roundWhole !== false); });
     return out;
   });
 }
@@ -79,7 +81,7 @@ export function customerLists(v, catOf = () => "") {
     skus.forEach(sku => {
       const base = (l.prices || {})[sku] || {}, ex = (l.exact || {})[sku] || {};
       prices[sku] = {};
-      new Set([...Object.keys(base), ...Object.keys(ex)]).forEach(f => { prices[sku][f] = newPrice(base[f], pctFor(v, sku, catOf(sku)), ex[f]); });
+      new Set([...Object.keys(base), ...Object.keys(ex)]).forEach(f => { prices[sku][f] = newPrice(base[f], pctFor(v, sku, catOf(sku)), ex[f], v.roundWhole !== false); });
     });
     out[name] = { terms: l.terms || [name], prices };
   });

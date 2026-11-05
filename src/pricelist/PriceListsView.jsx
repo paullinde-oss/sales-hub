@@ -111,7 +111,8 @@ function VersionEditor(props) {
     if (!draft) return null; // compare drafts against the current list
     return new Map((products || []).map(p => [up(p.sku), p]));
   }, [draft, products]);
-  const [restore, setRestore] = useState(false);
+  const [restore, setRestore] = useState(false); // true = this archived version, or { products, name } from a file
+  const restoreFile = useRef(null);
   const tabs = TABS.filter(([k]) => (k !== "increases" || draft) && (k !== "margins" || draft || props.canCosts));
   const ctx = { ...props, draft, editable, save, catOf, priced, base };
 
@@ -126,9 +127,17 @@ function VersionEditor(props) {
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: 11, color: T.tableHeadText }}>Last edited by <b style={{ color: T.text }}>{v.updatedBy || "—"}</b> · {when(v.updatedAt)}</span>
         {v.status === "archived" && <button className="btn" onClick={() => setRestore(true)} title="Put this version's exact prices back on the current list">↺ Restore these prices…</button>}
+        {v.status === "current" && <><button className="btn" onClick={() => restoreFile.current?.click()} title="Put exact prices from a CSV back on the current list (shows what changes first)">↺ Restore prices from a file…</button>
+          <input ref={restoreFile} type="file" accept=".csv" style={{ display: "none" }} onChange={async e => {
+            const f = e.target.files?.[0]; e.target.value = ""; if (!f) return;
+            const { rows } = readPriceCSV(await f.text(), products);
+            setRestore({ products: rows.map(r => ({ sku: r.sku, ...r.prices })), name: f.name });
+          }} /></>}
         {v.status !== "current" && <button className="btn-del" onClick={async () => { if (confirm(`Delete ${draft ? "the draft" : "the saved price list"} ${v.name}? This can't be undone.`)) { await deleteDraft(db, v.id); back(); } }}>Delete {draft ? "draft" : "from history"}</button>}
         {draft && <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} onClick={async () => {
           const changes = priced.reduce((nn, p) => nn + PRICE_FIELDS.filter(f => priceNum(base?.get(up(p.sku))?.[f]) !== priceNum(p[f])).length, 0);
+          const hasIncreases = Object.values(v.rules?.categories || {}).some(x => x) || Object.values(v.rules?.skus || {}).some(x => x) || Object.keys(v.overrides || {}).length;
+          if (!hasIncreases && changes && !confirm(`Careful: ${v.name} has no price increases. Making it active would only ROUND ${changes} of your current prices to the whole dollar.\n\nIf you just want to keep using today's prices, press Cancel — you don't need to make anything active.`)) return;
           if (!confirm(`Make ${v.name} the current price list?\n\n${changes} prices will change (increases and whole-dollar rounding) — these become the prices quotes use. Quotes already made keep their prices. ${current ? current.name + " moves to History, where it can be restored." : ""}`)) return;
           await makeActive(db, v, current, products, categories, loginName); back();
         }}>Make active</button>}
@@ -145,15 +154,16 @@ function VersionEditor(props) {
           : tab === "output" ? <Output {...ctx} />
           : <Log {...ctx} />}
       </div>
-      {restore && <RestorePrices T={T} db={db} v={v} live={products} current={current} loginName={loginName} onClose={() => setRestore(false)} />}
+      {restore && <RestorePrices T={T} db={db} v={v} live={products} current={current} loginName={loginName} onClose={() => setRestore(false)} savedProducts={restore === true ? null : restore.products} sourceName={restore === true ? null : restore.name} />}
     </div>
   );
 }
 
 // ── Restore a saved version's exact prices onto the current list ─────────────
 // e.g. a list made active by mistake rounded the prices — the version it replaced still holds them
-function RestorePrices({ T, db, v, live, current, loginName, onClose }) {
-  const saved = new Map((v.products || []).map(p => [up(p.sku), p]));
+function RestorePrices({ T, db, v, live, current, loginName, onClose, savedProducts, sourceName }) {
+  const src = sourceName || v.name;
+  const saved = new Map((savedProducts || v.products || []).map(p => [up(p.sku), p]));
   const changes = [];
   (live || []).forEach(p => {
     const o = saved.get(up(p.sku)); if (!o) return;
@@ -166,14 +176,14 @@ function RestorePrices({ T, db, v, live, current, loginName, onClose }) {
     setBusy(true);
     const items = live.map(p => { const q = { ...p }; changes.forEach(c => { if (c.sku === p.sku && sel.has(c.sku + "|" + c.f)) q[c.f] = saved.get(up(p.sku))[c.f]; }); return q; });
     await setDoc(doc(db, "config", "productsCAD"), JSON.parse(JSON.stringify({ items })));
-    if (current) await updateVersion(db, current.id, {}, loginName, `Restored ${sel.size} prices from ${v.name}`);
+    if (current) await updateVersion(db, current.id, {}, loginName, `Restored ${sel.size} prices from ${src}`);
     setBusy(false); onClose();
   };
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 720 }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Restore prices from {v.name}</div>
-        <div style={{ fontSize: 12, color: T.subtext, marginBottom: 10, lineHeight: 1.5 }}>{changes.length} prices on the current list differ from {v.name}. Ticked by default: the ones that look like they were only <b>rounded</b> to the whole dollar. Anything you changed on purpose is unticked — tick it to restore it too.</div>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Restore prices from {src}</div>
+        <div style={{ fontSize: 12, color: T.subtext, marginBottom: 10, lineHeight: 1.5 }}>{changes.length} prices on the current list differ from {src}. Ticked by default: the ones that look like they were only <b>rounded</b> to the whole dollar. Anything you changed on purpose is unticked — tick it to restore it too.</div>
         <div style={{ maxHeight: 380, overflow: "auto", border: `1px solid ${T.border}` }}>
           <table className="data-table"><thead><tr><th><input type="checkbox" checked={sel.size === changes.length && changes.length > 0} onChange={e => setSel(new Set(e.target.checked ? changes.map(c => c.sku + "|" + c.f) : []))} /></th><th>SKU</th><th>Price</th><th style={{ textAlign: "right" }}>Now</th><th style={{ textAlign: "right" }}>Restore to</th><th /></tr></thead>
             <tbody>{changes.map(c => { const k = c.sku + "|" + c.f; return <tr key={k}><td><input type="checkbox" checked={sel.has(k)} onChange={() => toggle(k)} /></td><td style={{ fontFamily: "monospace", fontSize: 11 }}>{c.sku}</td><td>{FIELD_LABEL[c.f]}</td><td style={{ textAlign: "right" }}>{fmt(c.now)}</td><td style={{ textAlign: "right", fontWeight: 600 }}>{fmt(c.was)}</td><td style={{ fontSize: 10, color: T.tableHeadText }}>{c.rounded ? "rounded" : "changed"}</td></tr>; })}</tbody></table>
@@ -209,6 +219,12 @@ function Increases({ T, v, save, products, categories, categoryOrder, base, pric
         </tr>)}</tbody>
       </table>
       <div style={{ fontSize: 11, color: T.tableHeadText, marginTop: 10 }}>{skuRules} SKU-specific % · {exact} SKUs with exact prices typed in</div>
+    </Card>
+    <Card T={T} title="Rounding">
+      <label style={{ fontSize: 12, color: T.subtext, display: "flex", gap: 8, alignItems: "center" }}>
+        <input type="checkbox" checked={v.roundWhole !== false} onChange={e => save({ roundWhole: e.target.checked }, `Round every price to the whole dollar: ${e.target.checked ? "on" : "off"}`)} />
+        Round <b>every</b> price to the whole dollar (also prices with no increase). Turn off to round only the prices that go up.
+      </label>
     </Card>
     <Card T={T} title="US dollar prices">
       <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12, color: T.subtext, flexWrap: "wrap" }}>

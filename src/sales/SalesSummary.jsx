@@ -1099,7 +1099,7 @@ const REPORTS = [
   ["product", "Sales by product / SKU"],
   ["custprod", "Customer × product (who ordered what)"],
   ["skubuyers", "Who buys a product (by category / SKU)"],
-  ["monthly", "Monthly sales — fiscal year vs last year"],
+  ["monthly", "Monthly sales — fiscal year vs previous years"],
   ["location", "Sales by location (BRO vs CAL)"],
   ["type", "Distributors vs End Users"],
   ["city", "Sales by ship-to city"],
@@ -1208,19 +1208,24 @@ function ReportsView({ T, db, orders, settings, opts, currencyMode, openAccount,
     if (g.length) rows.push(["Total", `${g.length} customer${g.length === 1 ? "" : "s"}`, "", fmtQty(tq), fmtMoney(total, 2), "100%", tq ? fmtMoney(total / tq, 2) : "—", new Set(g.flatMap(r => [...r.orders])).size, ""]);
   } else if (rep === "monthly") {
     const pool = filterOrders(orders, { ...fl.filters, from: "", to: "", currency: currencyMode });
-    headers = ["Month", `FY${fy} ${cur}`, `FY${fy - 1} ${cur}`, "Change", `FY${fy} orders`, `FY${fy - 1} orders`];
-    let a = 0, b = 0;
+    // Two years back is added once there is data for it (sales records start Dec 2024)
+    const two = pool.some(o => o.date >= fyStart(fy - 2) && o.date <= fyEnd(fy - 2));
+    headers = ["Month", `FY${fy} ${cur}`, `FY${fy - 1} ${cur}`, "Change", ...(two ? [`FY${fy - 2} ${cur}`, `Change vs FY${fy - 2}`] : []), `FY${fy} orders`, `FY${fy - 1} orders`, ...(two ? [`FY${fy - 2} orders`] : [])];
+    let a = 0, b = 0, c2 = 0;
+    const pct = (x, y) => y ? (((x - y) / y) * 100).toFixed(0) + "%" : "";
     for (let i = 0; i < 12; i++) {
       const d = parseYmd(fyStart(fy)); d.setMonth(d.getMonth() + i);
       const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       const pym = `${d.getFullYear() - 1}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       const s1 = sumOrders(pool.filter(o => o.date.slice(0, 7) === ym), opts), s2 = sumOrders(pool.filter(o => o.date.slice(0, 7) === pym), opts);
-      const v1 = money(s1), v2 = money(s2); a += v1; b += v2;
-      const ch = v2 ? (((v1 - v2) / v2) * 100).toFixed(0) + "%" : "";
-      rows.push([fmtMonth(ym + "-01"), fmtMoney(v1, 2), fmtMoney(v2, 2), ch, s1.count, s2.count]);
-      csvRows.push([ym, v1.toFixed(2), v2.toFixed(2), ch, s1.count, s2.count]);
+      const p2ym = `${d.getFullYear() - 2}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const s3 = sumOrders(pool.filter(o => o.date.slice(0, 7) === p2ym), opts);
+      const v1 = money(s1), v2 = money(s2), v3 = money(s3); a += v1; b += v2; c2 += v3;
+      const ch = pct(v1, v2);
+      rows.push([fmtMonth(ym + "-01"), fmtMoney(v1, 2), fmtMoney(v2, 2), ch, ...(two ? [fmtMoney(v3, 2), pct(v1, v3)] : []), s1.count, s2.count, ...(two ? [s3.count] : [])]);
+      csvRows.push([ym, v1.toFixed(2), v2.toFixed(2), ch, ...(two ? [v3.toFixed(2), pct(v1, v3)] : []), s1.count, s2.count, ...(two ? [s3.count] : [])]);
     }
-    rows.push(["Total", fmtMoney(a, 2), fmtMoney(b, 2), b ? (((a - b) / b) * 100).toFixed(0) + "%" : "", "", ""]);
+    rows.push(["Total", fmtMoney(a, 2), fmtMoney(b, 2), pct(a, b), ...(two ? [fmtMoney(c2, 2), pct(a, c2)] : []), "", "", ...(two ? [""] : [])]);
   } else if (rep === "inactive") {
     const last = new Map();
     orders.forEach(o => { const r = last.get(o.cust.key); if (!r || o.date > r.date) last.set(o.cust.key, { date: o.date, cust: o.cust }); });
@@ -1268,7 +1273,7 @@ function ReportsView({ T, db, orders, settings, opts, currencyMode, openAccount,
           <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{title}</div>
           <div style={{ flex: 1 }} />
           <button className="btn" onClick={() => downloadCSV(`${rep}-report.csv`, headers, csvRows)}>Export CSV</button>
-          <button className="btn" onClick={() => printReport(title, rep === "monthly" ? `Fiscal ${fy} vs ${fy - 1}` : rep === "inactive" ? `No orders in ${days}+ days` : `${fmtDate(fl.range[0])} – ${fmtDate(fl.range[1])}`, headers, shownRows)}>Print / PDF</button>
+          <button className="btn" onClick={() => printReport(title, rep === "monthly" ? `Fiscal ${fy} vs ${fy - 1}${orders.some(o => o.date >= fyStart(fy - 2) && o.date <= fyEnd(fy - 2)) ? ` and ${fy - 2}` : ""}` : rep === "inactive" ? `No orders in ${days}+ days` : `${fmtDate(fl.range[0])} – ${fmtDate(fl.range[1])}`, headers, shownRows)}>Print / PDF</button>
         </div>
         {rep === "monthly" ? (
           <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>

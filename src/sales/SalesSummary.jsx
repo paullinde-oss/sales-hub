@@ -174,7 +174,9 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
           {sync ? <span style={{ color: T.gold, display: "inline-flex", alignItems: "center", gap: 6 }}><Loader T={T} size={18} inline />{sync.stage}{sync.total ? ` ${sync.done}/${sync.total}` : ""}</span>
             : settings.lastSync ? <>Last synced {timeAgo(settings.lastSync.at)}<br />by {settings.lastSync.by || "—"}</> : "Never synced"}
         </div>}
-        {canSync && <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} disabled={!!sync} onClick={() => runSync(false)}>
+        {/* The hourly automatic sync covers everyone, so only admins are offered "Connect Dropbox";
+            anyone already connected keeps ↻ Refresh */}
+        {canSync && (connected || isAdmin) && <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} disabled={!!sync} onClick={() => runSync(false)}>
           {sync ? "Syncing…" : connected ? "↻ Refresh" : "Connect Dropbox"}
         </button>}
       </div>
@@ -205,7 +207,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
             <Empty T={T}>
               <div style={{ fontSize: 14, color: T.text, marginBottom: 8 }}>No order confirmations yet</div>
               <div style={{ marginBottom: 14 }}>{connected ? "Click Refresh to read your order confirmations from Dropbox." : "Connect Dropbox to pull in your order confirmations. You only need to do this once per computer."}</div>
-              {canSync && <button className="btn-gold" onClick={() => runSync(false)}>{connected ? "↻ Refresh now" : "Connect Dropbox"}</button>}
+              {canSync && (connected || isAdmin) && <button className="btn-gold" onClick={() => runSync(false)}>{connected ? "↻ Refresh now" : "Connect Dropbox"}</button>}
             </Empty>
           )
           : view === "dashboard" ? <>

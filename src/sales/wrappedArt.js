@@ -34,7 +34,7 @@ export function cardSVG(card, i, { year, logo, map = "" }) {
   const bs = bigLines.length > 1 ? Math.min(bigSize * 1.7, 96) : bigSize;
   const textLines = wrap(card.text, 30), subLines = wrap(card.sub, 40);
   let y = 330;
-  const parts = [`<text x="${S / 2}" y="${y}" text-anchor="middle" font-size="150">${esc(card.emoji || "")}</text>`];
+  const parts = [`<text x="${S / 2}" y="${y}" text-anchor="middle" font-size="150" fill="${fg}">${esc(card.emoji || "")}</text>`];
   y += 70 + bs * 0.9;
   bigLines.forEach((l, k) => parts.push(`<text x="${S / 2}" y="${y + k * bs * 1.05}" text-anchor="middle" font-family="${FONT}" font-size="${bs}" font-weight="800" fill="${fg}">${esc(l)}</text>`));
   y += (bigLines.length - 1) * bs * 1.05 + 80;
@@ -77,7 +77,12 @@ export function svgToCanvas(svg, size = S) {
   });
 }
 export function download(canvas, name) {
-  return new Promise(res => canvas.toBlob(b => { const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = name; a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); res(); }, 400); }, "image/png"));
+  return new Promise((res, rej) => canvas.toBlob(b => {
+    if (!b) return rej(new Error("no image"));
+    const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = name; a.style.display = "none";
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); res(); }, 600);
+  }, "image/png"));
 }
 // One tall image for email: cards two across
 export async function emailGraphic(svgs) {

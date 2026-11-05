@@ -98,7 +98,7 @@ export function buildCards(f, geo = {}) {
   if (f.cities.length) cards.push({ id: "map", map: true, emoji: "🗺️", big: "", text: `Where our products went in ${Y}`, sub: "" });
   if (f.cities[0]) add("topcity", "🏙️", `${f.cities[0].city}${f.cities[0].region ? ", " + f.cities[0].region : ""}`, "was our most-shipped-to city", `${n0(f.cities[0].orders)} deliveries`);
   if (geo.furthest) add("furthest", "🧭", `${n0(geo.furthest.km)} km`, `our furthest delivery — ${geo.furthest.label}`, `That's ${n1(geo.furthest.km / BROOKS_CALGARY_KM)}× the drive from Brooks to Calgary`);
-  if (f.usOrders) add("border", "🇨🇦🇺🇸", n0(f.usOrders), "times our products crossed the border", f.states.length ? `to ${f.states.length} US state${f.states.length > 1 ? "s" : ""}` : "");
+  if (f.usOrders) add("border", "🌎", n0(f.usOrders), "times our products crossed the border", f.states.length ? `to ${f.states.length} US state${f.states.length > 1 ? "s" : ""}` : "");
   if (f.rolls) add("blankets", "🌱", n0(f.rolls), "rolls of erosion control blankets", `Enough to cover ${n0(f.sy / CFL_FIELD_SY)} Canadian football fields (${n0(f.sy * 0.836127 / 10000)} hectares)`);
   if (f.wft) { const k = f.wft * 0.3048 / 1000; add("wattles", "🌾", `${n0(k)} km`, `of straw wattles (${n0(f.logs)} logs)`, k >= CALGARY_EDMONTON_KM / 2 ? `Laid end to end: Calgary → Edmonton ${n1(k / CALGARY_EDMONTON_KM)} times` : `That's ${n1(k / 0.4)} laps of an Olympic running track… in wattles`); }
   if (f.sections) { const m = f.sections * 50 * 0.3048; add("curtains", "🌊", `${n1(m / 1000)} km`, `of turbidity curtain & boom (${n0(f.sections)} sections)`, `As tall as ${n1(m / CN_TOWER_M)} CN Towers stacked up`); }
@@ -129,25 +129,26 @@ const CENTROIDS = {
   AL: [32.8, -86.8], AK: [64.2, -149.5], AZ: [34.0, -111.1], AR: [34.8, -92.2], CA: [36.8, -119.4], CO: [39.0, -105.5], CT: [41.6, -72.7], DE: [39.0, -75.5], FL: [27.8, -81.7], GA: [32.2, -82.9], HI: [19.9, -155.6], ID: [44.1, -114.7], IL: [40.0, -89.2], IN: [39.8, -86.1], IA: [42.0, -93.6], KS: [38.5, -98.4], KY: [37.8, -84.3], LA: [31.0, -92.0], ME: [45.3, -69.4], MD: [39.0, -76.6], MA: [42.4, -71.4], MI: [44.3, -85.6], MN: [46.7, -94.7], MS: [32.7, -89.7], MO: [38.5, -92.5], MT: [46.9, -110.4], NE: [41.5, -99.9], NV: [38.8, -116.4], NH: [43.2, -71.6], NJ: [40.1, -74.4], NM: [34.5, -106.0], NY: [43.0, -75.5], NC: [35.6, -79.4], ND: [47.5, -100.5], OH: [40.4, -82.9], OK: [35.6, -97.5], OR: [44.0, -120.6], PA: [41.2, -77.2], RI: [41.7, -71.5], SC: [33.9, -80.9], SD: [44.4, -100.2], TN: [35.9, -86.4], TX: [31.0, -99.0], UT: [39.3, -111.7], VT: [44.0, -72.7], VA: [37.5, -78.9], WA: [47.4, -120.7], WV: [38.6, -80.6], WI: [44.6, -89.9], WY: [43.0, -107.6],
 };
 const cityKey = c => `${c.city}|${c.region}|${c.country}`;
-export async function locateCities(cities, cache = {}, onProgress = () => {}, saveCache = async () => {}) {
-  const out = {}, fresh = {};
-  let i = 0;
-  for (const c of cities) {
-    const k = cityKey(c);
-    if (cache[k]) { out[k] = cache[k]; continue; }
-    onProgress(++i);
-    let pos = null;
+export async function locateCities(cities, cache = {}, { onProgress = () => {}, onFound = () => {}, saveCache = async () => {}, stopped = () => false } = {}) {
+  const out = {}, todo = [];
+  cities.forEach(c => { const k = cityKey(c); if (cache[k]) out[k] = cache[k]; else { todo.push(c); if (CENTROIDS[c.region]) out[k] = CENTROIDS[c.region]; } });
+  let fresh = {}, blocked = false;
+  const flush = async () => { if (Object.keys(fresh).length) { const f = fresh; fresh = {}; try { await saveCache(f); } catch { /* try again next time */ } } };
+  for (let i = 0; i < todo.length && !blocked; i++) {
+    if (stopped()) break;
+    const c = todo[i], k = cityKey(c);
+    onProgress(i + 1, todo.length);
     try {
       const q = encodeURIComponent(`${c.city}, ${c.region}, ${c.country === "US" ? "USA" : "Canada"}`);
       const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${q}`, { headers: { Accept: "application/json" } });
+      if (r.status === 429 || r.status === 403) blocked = true; // too many lookups — keep the province/state spots for now
       const j = r.ok ? await r.json() : [];
-      if (j[0]) pos = [+(+j[0].lat).toFixed(4), +(+j[0].lon).toFixed(4)];
-      await new Promise(res => setTimeout(res, 1100)); // OpenStreetMap asks for 1 lookup per second
-    } catch { /* offline — fall back to the province/state */ }
-    if (pos) { out[k] = pos; fresh[k] = pos; }
-    else if (CENTROIDS[c.region]) out[k] = CENTROIDS[c.region];
+      if (j[0]) { const pos = [+(+j[0].lat).toFixed(4), +(+j[0].lon).toFixed(4)]; out[k] = pos; fresh[k] = pos; onFound(k, pos); }
+    } catch { blocked = true; /* offline — keep the province/state spots */ }
+    if ((i + 1) % 10 === 0) await flush(); // save as we go, so nothing is lost if the page is closed
+    await new Promise(res => setTimeout(res, 1100)); // OpenStreetMap asks for 1 lookup per second
   }
-  if (Object.keys(fresh).length) await saveCache(fresh);
+  await flush();
   return out;
 }
 
@@ -160,4 +161,4 @@ export function furthest(cities, pos) {
   });
   return best && best.km > 50 ? best : null;
 }
-export { cityKey };
+export { cityKey, CENTROIDS };

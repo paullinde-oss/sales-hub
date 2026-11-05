@@ -4,7 +4,7 @@
 // config/wrapped. City positions for the map are saved in config/geoCache.
 import { useEffect, useMemo, useState } from "react";
 import { doc, onSnapshot, setDoc, updateDoc, FieldPath } from "firebase/firestore";
-import { wrappedFacts, buildCards, finalCards, locateCities, furthest } from "./wrapped";
+import { wrappedFacts, buildCards, finalCards, locateCities, furthest, cityKey, CENTROIDS } from "./wrapped";
 import { cardSVG, mapSVG, svgToCanvas, download, emailGraphic, toDataURL } from "./wrappedArt";
 import logoUrl from "../assets/bmp-logo.png";
 import { today } from "./salesUtils";
@@ -26,17 +26,28 @@ export default function WrappedReport({ T, db, orders, quotes = [], products = [
   useEffect(() => { toDataURL(logoUrl).then(setLogo).catch(() => {}); }, []);
 
   const facts = useMemo(() => wrappedFacts({ orders, quotes, products, year }), [orders, quotes, products, year]);
-  // Place the cities on the map (first time: ~1 second per new city, then saved)
+  // Place the cities on the map: right away at saved spots (or the middle of the province/state),
+  // then each new city is looked up on OpenStreetMap (~1 second each) and saved for next time.
+  const citySig = facts.cities.map(cityKey).join(";");
   useEffect(() => {
-    if (geoCache === null || !facts.cities.length) { setPos({}); return; }
+    if (geoCache === null) return;
     let stop = false;
-    const missing = facts.cities.filter(c => !geoCache[`${c.city}|${c.region}|${c.country}`]).length;
-    locateCities(facts.cities, geoCache, i => !stop && setPlacing(`Placing cities on the map… ${i} of ${missing}`),
-      fresh => setDoc(doc(db, "config", "geoCache"), { map: fresh }, { merge: true }))
-      .then(p => { if (!stop) { setPos(p); setPlacing(""); } });
-    return () => { stop = true; };
-  }, [facts, geoCache === null]); // eslint-disable-line
-  useEffect(() => { let ok = true; if (Object.keys(pos).length) mapSVG(facts.cities, pos).then(m => ok && setMapArt(m)).catch(e => console.warn("map", e)); return () => { ok = false; }; }, [pos, facts]);
+    const quick = {};
+    facts.cities.forEach(c => { const k = cityKey(c), p = geoCache[k] || CENTROIDS[c.region]; if (p) quick[k] = p; });
+    setPos(quick);
+    locateCities(facts.cities, geoCache, {
+      stopped: () => stop,
+      onProgress: (i, n) => !stop && setPlacing(`Placing cities on the map… ${i} of ${n} (first time only)`),
+      onFound: (k, p) => !stop && setPos(prev => ({ ...prev, [k]: p })),
+      saveCache: fresh => setDoc(doc(db, "config", "geoCache"), { map: fresh }, { merge: true }),
+    }).finally(() => { if (!stop) setPlacing(""); });
+    return () => { stop = true; setPlacing(""); };
+  }, [citySig, geoCache === null]); // eslint-disable-line
+  useEffect(() => {
+    let ok = true;
+    const t = setTimeout(() => mapSVG(facts.cities, pos).then(m => ok && setMapArt(m)).catch(e => { console.warn("map", e); ok && setMapArt(`<text x="540" y="560" text-anchor="middle" font-family="Arial" font-size="30" fill="#999">Map couldn't be drawn</text>`); }), 250);
+    return () => { ok = false; clearTimeout(t); };
+  }, [pos, citySig]); // eslint-disable-line
 
   const settings = all[String(year)] || {};
   const cards = finalCards(buildCards(facts, { furthest: furthest(facts.cities, pos) }), settings, year);
@@ -47,6 +58,11 @@ export default function WrappedReport({ T, db, orders, quotes = [], products = [
     await updateDoc(doc(db, "config", "wrapped"), new FieldPath(String(year)), JSON.parse(JSON.stringify(next)));
   };
   const toggle = id => save({ ...settings, hidden: { ...(settings.hidden || {}), [id]: !settings.hidden?.[id] } });
+  const saveOne = async (c, i) => {
+    try { setBusy("Saving…"); await download(await svgToCanvas(svgOf(c, i)), fileName(c, i)); }
+    catch (e) { console.warn(e); alert("Sorry — that card couldn't be saved as a picture. Try again, or use Chrome / Edge."); }
+    finally { setBusy(""); }
+  };
   const fileName = (c, i) => `BMP Supplies ${year} Wrapped - ${String(i + 1).padStart(2, "0")} ${c.id}.png`;
 
   return (
@@ -55,10 +71,11 @@ export default function WrappedReport({ T, db, orders, quotes = [], products = [
         <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>🎉 BMP Supplies Wrapped</div>
         <select value={year} onChange={e => setYear(+e.target.value)} style={{ fontSize: 12, height: 28 }}>{years.map(y => <option key={y} value={y}>{y}{y === thisYear ? " (so far)" : ""}</option>)}</select>
         <div style={{ flex: 1 }} />
-        <button className="btn" disabled={!!busy} onClick={async () => { setBusy("Making the email graphic…"); const c = await emailGraphic(shown.map(svgOf)); await download(c, `BMP Supplies ${year} Wrapped - email.png`); setBusy(""); }}>⬇ Email graphic (one image)</button>
+        <button className="btn" disabled={!!busy} onClick={async () => { try { setBusy("Making the email graphic…"); const c = await emailGraphic(shown.map(svgOf)); await download(c, `BMP Supplies ${year} Wrapped - email.png`); } catch (e) { console.warn(e); alert("Sorry — the email graphic couldn't be made. Try again, or use Chrome / Edge."); } finally { setBusy(""); } }}>⬇ Email graphic (one image)</button>
         <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} disabled={!!busy} onClick={async () => {
-          for (let i = 0; i < shown.length; i++) { setBusy(`Saving card ${i + 1} of ${shown.length}…`); await download(await svgToCanvas(svgOf(shown[i], i)), fileName(shown[i], i)); }
-          setBusy("");
+          try { for (let i = 0; i < shown.length; i++) { setBusy(`Saving card ${i + 1} of ${shown.length}…`); await download(await svgToCanvas(svgOf(shown[i], i)), fileName(shown[i], i)); } }
+          catch (e) { console.warn(e); alert("Sorry — a card couldn't be saved as a picture. Try again, or use Chrome / Edge."); }
+          finally { setBusy(""); }
         }}>⬇ Download all {shown.length} cards</button>
       </div>
       <div style={{ fontSize: 11, color: T.tableHeadText, marginBottom: 12, lineHeight: 1.5 }}>
@@ -76,7 +93,7 @@ export default function WrappedReport({ T, db, orders, quotes = [], products = [
                 <label style={{ fontSize: 11, flex: 1 }}><input type="checkbox" checked={!c.hidden} onChange={() => toggle(c.id)} /> Include</label>
                 {!c.map && <button className="btn" style={{ padding: "2px 8px" }} onClick={() => setEdit({ ...c })}>✎</button>}
                 {c.custom && <button className="btn-del" style={{ padding: "2px 8px" }} onClick={() => save({ ...settings, custom: (settings.custom || []).filter(x => x.id !== c.id) })}>×</button>}
-                <button className="btn" style={{ padding: "2px 8px" }} disabled={c.hidden || (c.map && !mapArt)} onClick={async () => download(await svgToCanvas(svgOf(c, idx)), fileName(c, idx))}>⬇ PNG</button>
+                <button className="btn" style={{ padding: "2px 8px" }} disabled={c.hidden || (c.map && !mapArt)} onClick={() => saveOne(c, idx)}>⬇ PNG</button>
               </div>
             </div>
           );

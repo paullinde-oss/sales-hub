@@ -1321,7 +1321,7 @@ function YearEndPicker({ T, orders, settings, opts, logos, bmpLogo, openAccount,
       if (!r) { r = { key: o.cust.key, name: o.cust.name, rep: o.cust.rep, type: o.cust.type, orders: [] }; m.set(o.cust.key, r); }
       r.orders.push(o);
     });
-    return [...m.values()].map(r => ({ ...r, cur: sumOrders(r.orders.filter(o => o.date >= per.from && o.date <= per.to), opts).combined, prev: sumOrders(r.orders.filter(o => o.date >= per.pfrom && o.date <= per.pto), opts).combined }))
+    return [...m.values()].map(r => ({ ...r, cur: sumOrders(r.orders.filter(o => o.date >= per.from && o.date <= per.to), { ...opts, includeFreight: false }).combined, prev: sumOrders(r.orders.filter(o => o.date >= per.pfrom && o.date <= per.pto), { ...opts, includeFreight: false }).combined }))
       .filter(r => (r.cur || r.prev) && (typeF === "all" || r.type === typeF) && (repF === "all" || r.rep === repF))
       .sort((a, b) => b.cur - a.cur);
   }, [orders, fy, typeF, repF, opts]); // eslint-disable-line

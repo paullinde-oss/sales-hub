@@ -2,6 +2,7 @@
 // Calendar year vs the year before (Paul: "2027 compared to 2026", not fiscal). Made for
 // distributors, so it shows dollars. Page 1: totals, month by month, spending by category.
 // Page 2: top 10 products, products new this year, "popular with distributors like you".
+// Freight is left out everywhere (totals, months, categories, products).
 // Opens a print window → "Save as PDF"; file name "Customer — 2026 BMP Supplies Year in Review".
 import { fmtMoney, fmtQty, orderAmount, orderCurrency, today } from "./salesUtils";
 
@@ -32,10 +33,10 @@ function numbers(c, per, ctx) {
   const currency = curs.size === 1 ? [...curs][0] : "CAD";
   const conv = (amt, o) => (curs.size > 1 && orderCurrency(o) === "USD" ? amt * ctx.usdToCad : amt);
   const sum = list => {
-    const r = { total: 0, freight: 0, orders: list.length, months: Array(12).fill(0), cats: new Map(), skus: new Map() };
+    const r = { total: 0, orders: list.length, months: Array(12).fill(0), cats: new Map(), skus: new Map() };
     list.forEach(o => {
-      const amt = conv(orderAmount(o, true), o);
-      r.total += amt; r.freight += conv(o.freight || 0, o); r.months[+o.date.slice(5, 7) - 1] += amt;
+      const amt = conv(orderAmount(o, false), o); // without freight (Paul: freight isn't part of this report)
+      r.total += amt; r.months[+o.date.slice(5, 7) - 1] += amt;
       (o.lines || []).forEach(l => {
         const a = conv(l.amount || 0, o), k = l.sku && !NOT_PRODUCT.test(l.sku) ? up(l.sku) : `desc:${l.desc}`;
         const cat = ctx.categories[l.sku] || ctx.categories[up(l.sku)] || "Other products";
@@ -121,7 +122,7 @@ function report(c, per, ctx) {
       ${kpi("Average order", money(d.cur.avg), `${change(d.cur.avg, d.prev.avg)} <span>vs ${money(d.prev.avg)}</span>`)}
       ${kpi("Products purchased", skuCountNow, `<span>${skuCountPrev} in ${Y - 1}</span>`)}
     </div>
-    ${d.prev.total ? `<div class="headline">${ch >= 0 ? `Your purchases with BMP Supplies grew <b>${Math.abs(ch).toFixed(0)}%</b>` : `Your purchases with BMP Supplies were <b>${Math.abs(ch).toFixed(0)}%</b> lower`} compared with ${plabel}${d.cur.freight ? ` · includes ${money(d.cur.freight)} freight` : ""}.</div>` : ""}
+    ${d.prev.total ? `<div class="headline">${ch >= 0 ? `Your purchases with BMP Supplies grew <b>${Math.abs(ch).toFixed(0)}%</b>` : `Your purchases with BMP Supplies were <b>${Math.abs(ch).toFixed(0)}%</b> lower`} compared with ${plabel}.</div>` : ""}
     <h2>Month by month</h2>${monthChart(d.cur.months, d.prev.months, Y)}
     <h2>Spending by product category</h2><div class="cats">${categoryBars(d, money)}</div>
     <div class="legend" style="margin-top:4px"><span><i style="background:${GREY}"></i>${Y - 1}</span><span><i style="background:${GOLD}"></i>${Y}</span></div>

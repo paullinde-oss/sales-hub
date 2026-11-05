@@ -1,7 +1,7 @@
 // ─── Price list versions in Firestore ────────────────────────────────────────
 // priceLists/{id} — one document per version (see priceLists.js). config/customerPrices holds the
 // customer price lists of the current version, which quotes use ({ lists, usdMultiplier, version }).
-import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, arrayUnion, deleteField, FieldPath } from "firebase/firestore";
+import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, arrayUnion, deleteField, FieldPath, getDoc, getDocs } from "firebase/firestore";
 import { versionProducts, customerLists, MASTER_2026_V2_SKUS, DEFAULT_NOTES, up } from "./priceLists";
 
 const COL = "priceLists";
@@ -79,4 +79,25 @@ export async function makeActive(db, draft, current, liveProducts, categories, b
   await setDoc(doc(db, "config", "productsCAD"), clean({ items: products }));
   await updateDoc(doc(db, COL, draft.id), { ...clean({ status: "current", customers, activatedAt: at, activatedBy: by, updatedAt: at, updatedBy: by }), log: arrayUnion({ at, by, what: `Made active — quotes now use ${draft.name}` }) });
   await publishCustomerPrices(db, { ...draft, status: "current", customers }, catOf);
+}
+
+// ── Scheduled go-live ────────────────────────────────────────────────────────
+// A draft marked "scheduled" becomes the current list on its effective date (Alberta time).
+// The hourly GitHub job (scripts/autosync.mjs) calls activateDue; it works the same in a browser.
+export const albertaToday = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Edmonton" });
+export async function activateDue(db, by = "Scheduled go-live") {
+  const lists = (await getDocs(collection(db, COL))).docs.map(d => ({ ...d.data(), id: d.id }));
+  const due = lists.filter(v => v.status === "draft" && v.scheduled && v.effectiveDate && v.effectiveDate <= albertaToday())
+    .sort((a, b) => (a.effectiveDate < b.effectiveDate ? -1 : 1));
+  const done = [];
+  for (const draft of due.slice(-1)) { // if several are due, the latest effective one wins
+    const current = lists.find(v => v.status === "current");
+    const live = (await getDoc(doc(db, "config", "productsCAD"))).data()?.items || [];
+    const categories = (await getDoc(doc(db, "config", "categories"))).data()?.map || {};
+    if (!live.length) throw new Error("Product list is empty — not activating " + draft.name);
+    await makeActive(db, draft, current, live, categories, by);
+    await updateDoc(doc(db, COL, draft.id), { scheduled: false });
+    done.push(draft.name);
+  }
+  return done;
 }

@@ -6,6 +6,7 @@ import { listenPriceLists, updateVersion, setUpCurrent, startDraft, deleteDraft,
 import { PRICE_FIELDS, FIELD_LABEL, versionProducts, customerLists, pctFor, priceNum, up, fmtEffective, yearOf, DEFAULT_NOTES, readPriceCSV } from "./priceLists";
 import { buildPriceListHTML, pdfFileName } from "./pdf";
 import { downloadCSV } from "../sales/salesUtils";
+import { albertaToday } from "./store";
 import { doc, setDoc } from "firebase/firestore";
 import CostsView, { CostGate, marginColor } from "./CostsView";
 import Projection from "./Projection";
@@ -65,7 +66,7 @@ export default function PriceListsView({ T, db, products, categories = {}, subCa
 }
 
 function VersionRow({ T, v, onOpen }) {
-  const tag = { current: ["CURRENT", GREEN], draft: ["DRAFT", "#c8a030"], archived: ["HISTORY", "#888"] }[v.status];
+  const tag = v.status === "draft" && v.scheduled ? ["SCHEDULED", GREEN] : { current: ["CURRENT", GREEN], draft: ["DRAFT", "#c8a030"], archived: ["HISTORY", "#888"] }[v.status];
   return (
     <div onClick={onOpen} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 4px", borderBottom: `1px solid ${T.border}`, cursor: "pointer" }}>
       <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: ".08em", color: tag[1], border: `1px solid ${tag[1]}`, padding: "1px 6px", borderRadius: 2 }}>{tag[0]}</span>
@@ -134,13 +135,28 @@ function VersionEditor(props) {
             setRestore({ products: rows.map(r => ({ sku: r.sku, ...r.prices })), name: f.name });
           }} /></>}
         {v.status !== "current" && <button className="btn-del" onClick={async () => { if (confirm(`Delete ${draft ? "the draft" : "the saved price list"} ${v.name}? This can't be undone.`)) { await deleteDraft(db, v.id); back(); } }}>Delete {draft ? "draft" : "from history"}</button>}
-        {draft && <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} onClick={async () => {
+        {draft && (() => {
+          const due = !v.effectiveDate || v.effectiveDate <= albertaToday();
           const changes = priced.reduce((nn, p) => nn + PRICE_FIELDS.filter(f => priceNum(base?.get(up(p.sku))?.[f]) !== priceNum(p[f])).length, 0);
           const hasIncreases = Object.values(v.rules?.categories || {}).some(x => x) || Object.values(v.rules?.skus || {}).some(x => x) || Object.keys(v.overrides || {}).length;
-          if (!hasIncreases && changes && !confirm(`Careful: ${v.name} has no price increases. Making it active would only ROUND ${changes} of your current prices to the whole dollar.\n\nIf you just want to keep using today's prices, press Cancel — you don't need to make anything active.`)) return;
-          if (!confirm(`Make ${v.name} the current price list?\n\n${changes} prices will change (increases and whole-dollar rounding) — these become the prices quotes use. Quotes already made keep their prices. ${current ? current.name + " moves to History, where it can be restored." : ""}`)) return;
-          await makeActive(db, v, current, products, categories, loginName); back();
-        }}>Make active</button>}
+          const check = () => hasIncreases || !changes || confirm(`Careful: ${v.name} has no price increases. It would only ROUND ${changes} of your current prices to the whole dollar.\n\nIf you just want to keep using today's prices, press Cancel — you don't need to make anything active.`);
+          if (v.scheduled) return <>
+            <span style={{ fontSize: 11, fontWeight: 700, color: GREEN, border: `1px solid ${GREEN}`, padding: "4px 10px", borderRadius: 2 }}>⏱ Scheduled — goes live automatically {fmtEffective(v.effectiveDate)}</span>
+            <button className="btn" onClick={() => save({ scheduled: false }, "Schedule cancelled")}>Cancel schedule</button>
+          </>;
+          return due
+            ? <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} onClick={async () => {
+                if (!check()) return;
+                if (!confirm(`Make ${v.name} the current price list now?\n\n${changes} prices will change — these become the prices quotes use. Quotes already made keep their prices. ${current ? current.name + " moves to History, where it can be restored." : ""}`)) return;
+                await makeActive(db, v, current, products, categories, loginName); back();
+              }}>Make active now</button>
+            : <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} onClick={async () => {
+                if (!v.effectiveDate) return alert("Set the effective date first.");
+                if (!check()) return;
+                if (!confirm(`Schedule ${v.name} to go live on ${fmtEffective(v.effectiveDate)}?\n\n${current ? current.name : "The current list"} stays in use until then. Shortly after midnight on ${fmtEffective(v.effectiveDate)} (Alberta time) ${v.name} becomes the current list automatically and ${changes} prices change. You can still edit the draft — the latest version is what goes live — or cancel the schedule.`)) return;
+                save({ scheduled: true, scheduledBy: loginName, scheduledAt: new Date().toISOString() }, `Scheduled to go live on ${v.effectiveDate}`);
+              }}>Schedule for {fmtEffective(v.effectiveDate)}</button>;
+        })()}
       </div>
       <div style={{ display: "flex", gap: 4, padding: "8px 16px", borderBottom: `1px solid ${T.border}`, background: T.panelBg, flexWrap: "wrap" }}>
         {tabs.map(([k, l]) => <button key={k} onClick={() => setTab(k)} style={{ background: tab === k ? T.activeBg : "transparent", border: `1px solid ${tab === k ? T.borderLight : "transparent"}`, color: tab === k ? T.gold : T.subtext, padding: "5px 11px", fontSize: 11, borderRadius: 2 }}>{l}</button>)}

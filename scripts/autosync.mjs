@@ -7,6 +7,14 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, doc, getDoc, getDocs, setDoc, collection, terminate } from "firebase/firestore";
 import { firebaseConfig } from "../src/firebaseConfig.js";
 import { runFullSync, SYNC_DEFAULTS } from "../src/sales/syncRunner.js";
+import { activateDue } from "../src/pricelist/store.js";
+
+// Price lists scheduled to go live today (Products & Price List → Price Lists → Schedule)
+{
+  const pdb = getFirestore(initializeApp(firebaseConfig, "pricelists"));
+  try { const done = await activateDue(pdb); if (done.length) console.log("Price list now current:", done.join(", ")); }
+  catch (e) { console.error("Scheduled price list go-live failed:", e.message || e); }
+}
 
 const token = process.env.DROPBOX_REFRESH_TOKEN;
 if (!token) { console.log("No DROPBOX_REFRESH_TOKEN secret set — automatic sync is not set up yet. Skipping."); process.exit(0); }

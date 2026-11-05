@@ -24,7 +24,10 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   lists": Paul, Mark, Jeff by default). Firestore `priceLists/{id}`: status current | draft | archived.
   Drafts store only decisions (category/SKU %, exact prices, on-list ticks, notes, customer price
   lists) and are worked out on the live `config/productsCAD`; every price is rounded to the whole
-  dollar; USD = CAD × `usdMultiplier` (0.95). "Make active" writes the worked-out list to
+  dollar (per-draft `roundWhole` switch); USD = CAD × `usdMultiplier` (0.95). A draft with a future
+  effective date is **scheduled** (`scheduled: true`); the hourly GitHub job (`activateDue` in
+  `store.js`, called from `scripts/autosync.mjs` before the Dropbox sync) makes it current on the
+  effective date (Alberta time). Past/today date → "Make active now". "Make active" writes the worked-out list to
   `config/productsCAD`, freezes the old current into history, and publishes customer price lists to
   `config/customerPrices` (quotes for a matching company — e.g. White Cap — use those prices). Edits
   go through `updateVersion` (who/when + change log; use `path()` for nested fields — names contain

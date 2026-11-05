@@ -96,6 +96,14 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   category; page 2: top 10 products, new this year, "Popular with distributors like you" (SKUs bought
   by ≥2 other distributors who share products with them, on the current product list; never names
   others). No "bought less / stopped" section (Paul). File: `Customer — 2026 BMP Supplies Year in Review`.
+- **BMP Supplies Wrapped** (Reports → "🎉 BMP Supplies Wrapped"; `wrapped.js`, `wrappedArt.js`,
+  `WrappedReport.jsx`): one company-wide, no-dollar "Spotify Wrapped" per calendar year for LinkedIn /
+  email / staff — 1080×1080 PNG cards + one email graphic. Facts from orders (cities, map, furthest
+  delivery, border crossings, blankets → CFL fields, wattles/curtain km, donuts, pallets/truckloads,
+  busiest month/day, customers, Brooks/Calgary split, top product) + quotes. Cards can be hidden,
+  reworded, or added ("your own") — saved per year in `config/wrapped`. City positions: OpenStreetMap
+  lookup once per city, cached in `config/geoCache`, province/state centroid fallback; map outlines are
+  bundled (world-atlas / us-atlas, d3-geo).
 - Must keep working for many years: nothing hard-coded to a year; FY lists grow from the data.
 
 ## Dropbox & order confirmations

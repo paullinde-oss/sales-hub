@@ -16,6 +16,7 @@ import { writeOrder, removeOrder, listenOrders, buildPacks } from "./orderStore"
 import { useLogos, resizeImage, saveLogo, removeLogo, logoDevUrl, domainOf } from "./logos";
 import { yearCompare } from "./yearEndReport";
 import { openYearInReview, reviewPeriod } from "./yearInReview";
+import WrappedReport from "./WrappedReport";
 import { buildCatalog, suggestSkus, isGenericSku } from "./skus";
 import { QuoteWinRateReport, OpenPipelineReport, QuoteToOrderReport, LeadReport, SalesForecastReport, ReorderReport, ProductTrendsReport } from "./pipelineReports";
 import {
@@ -1092,6 +1093,7 @@ function ProductTable({ T, rows, mode }) {
 const REPORTS = [
   ["__h", "Sales"],
   ["yearend", "Year-End customer reports (PDF)"],
+  ["wrapped", "🎉 BMP Supplies Wrapped (year in fun facts)"],
   ["salesrep", `${SALES_REP}'s sales`],
   ["customer", "Sales by customer"],
   ["product", "Sales by product / SKU"],
@@ -1138,7 +1140,7 @@ function SkuGroupPicker({ T, value, onChange, products, categories, orders }) {
   );
 }
 
-function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, logos, bmpLogo, quotes, leads, adSpend, canSeeLeads, ownOnly, loginName, products = [], categories = {}, subCategories = {}, costs, canCosts }) {
+function ReportsView({ T, db, orders, settings, opts, currencyMode, openAccount, logos, bmpLogo, quotes, leads, adSpend, canSeeLeads, ownOnly, loginName, products = [], categories = {}, subCategories = {}, costs, canCosts }) {
   const [rep, setRep] = useState("salesrep");
   const [pick, setPick] = useState(""); // "cat:Name" | "sub:Name" | "sku:SKU" for "Who buys a product"
   const ts = useTableSort();
@@ -1259,7 +1261,8 @@ function ReportsView({ T, orders, settings, opts, currencyMode, openAccount, log
           : rep === "forecast" ? <SalesForecastReport {...pp} />
           : rep === "reorder" ? <ReorderReport {...pp} />
           : <ProductTrendsReport {...pp} />;
-      })() : rep === "yearend" ? <YearEndPicker T={T} orders={orders} settings={settings} opts={opts} logos={logos} bmpLogo={bmpLogo} openAccount={openAccount} products={products} categories={categories} /> :
+      })() : rep === "wrapped" ? <WrappedReport T={T} db={db} orders={orders} quotes={quotes} products={products} />
+      : rep === "yearend" ? <YearEndPicker T={T} orders={orders} settings={settings} opts={opts} logos={logos} bmpLogo={bmpLogo} openAccount={openAccount} products={products} categories={categories} /> :
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
           <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{title}</div>

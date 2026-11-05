@@ -44,16 +44,19 @@ export function wrappedFacts({ orders, quotes = [], products = [], year }) {
   const f = { year, orders: yo.length, hasEarlierData: before.length > 0 };
 
   // Where it went
-  const cities = new Map(), provinces = new Set(), states = new Set();
+  const cities = new Map(), provinces = new Set(), territories = new Set(), states = new Set();
   yo.forEach(o => {
     if (!o.city) return;
     const k = `${o.city}|${o.region || ""}|${o.country || ""}`;
     const c = cities.get(k) || { city: o.city, region: o.region || "", country: o.country || "", orders: 0 };
     c.orders++; cities.set(k, c);
-    if (o.region) (o.country === "US" ? states : provinces).add(o.region);
+    const r = String(o.region || "").toUpperCase().trim();
+    if (o.country === "US") { if (US_STATES.has(r)) states.add(r); }
+    else if (PROVINCES.has(r)) provinces.add(r);
+    else if (TERRITORIES.has(r)) territories.add(r);
   });
   f.cities = [...cities.values()].sort((a, b) => b.orders - a.orders);
-  f.provinces = [...provinces]; f.states = [...states];
+  f.provinces = [...provinces]; f.territories = [...territories]; f.states = [...states];
   f.usOrders = yo.filter(o => o.country === "US" || orderCurrency(o) === "USD").length;
 
   // How much
@@ -94,7 +97,7 @@ export function buildCards(f, geo = {}) {
   const add = (id, emoji, big, text, sub) => cards.push({ id, emoji, big: String(big), text, sub: sub || "" });
   add("cover", "🎉", `${Y}`, "BMP Supplies Wrapped", "Our year, by the numbers");
   if (f.cities.length) add("cities", "📍", n0(f.cities.length), `cities received BMP products`,
-    [f.provinces.length && `${f.provinces.length} province${f.provinces.length > 1 ? "s" : ""}`, f.states.length && `${f.states.length} state${f.states.length > 1 ? "s" : ""}`].filter(Boolean).join(" · "));
+    [f.provinces.length && `${f.provinces.length} province${f.provinces.length > 1 ? "s" : ""}`, f.territories.length && `${f.territories.length} territor${f.territories.length > 1 ? "ies" : "y"}`, f.states.length && `${f.states.length} state${f.states.length > 1 ? "s" : ""}`].filter(Boolean).join(" · "));
   if (f.cities.length) cards.push({ id: "map", map: true, emoji: "🗺️", big: "", text: `Where our products went in ${Y}`, sub: "" });
   if (f.cities[0]) add("topcity", "🏙️", `${f.cities[0].city}${f.cities[0].region ? ", " + f.cities[0].region : ""}`, "was our most-shipped-to city", `${n0(f.cities[0].orders)} deliveries`);
   if (geo.furthest) add("furthest", "🧭", `${n0(geo.furthest.km)} km`, `our furthest delivery — ${geo.furthest.label}`, `That's ${n1(geo.furthest.km / BROOKS_CALGARY_KM)}× the drive from Brooks to Calgary`);
@@ -128,6 +131,10 @@ const CENTROIDS = {
   AB: [53.9, -116.6], BC: [53.7, -127.6], SK: [52.9, -106.5], MB: [53.8, -98.8], ON: [50.0, -85.3], QC: [52.9, -73.5], NB: [46.6, -66.5], NS: [45.0, -63.0], PE: [46.5, -63.4], NL: [53.1, -57.7], YT: [64.3, -135.0], NT: [64.8, -124.8], NU: [70.3, -83.1],
   AL: [32.8, -86.8], AK: [64.2, -149.5], AZ: [34.0, -111.1], AR: [34.8, -92.2], CA: [36.8, -119.4], CO: [39.0, -105.5], CT: [41.6, -72.7], DE: [39.0, -75.5], FL: [27.8, -81.7], GA: [32.2, -82.9], HI: [19.9, -155.6], ID: [44.1, -114.7], IL: [40.0, -89.2], IN: [39.8, -86.1], IA: [42.0, -93.6], KS: [38.5, -98.4], KY: [37.8, -84.3], LA: [31.0, -92.0], ME: [45.3, -69.4], MD: [39.0, -76.6], MA: [42.4, -71.4], MI: [44.3, -85.6], MN: [46.7, -94.7], MS: [32.7, -89.7], MO: [38.5, -92.5], MT: [46.9, -110.4], NE: [41.5, -99.9], NV: [38.8, -116.4], NH: [43.2, -71.6], NJ: [40.1, -74.4], NM: [34.5, -106.0], NY: [43.0, -75.5], NC: [35.6, -79.4], ND: [47.5, -100.5], OH: [40.4, -82.9], OK: [35.6, -97.5], OR: [44.0, -120.6], PA: [41.2, -77.2], RI: [41.7, -71.5], SC: [33.9, -80.9], SD: [44.4, -100.2], TN: [35.9, -86.4], TX: [31.0, -99.0], UT: [39.3, -111.7], VT: [44.0, -72.7], VA: [37.5, -78.9], WA: [47.4, -120.7], WV: [38.6, -80.6], WI: [44.6, -89.9], WY: [43.0, -107.6],
 };
+// Only real codes count (10 provinces, 3 territories, 50 states + DC)
+const PROVINCES = new Set(["AB", "BC", "SK", "MB", "ON", "QC", "NB", "NS", "PE", "NL"]);
+const TERRITORIES = new Set(["YT", "NT", "NU"]);
+const US_STATES = new Set(["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC"]);
 const cityKey = c => `${c.city}|${c.region}|${c.country}`;
 export async function locateCities(cities, cache = {}, { onProgress = () => {}, onFound = () => {}, saveCache = async () => {}, stopped = () => false } = {}) {
   const out = {}, todo = [];

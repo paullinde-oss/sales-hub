@@ -365,19 +365,23 @@ function FyMonthBars({ T, pool, opts, mode, fy, mobile }) {
     const future = ms > now, partial = !future && me > now;
     const end = partial ? now : me; // the month so far is compared with the same days last year
     const val = (a, b) => { const l = pool.filter(o => o.date >= a && o.date <= b); return { v: displayValue(sumOrders(l, opts), mode), n: l.length }; };
-    return { ms, future, partial, cur: future ? null : val(ms, end), prev: val(shiftYr(ms, -1), shiftYr(end, -1)), prevFull: val(shiftYr(ms, -1), shiftYr(me, -1)) };
+    return { ms, future, partial, cur: future ? null : val(ms, end), prev: val(shiftYr(ms, -1), shiftYr(end, -1)), prevFull: val(shiftYr(ms, -1), shiftYr(me, -1)), prev2: val(shiftYr(ms, -2), shiftYr(end, -2)), prev2Full: val(shiftYr(ms, -2), shiftYr(me, -2)) };
   }), [pool, opts, mode, fy, now]);
-  const max = Math.max(1, ...months.flatMap(m => [m.cur?.v || 0, m.prevFull.v]));
+  // Two years back is shown too, once there is data for it (sales records start Dec 2024)
+  const two = useMemo(() => pool.some(o => o.date >= fyStart(fy - 2) && o.date <= fyEnd(fy - 2)), [pool, fy]);
+  const max = Math.max(1, ...months.flatMap(m => [m.cur?.v || 0, m.prevFull.v, two ? m.prev2Full.v : 0]));
   const done = months.filter(m => !m.future);
-  const tot = done.reduce((s, m) => s + m.cur.v, 0), ptot = done.reduce((s, m) => s + m.prev.v, 0);
+  const tot = done.reduce((s, m) => s + m.cur.v, 0), ptot = done.reduce((s, m) => s + m.prev.v, 0), p2tot = done.reduce((s, m) => s + m.prev2.v, 0);
   const H = mobile ? 90 : 130;
   return <div>
     <div style={{ display: "flex", gap: 14, alignItems: "baseline", flexWrap: "wrap", marginBottom: 10, fontSize: 12, color: T.subtext }}>
       <span>FY{fy} to date <b style={{ color: T.text, fontSize: 15 }}>{fmtMoney(tot)}</b></span>
       <span>FY{fy - 1} same point {fmtMoney(ptot)}</span>
       <Change cur={tot} prev={ptot} size={12} />
+      {two && <><span>FY{fy - 2} same point {fmtMoney(p2tot)}</span><Change cur={tot} prev={p2tot} size={12} /></>}
       <span style={{ flex: 1 }} />
       <span style={{ fontSize: 10, display: "flex", gap: 10 }}>
+        {two && <span><i style={{ display: "inline-block", width: 9, height: 9, background: T.border, marginRight: 4 }} />FY{fy - 2}</span>}
         <span><i style={{ display: "inline-block", width: 9, height: 9, background: T.borderMid, marginRight: 4 }} />FY{fy - 1}</span>
         <span><i style={{ display: "inline-block", width: 9, height: 9, background: GREEN, marginRight: 4 }} />FY{fy} up</span>
         <span><i style={{ display: "inline-block", width: 9, height: 9, background: RED, marginRight: 4 }} />FY{fy} down</span>
@@ -386,18 +390,21 @@ function FyMonthBars({ T, pool, opts, mode, fy, mobile }) {
     <div style={{ display: "grid", gridTemplateColumns: `repeat(${mobile ? 6 : 12}, 1fr)`, gap: mobile ? 6 : 8 }}>
       {months.map(m => {
         const up = m.cur && m.cur.v >= m.prev.v;
+        const hp2 = Math.max(m.prev2Full.v ? 3 : 0, (m.prev2Full.v / max) * H);
         const hp = Math.max(m.prevFull.v ? 3 : 0, (m.prevFull.v / max) * H), hc = m.cur ? Math.max(m.cur.v ? 3 : 0, (m.cur.v / max) * H) : 0;
-        return <div key={m.ms} title={`${fmtMonth(m.ms)}: ${m.cur ? fmtMoney(m.cur.v) + ` (${m.cur.n} orders)` : "not yet"} · FY${fy - 1}: ${fmtMoney(m.prevFull.v)}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 0 }}>
+        return <div key={m.ms} title={`${fmtMonth(m.ms)}: ${m.cur ? fmtMoney(m.cur.v) + ` (${m.cur.n} orders)` : "not yet"} · FY${fy - 1}: ${fmtMoney(m.prevFull.v)}${two ? ` · FY${fy - 2}: ${fmtMoney(m.prev2Full.v)}` : ""}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 0 }}>
           <div style={{ height: 30, display: "flex", alignItems: "flex-end", textAlign: "center", lineHeight: 1.2 }}>
             {m.cur ? <span style={{ fontSize: mobile ? 9 : 10 }}><Change cur={m.cur.v} prev={m.prev.v} size={mobile ? 9 : 10} stack /></span> : null}
           </div>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: H + 4, width: "100%", justifyContent: "center", borderBottom: `1px solid ${T.borderMid}` }}>
-            <div style={{ width: "34%", maxWidth: 26, height: hp, background: T.borderMid, borderRadius: "3px 3px 0 0" }} />
-            <div style={{ width: "34%", maxWidth: 26, height: hc, background: !m.cur ? "transparent" : m.prev.v ? (up ? GREEN : RED) : GREEN, borderRadius: "3px 3px 0 0", opacity: m.partial ? .75 : 1 }} />
+          <div style={{ display: "flex", alignItems: "flex-end", gap: two ? 2 : 3, height: H + 4, width: "100%", justifyContent: "center", borderBottom: `1px solid ${T.borderMid}` }}>
+            {two && <div style={{ width: "26%", maxWidth: 20, height: hp2, background: T.border, borderRadius: "3px 3px 0 0" }} />}
+            <div style={{ width: two ? "26%" : "34%", maxWidth: two ? 20 : 26, height: hp, background: T.borderMid, borderRadius: "3px 3px 0 0" }} />
+            <div style={{ width: two ? "26%" : "34%", maxWidth: two ? 20 : 26, height: hc, background: !m.cur ? "transparent" : m.prev.v ? (up ? GREEN : RED) : GREEN, borderRadius: "3px 3px 0 0", opacity: m.partial ? .75 : 1 }} />
           </div>
           <div style={{ fontSize: 11, fontWeight: 600, color: T.subtext, marginTop: 5 }}>{fmtMonth(m.ms).split(" ")[0]}</div>
           <div style={{ fontSize: mobile ? 9 : 11, fontWeight: 600, color: T.text, fontVariantNumeric: "tabular-nums" }}>{m.cur ? fmtMoney(m.cur.v) : "—"}</div>
           <div style={{ fontSize: mobile ? 8 : 10, color: T.tableHeadText, fontVariantNumeric: "tabular-nums" }}>LY {fmtMoney(m.prevFull.v)}</div>
+          {two && <div style={{ fontSize: mobile ? 8 : 10, color: T.tableHeadText, fontVariantNumeric: "tabular-nums" }}>{fy - 2} {fmtMoney(m.prev2Full.v)}</div>}
           {m.partial && <div style={{ fontSize: 8, color: T.tableHeadText }}>to date</div>}
         </div>;
       })}
@@ -421,6 +428,8 @@ function BestOf({ T, pool, opts, mode, fy, mobile }) {
   };
   const cur = useMemo(() => best(fyStart(fy), now < fyEnd(fy) ? now : fyEnd(fy)), [pool, opts, mode, fy, now]);
   const prev = useMemo(() => best(fyStart(fy - 1), fyEnd(fy - 1)), [pool, opts, mode, fy]);
+  const prev2 = useMemo(() => best(fyStart(fy - 2), fyEnd(fy - 2)), [pool, opts, mode, fy]);
+  const two = !!prev2.month;
   const label = { month: k => fmtMonth(k + "-01"), week: k => `Week of ${fmtShort(k)}, ${k.slice(0, 4)}`, day: k => `${weekdayName(k)} ${fmtDate(k)}` };
   const Side = ({ b, kind, title, strong }) => (
     <div style={{ flex: 1, minWidth: 0 }}>
@@ -438,8 +447,10 @@ function BestOf({ T, pool, opts, mode, fy, mobile }) {
         <div style={{ display: "flex", gap: 12 }}>
           <Side b={cur[k]} kind={k} title={`FY${fy}${now < fyEnd(fy) ? " so far" : ""}`} strong />
           <Side b={prev[k]} kind={k} title={`FY${fy - 1}`} />
+          {two && <Side b={prev2[k]} kind={k} title={`FY${fy - 2}`} />}
         </div>
-        {cur[k] && prev[k] && <div style={{ marginTop: 8 }}><Change cur={cur[k].v} prev={prev[k].v} /> <span style={{ fontSize: 10, color: T.tableHeadText }}>vs FY{fy - 1} best</span></div>}
+        {cur[k] && prev[k] && <div style={{ marginTop: 8 }}><Change cur={cur[k].v} prev={prev[k].v} /> <span style={{ fontSize: 10, color: T.tableHeadText }}>vs FY{fy - 1} best</span>
+          {two && prev2[k] && <> · <Change cur={cur[k].v} prev={prev2[k].v} /> <span style={{ fontSize: 10, color: T.tableHeadText }}>vs FY{fy - 2}</span></>}</div>}
       </div>
     ))}
   </div>;
@@ -1099,7 +1110,7 @@ const REPORTS = [
   ["product", "Sales by product / SKU"],
   ["custprod", "Customer × product (who ordered what)"],
   ["skubuyers", "Who buys a product (by category / SKU)"],
-  ["monthly", "Monthly sales — fiscal year vs last year"],
+  ["monthly", "Monthly sales — fiscal year vs previous years"],
   ["location", "Sales by location (BRO vs CAL)"],
   ["type", "Distributors vs End Users"],
   ["city", "Sales by ship-to city"],
@@ -1208,19 +1219,23 @@ function ReportsView({ T, db, orders, settings, opts, currencyMode, openAccount,
     if (g.length) rows.push(["Total", `${g.length} customer${g.length === 1 ? "" : "s"}`, "", fmtQty(tq), fmtMoney(total, 2), "100%", tq ? fmtMoney(total / tq, 2) : "—", new Set(g.flatMap(r => [...r.orders])).size, ""]);
   } else if (rep === "monthly") {
     const pool = filterOrders(orders, { ...fl.filters, from: "", to: "", currency: currencyMode });
-    headers = ["Month", `FY${fy} ${cur}`, `FY${fy - 1} ${cur}`, "Change", `FY${fy} orders`, `FY${fy - 1} orders`];
-    let a = 0, b = 0;
+    const two = pool.some(o => o.date >= fyStart(fy - 2) && o.date <= fyEnd(fy - 2));
+    headers = ["Month", `FY${fy} ${cur}`, `FY${fy - 1} ${cur}`, "Change", ...(two ? [`FY${fy - 2} ${cur}`, `Change vs FY${fy - 2}`] : []), `FY${fy} orders`, `FY${fy - 1} orders`, ...(two ? [`FY${fy - 2} orders`] : [])];
+    let a = 0, b = 0, c2 = 0;
+    const pct = (x, y) => y ? (((x - y) / y) * 100).toFixed(0) + "%" : "";
     for (let i = 0; i < 12; i++) {
       const d = parseYmd(fyStart(fy)); d.setMonth(d.getMonth() + i);
       const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       const pym = `${d.getFullYear() - 1}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       const s1 = sumOrders(pool.filter(o => o.date.slice(0, 7) === ym), opts), s2 = sumOrders(pool.filter(o => o.date.slice(0, 7) === pym), opts);
-      const v1 = money(s1), v2 = money(s2); a += v1; b += v2;
-      const ch = v2 ? (((v1 - v2) / v2) * 100).toFixed(0) + "%" : "";
-      rows.push([fmtMonth(ym + "-01"), fmtMoney(v1, 2), fmtMoney(v2, 2), ch, s1.count, s2.count]);
-      csvRows.push([ym, v1.toFixed(2), v2.toFixed(2), ch, s1.count, s2.count]);
+      const p2ym = `${d.getFullYear() - 2}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const s3 = sumOrders(pool.filter(o => o.date.slice(0, 7) === p2ym), opts);
+      const v1 = money(s1), v2 = money(s2), v3 = money(s3); a += v1; b += v2; c2 += v3;
+      const ch = pct(v1, v2);
+      rows.push([fmtMonth(ym + "-01"), fmtMoney(v1, 2), fmtMoney(v2, 2), ch, ...(two ? [fmtMoney(v3, 2), pct(v1, v3)] : []), s1.count, s2.count, ...(two ? [s3.count] : [])]);
+      csvRows.push([ym, v1.toFixed(2), v2.toFixed(2), ch, ...(two ? [v3.toFixed(2), pct(v1, v3)] : []), s1.count, s2.count, ...(two ? [s3.count] : [])]);
     }
-    rows.push(["Total", fmtMoney(a, 2), fmtMoney(b, 2), b ? (((a - b) / b) * 100).toFixed(0) + "%" : "", "", ""]);
+    rows.push(["Total", fmtMoney(a, 2), fmtMoney(b, 2), pct(a, b), ...(two ? [fmtMoney(c2, 2), pct(a, c2)] : []), "", "", ...(two ? [""] : [])]);
   } else if (rep === "inactive") {
     const last = new Map();
     orders.forEach(o => { const r = last.get(o.cust.key); if (!r || o.date > r.date) last.set(o.cust.key, { date: o.date, cust: o.cust }); });
@@ -1268,7 +1283,7 @@ function ReportsView({ T, db, orders, settings, opts, currencyMode, openAccount,
           <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{title}</div>
           <div style={{ flex: 1 }} />
           <button className="btn" onClick={() => downloadCSV(`${rep}-report.csv`, headers, csvRows)}>Export CSV</button>
-          <button className="btn" onClick={() => printReport(title, rep === "monthly" ? `Fiscal ${fy} vs ${fy - 1}` : rep === "inactive" ? `No orders in ${days}+ days` : `${fmtDate(fl.range[0])} – ${fmtDate(fl.range[1])}`, headers, shownRows)}>Print / PDF</button>
+          <button className="btn" onClick={() => printReport(title, rep === "monthly" ? `Fiscal ${fy} vs ${fy - 1}${orders.some(o => o.date >= fyStart(fy - 2) && o.date <= fyEnd(fy - 2)) ? ` and ${fy - 2}` : ""}` : rep === "inactive" ? `No orders in ${days}+ days` : `${fmtDate(fl.range[0])} – ${fmtDate(fl.range[1])}`, headers, shownRows)}>Print / PDF</button>
         </div>
         {rep === "monthly" ? (
           <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>

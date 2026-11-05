@@ -1,5 +1,5 @@
 // ─── BMP loading animation + logo (black artwork; flipped to white on dark themes) ──
-import loadingGif from "./assets/bmp-loading.gif";
+import loadingGif from "./assets/bmp-loading.webp"; // animated, transparent background (from Paul's GIF)
 import logoPng from "./assets/bmp-logo.png";
 
 export const BMP_LOGO = logoPng;

@@ -248,7 +248,8 @@ export function auditWonQuotes(orders, quotes, settings) {
   const rate = Number(settings.usdToCad) || 1.37;
   const inCad = (amt, cur) => (cur === "USD" ? amt * rate : amt);
   const pool = orders.filter(o => o.hasPricing && !linkedOrders.has(o.orderNo));
-  return (quotes || []).filter(q => q.saved !== false && q.quoteStatus === "won" && !linkedQuotes.has(String(q.id)))
+  const ignored = settings.wonNoOrder || {}; // "No order needed" — stays Won, just isn't chased for an order
+  return (quotes || []).filter(q => q.saved !== false && q.quoteStatus === "won" && !linkedQuotes.has(String(q.id)) && !ignored[String(q.id)])
     .map(q => {
       const date = quoteDate(q), name = q.company || q.name || "", cur = q.currency || "CAD";
       const skus = new Set((q.lineItems || []).map(li => String(li.sku || "").toUpperCase().trim()).filter(Boolean));

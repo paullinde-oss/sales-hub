@@ -1410,10 +1410,21 @@ function quoteFromOrder(quote, order, wonOption = null) {
   };
 }
 // Every Won quote should have its order attached: list the ones that don't, with the likeliest orders
-function WonQuoteAudit({ T, audit, orders, settings, saveSettings, opts, openAccount }) {
+function WonQuoteAudit({ T, audit, orders, quotes = [], settings, saveSettings, opts, openAccount, loginName }) {
   const [typed, setTyped] = useState({});
   const [open, setOpen] = useState(true);
-  if (!audit.length) return null;
+  const [showIgnored, setShowIgnored] = useState(false);
+  const ignoredMap = settings.wonNoOrder || {};
+  const ignored = quotes.filter(q => ignoredMap[String(q.id)] && q.quoteStatus === "won");
+  const ignore = q => saveSettings({ wonNoOrder: { [String(q.id)]: { by: loginName || "", at: new Date().toISOString() } } });
+  const unignore = q => saveSettings({ wonNoOrder: { [String(q.id)]: deleteField() } });
+  const ignoredList = ignored.length > 0 && (
+    <div style={{ fontSize: 11, color: T.tableHeadText, padding: "8px 14px" }}>
+      {ignored.length} Won quote{ignored.length > 1 ? "s" : ""} marked "no order needed" · <a style={{ cursor: "pointer" }} onClick={() => setShowIgnored(!showIgnored)}>{showIgnored ? "hide" : "show"}</a>
+      {showIgnored && ignored.map(q => <div key={q.id} style={{ marginTop: 4 }}>{q.quoteNum} · {q.company || q.name} · {fmtMoney(quoteValue(q), 2)} <span style={{ color: T.tableHeadText }}>({ignoredMap[String(q.id)]?.by || "—"})</span> <a style={{ cursor: "pointer", marginLeft: 6 }} onClick={() => unignore(q)}>undo</a></div>)}
+    </div>
+  );
+  if (!audit.length) return ignoredList ? <Card T={T} title="Won quotes without an order (0)" pad={0}>{ignoredList}</Card> : null;
   const linkedOrders = settings.quoteLinks || {};
   const link = (orderNo, q) => saveSettings({ quoteLinks: { [orderNo]: String(q.id) } });
   // One click for the clear-cut ones: best order scores 85%+ and no other quote wants the same order
@@ -1440,6 +1451,7 @@ function WonQuoteAudit({ T, audit, orders, settings, saveSettings, opts, openAcc
       <div style={{ fontSize: 12, color: T.subtext, padding: "10px 14px", borderBottom: `1px solid ${T.border}` }}>
         Every Won quote should have its order attached. These are marked Won but aren't linked yet — pick the right order, or type the order number if it isn't suggested.
         Linking doesn't change the quote; it just connects it to the order (for the Won quotes → orders report).
+        No order to attach (e.g. paid by Square)? Click <b>No order needed</b> — it stays Won and drops off this list.
       </div>
       {open && audit.map(a => (
         <div key={a.quote.id} style={{ padding: "12px 14px", borderBottom: `1px solid ${T.border}`, display: "grid", gridTemplateColumns: "minmax(220px, 1fr) 2fr", gap: 16 }}>
@@ -1451,6 +1463,7 @@ function WonQuoteAudit({ T, audit, orders, settings, saveSettings, opts, openAcc
               <input value={typed[a.quote.id] || ""} onChange={e => setTyped(t => ({ ...t, [a.quote.id]: e.target.value }))} onKeyDown={e => e.key === "Enter" && linkTyped(a)} placeholder="Order # e.g. BRO10912" style={{ fontSize: 11, height: 26, width: 150 }} />
               <button className="btn" disabled={!typed[a.quote.id]} onClick={() => linkTyped(a)}>Link</button>
             </div>
+            <button className="btn" style={{ marginTop: 6, fontSize: 10, padding: "3px 10px" }} onClick={() => ignore(a.quote)}>No order needed</button>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {!a.candidates.length && <div style={{ fontSize: 12, color: T.tableHeadText, alignSelf: "center", marginTop: 14 }}>No likely order found — type the order number on the left.</div>}
@@ -1466,11 +1479,12 @@ function WonQuoteAudit({ T, audit, orders, settings, saveSettings, opts, openAcc
           </div>
         </div>
       ))}
+      {ignoredList}
     </Card>
   );
 }
 
-function QuoteMatchesView({ T, matches, wonAudit = [], settings, saveSettings, opts, quotes, updateQuoteStatus, openAccount, orders }) {
+function QuoteMatchesView({ T, matches, wonAudit = [], loginName, settings, saveSettings, opts, quotes, updateQuoteStatus, openAccount, orders }) {
   const link = (m, markWon) => {
     if (markWon) {
       // A quote with options: confirm which option they chose (the closest one is pre-picked)
@@ -1495,7 +1509,7 @@ function QuoteMatchesView({ T, matches, wonAudit = [], settings, saveSettings, o
         These orders look like they came from a quote in the Quote Maker — same customer, the same SKUs, and quoted before the order date.
         Mark the quote <b>Won</b> to keep Pipeline and Lead Tracking accurate, or dismiss it if it's not the same deal.
       </div>
-      <WonQuoteAudit T={T} audit={wonAudit} orders={orders} settings={settings} saveSettings={saveSettings} opts={opts} openAccount={openAccount} />
+      <WonQuoteAudit T={T} audit={wonAudit} orders={orders} quotes={quotes} settings={settings} saveSettings={saveSettings} opts={opts} openAccount={openAccount} loginName={loginName} />
       {!matches.length && <Empty T={T}>No possible quote matches right now.</Empty>}
       {matches.map(m => (
         <div key={m.order.orderNo + m.quote.id} style={{ background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 3, padding: 14, display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 16, alignItems: "center" }}>

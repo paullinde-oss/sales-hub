@@ -96,7 +96,8 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
 - **Every Won quote should have an order attached** (Paul). Quote Matches → "Won quotes without an order"
   (`auditWonQuotes` in salesUtils.js) lists unlinked Won quotes with up to 3 likely orders (customer, SKUs,
   amount closeness, −7…240 days) + type-an-order-# + "Link N clear matches" (85%+, clear winner). Linking
-  only adds `quoteLinks` — it doesn't change the quote. Reports → Won quotes → orders lists all Won quotes
+  only adds `quoteLinks` — it doesn't change the quote. "No order needed" (`settings.wonNoOrder[quoteId]` {by, at}, undo-able)
+  keeps the quote Won but drops it from the audit; the report shows it as "No order needed". Reports → Won quotes → orders lists all Won quotes
   ("Not linked yet" rows).
 - **Year in Review** (`src/sales/yearInReview.js`, Reports → Year-End customer reports and the customer
   page button): two pages, **calendar year vs previous calendar year** (year in progress = Jan 1 →

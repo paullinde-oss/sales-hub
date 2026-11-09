@@ -234,15 +234,17 @@ export function QuoteToOrderReport({ T, quotes, orders, settings, ownOnly, login
   const tq = links.reduce((s, x) => s + x.qv, 0), to = links.reduce((s, x) => s + x.ov, 0);
   // Every Won quote is listed; ones not linked yet show at the bottom (link them in Quote Matches)
   const linkedIds = new Set(Object.values(settings.quoteLinks || {}).map(String));
-  const unlinked = (quotes || []).filter(q => q.saved !== false && q.quoteStatus === "won" && !linkedIds.has(String(q.id)) && (!ownOnly || q.savedBy === loginName))
-    .map(q => ({ q, qd: quoteDate(q), qv: quoteValue(q, rate) })).sort((a, b) => (a.qd < b.qd ? 1 : -1));
+  const noOrder = settings.wonNoOrder || {};
+  const allUnlinked = (quotes || []).filter(q => q.saved !== false && q.quoteStatus === "won" && !linkedIds.has(String(q.id)) && (!ownOnly || q.savedBy === loginName))
+    .map(q => ({ q, qd: quoteDate(q), qv: quoteValue(q, rate), ignored: !!noOrder[String(q.id)] })).sort((a, b) => (a.ignored - b.ignored) || (a.qd < b.qd ? 1 : -1));
+  const unlinked = allUnlinked.filter(x => !x.ignored), ignoredN = allUnlinked.length - unlinked.length;
   const rows = [
     ...links.map(x => ({ cells: [x.o.cust?.name || x.o.customer, x.q.quoteNum || "", x.q.savedBy || "—", fmtDate(x.qd), x.o.orderNo, fmtDate(x.o.date), x.days ?? "—", fmtMoney(x.qv), fmtMoney(x.ov), { text: `${x.ov - x.qv >= 0 ? "+" : "−"}${fmtMoney(Math.abs(x.ov - x.qv))}`, color: x.ov >= x.qv ? GREEN : RED }] })),
-    ...unlinked.map(x => ({ cells: [x.q.company || x.q.name || "—", x.q.quoteNum || "", x.q.savedBy || "—", fmtDate(x.qd), { text: "Not linked yet", color: RED }, "", "", fmtMoney(x.qv), "", ""] })),
+    ...allUnlinked.map(x => ({ cells: [x.q.company || x.q.name || "—", x.q.quoteNum || "", x.q.savedBy || "—", fmtDate(x.qd), x.ignored ? "No order needed" : { text: "Not linked yet", color: RED }, "", "", fmtMoney(x.qv), "", ""] })),
   ];
   return <ReportTable T={T} title="Won quotes → orders"
     note="Every quote marked Won. Linked ones show how long it took from quote to order and how the order compared with what was quoted (totals are for linked quotes only). Link the rest in Sales Summary → Quote Matches → Won quotes without an order."
-    summary={<Kpis T={T} items={[["Won quotes", links.length + unlinked.length, unlinked.length ? `${unlinked.length} not linked to an order yet` : "all linked to an order", unlinked.length ? RED : GREEN], ["Linked quotes", links.length], ["Typical time to order", median == null ? "—" : `${median} days`, "median"], ["Quoted", fmtMoney(tq)], ["Ordered", fmtMoney(to), tq ? `${chg(to, tq)} vs quoted` : ""]]} />}
+    summary={<Kpis T={T} items={[["Won quotes", links.length + allUnlinked.length, unlinked.length ? `${unlinked.length} not linked to an order yet` : ignoredN ? `${ignoredN} marked "no order needed"` : "all linked to an order", unlinked.length ? RED : GREEN], ["Linked quotes", links.length], ["Typical time to order", median == null ? "—" : `${median} days`, "median"], ["Quoted", fmtMoney(tq)], ["Ordered", fmtMoney(to), tq ? `${chg(to, tq)} vs quoted` : ""]]} />}
     headers={["Customer", "Quote #", "Quoted by", "Quote date", "Order #", "Order date", "Days to order", "Quoted (CAD)", "Ordered (CAD)", "Difference"]}
     right={[6, 7, 8, 9]}
     rows={rows} />;

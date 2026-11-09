@@ -132,7 +132,16 @@ export function WebsitePagesView({ T, products, loginName }) {
   const data = useProductPages();
   const [q, setQ] = useState("");
   const [show, setShow] = useState("all");
-  const rows = useMemo(() => (products || []).filter(p => p?.sku).map(p => ({ p, r: resolveSku(p.sku, data) })), [products, data]);
+  const [extraSku, setExtraSku] = useState("");
+  const [added, setAdded] = useState([]); // SKUs typed in this visit, before a page is picked
+  // Products-list SKUs, plus any other SKU (e.g. one only used on orders) that has a hand-picked page
+  const rows = useMemo(() => {
+    const list = (products || []).filter(p => p?.sku).map(p => ({ p, r: resolveSku(p.sku, data) }));
+    const have = new Set(list.map(x => skuKey(x.p.sku)));
+    const others = [...new Set([...added, ...Object.keys(data?.links || {})])].filter(k => k && !have.has(skuKey(k)));
+    return [...list, ...others.map(k => ({ p: { sku: k, product: "Not on the Products list", other: true }, r: resolveSku(k, data) }))];
+  }, [products, data, added]);
+  const addSku = () => { const k = extraSku.trim(); if (!k) return; setAdded(a => [...a, k]); setExtraSku(""); setQ(""); setShow("all"); };
   const counts = { none: rows.filter(x => !x.r.slug).length, picked: rows.filter(x => x.r.how === "picked").length };
   const visible = rows.filter(({ p, r }) =>
     (show === "all" || (show === "none" && !r.slug) || (show === "picked" && r.how === "picked"))
@@ -169,7 +178,7 @@ export function WebsitePagesView({ T, products, loginName }) {
             {visible.map(({ p, r }) => (
               <tr key={p.sku}>
                 <td><SkuLink sku={p.sku} product={p} style={{ fontFamily: "monospace", fontSize: 11, color: T.accent, whiteSpace: "nowrap" }} /></td>
-                <td style={{ color: T.subtext }}>{p.product}</td>
+                <td style={{ color: p.other ? T.tableHeadText : T.subtext, fontStyle: p.other ? "italic" : undefined }}>{p.product}</td>
                 <td style={{ color: T.tableHeadText, fontSize: 11 }}>{r.family?.label || "—"}</td>
                 <td><span style={{ fontSize: 10, color: howColor[r.how] }}>{howLabel[r.how]}</span></td>
                 <td><WebsitePagePicker sku={p.sku} loginName={loginName} T={T} data={data} compact /></td>
@@ -179,6 +188,11 @@ export function WebsitePagesView({ T, products, loginName }) {
             {!visible.length && <tr><td colSpan={6} style={{ color: T.tableHeadText }}>Nothing to show.</td></tr>}
           </tbody>
         </table>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 12 }}>
+          <span style={{ fontSize: 11, color: T.tableHeadText }}>SKU not on the Products list (e.g. only used on orders)?</span>
+          <input placeholder="Type the SKU" value={extraSku} onChange={e => setExtraSku(e.target.value)} onKeyDown={e => e.key === "Enter" && addSku()} style={{ width: 160, height: 28, fontSize: 12, fontFamily: "monospace" }} />
+          <button className="btn" style={{ fontSize: 11 }} onClick={addSku}>Add to list</button>
+        </div>
         {unused.length > 0 && (
           <div style={{ marginTop: 18 }}>
             <div style={{ fontSize: 11, color: T.tableHeadText, marginBottom: 6 }}>Pages on the website that no Products-list SKU opens ({unused.length}):</div>

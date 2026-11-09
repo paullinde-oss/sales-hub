@@ -61,6 +61,8 @@ export const FAMILIES = [
   { id: "sdnsc", label: "Blanket — Standard double net straw/coconut", re: /^SDNSC\d/, slug: "standard-double-net-straw-coconut" },
   { id: "sdnc", label: "Blanket — Standard double net coconut", re: /^SDNC\d/, slug: "standard-double-net-coconut" },
   { id: "bdns", label: "Blanket — Bio double net straw", re: /^BDNS\d/, slug: "bio-double-net-straw" },
+  // 4'-wide bio straw/coconut roll (BDNSC0401, 4' x 50') is sold as the Grass Seed Germination Blanket
+  { id: "germination", label: "Grass Seed Germination Blanket (4' bio straw/coconut)", re: /^BDNSC04/, slug: "4footers" },
   { id: "bdnsc", label: "Blanket — Bio double net straw/coconut", re: /^BDNSC\d/, slug: "bio-double-net-straw-coco" },
   { id: "bdnc", label: "Blanket — Bio double net coconut", re: /^BDNC\d/, slug: "bio-double-net-coconut" },
   { id: "sdnae", label: "Blanket — Standard double net aspen excelsior", re: /^SDNAE\d/, slug: "standard-double-net-aspen-excelsior" },

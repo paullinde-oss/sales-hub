@@ -18,6 +18,7 @@ import { yearCompare } from "./yearEndReport";
 import { openYearInReview, reviewPeriod } from "./yearInReview";
 import WrappedReport from "./WrappedReport";
 import { buildCatalog, suggestSkus, isGenericSku } from "./skus";
+import { SkuLink } from "../products/ProductPreview";
 import { QuoteWinRateReport, OpenPipelineReport, QuoteToOrderReport, LeadReport, SalesForecastReport, ReorderReport, ProductTrendsReport } from "./pipelineReports";
 import {
   today, mondayOf, addDays, monthStart, monthEnd, fyOf, fyStart, fyEnd, daysBetween, parseYmd,
@@ -652,7 +653,7 @@ function OrderDetail({ T, db, o, editable }) {
         <table className="data-table" style={{ background: T.cardBg }}>
           <thead><tr><th>SKU</th><th>Description</th><th style={{ textAlign: "right" }}>Qty</th><th style={{ textAlign: "right" }}>Price</th><th style={{ textAlign: "right" }}>Amount</th></tr></thead>
           <tbody>
-            {(o.lines || []).map((l, i) => <tr key={i}><td>{l.sku}</td><td>{l.desc}</td><td style={{ textAlign: "right" }}>{fmtQty(l.qty)}</td><td style={{ textAlign: "right" }}>{o.hasPricing ? fmtMoney(l.price, 2) : "—"}</td><td style={{ textAlign: "right" }}>{o.hasPricing ? fmtMoney(l.amount, 2) : "—"}</td></tr>)}
+            {(o.lines || []).map((l, i) => <tr key={i}><td>{isGenericSku(l.sku) ? l.sku : <SkuLink sku={l.sku} />}</td><td>{l.desc}</td><td style={{ textAlign: "right" }}>{fmtQty(l.qty)}</td><td style={{ textAlign: "right" }}>{o.hasPricing ? fmtMoney(l.price, 2) : "—"}</td><td style={{ textAlign: "right" }}>{o.hasPricing ? fmtMoney(l.amount, 2) : "—"}</td></tr>)}
             {(o.charges || []).map((c, i) => <tr key={"c" + i}><td></td><td style={{ color: T.subtext }}>{c.label}{c.note && <span style={{ color: T.tableHeadText, fontSize: 10 }}> · {c.note}</span>}</td><td></td><td></td><td style={{ textAlign: "right" }}>{fmtMoney(c.amount, 2)}</td></tr>)}
             {(o.taxes || []).map((c, i) => <tr key={"t" + i}><td></td><td style={{ color: T.tableHeadText }}>{c.label} <span style={{ fontSize: 10 }}>(tax — not counted in sales)</span></td><td></td><td></td><td style={{ textAlign: "right", color: T.tableHeadText }}>{fmtMoney(c.amount, 2)}</td></tr>)}
             {o.hasPricing && <tr><td></td><td style={{ fontWeight: 600 }}>Total before tax</td><td></td><td></td><td style={{ textAlign: "right", fontWeight: 600 }}>{fmtMoney(o.total, 2)} {orderCurrency(o)}</td></tr>}

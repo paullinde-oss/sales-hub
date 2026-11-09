@@ -44,6 +44,15 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   lines re-priced by each SKU's average % change, with gross profit where costs exist.
   Sales Summary → Reports → **Margins** (`src/sales/marginReports.jsx`, cost viewers only): profit by
   product / customer / category / month on product lines (CAD), with "sales with a cost" coverage.
+- **Website product preview** (`src/products/webPages.js`, `ProductPreview.jsx`): clicking a SKU (Products list,
+  quote lines — ⓘ while editing — and order lines) shows photo, name and short description from the product's
+  page on bmpsupplies.com (Wix) with "View more". SKUs find their page by **product family** (`FAMILIES`
+  regexes on the SKU without "BMP"/dashes; size digits ignored), not exact SKU; a hand-picked page wins
+  (Products & Price List → **Website pages**, or the ✏ Edit row). Firestore `config/productPages`: `pages`
+  + `fetch` written only by the **weekly job** (`.github/workflows/productpages.yml` → `npm run productpages`
+  → `scripts/productPages.mjs`, reads the Wix store sitemap + each page's JSON-LD/Open Graph; keeps the old
+  copy on failure); `links` {SKUKEY: slug | "" = no page} written by the picker. One listener = 1 read per open.
+  New product family on the Products list → add a rule to `FAMILIES`.
 - `src/pipeline/PipelineDashboard.jsx` — Pipeline & Leads dashboard (lead tiles hidden without "leads").
 - `src/admin/` — Users & Access: per-user area access (+ "leads" sub-permission; old ids loadcalc/dims
   map to shipping via `userTabs`), sales-data scope, master password (viewable — stored readable

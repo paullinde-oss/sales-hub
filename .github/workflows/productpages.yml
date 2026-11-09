@@ -1,0 +1,29 @@
+name: Weekly website product pages
+
+# Reads the product pages on bmpsupplies.com once a week and saves their photo, name and short
+# description in the Sales Hub (scripts/productPages.mjs) for the SKU preview pop-up.
+# Run it sooner from GitHub → Actions → "Weekly website product pages" → Run workflow.
+on:
+  schedule:
+    - cron: "43 10 * * 1" # Mondays 10:43 UTC (early morning in Alberta)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: productpages
+  cancel-in-progress: false
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-audit --no-fund
+      - name: Read product pages from the website
+        run: npm run productpages

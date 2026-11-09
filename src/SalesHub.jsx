@@ -20,6 +20,8 @@ import AdminTab from "./admin/AdminTab";
 import { useUsers, findUser, canSee, DEFAULT_USERS, canEditPriceLists, canSeeCosts } from "./admin/users";
 import { checkPassword, currentPasswordHash } from "./sales/auth";
 import { SS_OPEN_TAB } from "./sales/dropbox";
+import { ProductPreviewHost, SkuLink, SkuInfoButton, WebsitePagePicker, WebsitePagesView } from "./products/ProductPreview";
+import { moveSkuPage, useProductPages } from "./products/webPages";
 
 // ─── Firebase config ────────────────────────────────────────────────────────
 import { firebaseConfig } from "./firebaseConfig";
@@ -905,9 +907,11 @@ export default function SalesHub() {
       setProductsUSD(updater);
     }
   }
+  const productPages = useProductPages();
   // A product's SKU was corrected on the Products tab: keep its USD price override, and have
   // past orders that used the old SKU (and Sales Summary SKU clean-up choices) follow it
   async function renameProductSku(oldSku, newSku) {
+    moveSkuPage(oldSku, newSku, productPages).catch(e => console.warn("Couldn't move the website page choice", e));
     setProductsUSD(prev => (prev||[]).map(p => p.sku===oldSku ? {...p, sku:newSku} : p));
     try {
       const squash = s => String(s||"").toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -1210,7 +1214,8 @@ ${quoteNumLine}
   }, [authed, activeTab, TABS.map(t => t.id).join()]);
 
   // ── Mobile layout ────────────────────────────────────────────────────────
-  if (authed && isMobile) return (
+  if (authed && isMobile) return (<>
+    <ProductPreviewHost T={T} products={productsCAD}/>
     <MobileLayout
       T={T} theme={theme} setTheme={setTheme}
       activeTab={mobileTab} setActiveTab={setMobileTab}
@@ -1230,7 +1235,7 @@ ${quoteNumLine}
       currentUser={currentUser}
       loginName={loginName} setAuthed={setAuthed} setLoginName={setLoginName}
     />
-  );
+  </>);
 
   return authed ? (
     <div style={{fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",background:T.bg,color:T.text,minHeight:"100vh",display:"flex",flexDirection:"column",
@@ -1324,17 +1329,18 @@ ${quoteNumLine}
           {activeTab==="products"&&(()=>{
             // Price Lists (versions, drafts, customer price lists) only for people with "Edit price lists"
             const plOk = canEditPriceLists(currentUser), costOk = canSeeCosts(currentUser);
-            const secs = [["products","Products"], ...(plOk?[["pricelists","Price Lists"]]:[]), ...(costOk?[["costs","Costs & Margins"]]:[])];
+            const secs = [["products","Products"], ...(plOk?[["pricelists","Price Lists"]]:[]), ...(costOk?[["costs","Costs & Margins"]]:[]), ["webpages","Website pages"]];
             const sec = secs.some(x=>x[0]===productsSection) ? productsSection : "products";
             const catOrder = Array.isArray(subCatDefs?.categoryOrder)&&subCatDefs.categoryOrder.length?subCatDefs.categoryOrder:CATEGORY_ORDER;
             return <TabPage T={T} title="PRODUCTS & PRICE LIST" sections={secs.length>1?secs:null} active={sec} onSelect={setProductsSection}>
-              {sec==="costs" ? <div style={{flex:1,overflow:"auto",padding:16}}><CostGate T={T} costs={costs} loginName={loginName}><CostsView T={T} costs={costs} loginName={loginName} products={productsCAD} categories={categories} categoryOrder={catOrder}/></CostGate></div>
+              {sec==="webpages" ? <WebsitePagesView T={T} products={productsCAD} loginName={loginName}/>
+              : sec==="costs" ? <div style={{flex:1,overflow:"auto",padding:16}}><CostGate T={T} costs={costs} loginName={loginName}><CostsView T={T} costs={costs} loginName={loginName} products={productsCAD} categories={categories} categoryOrder={catOrder}/></CostGate></div>
               : sec==="products" ? <ProductsTab products={filteredProducts} setProducts={setCurrentProducts}
             currency={productCurrency} setCurrency={setProductCurrency} search={productSearch} setSearch={setProductSearch}
             categories={categories} setCategories={setCurrentCategories}
             subCategories={subCategories} setSubCategories={setCurrentSubCategories}
             subCatDefs={subCatDefs} setSubCatDefs={setCurrentSubCatDefs}
-            exchangeRate={exchangeRate} setExchangeRate={setExchangeRate} T={T} onSkuRenamed={renameProductSku}/> : <PriceListsView T={T} db={db} products={productsCAD} categories={categories} subCategories={subCategories} subCatDefs={subCatDefs}
+            exchangeRate={exchangeRate} setExchangeRate={setExchangeRate} T={T} onSkuRenamed={renameProductSku} loginName={loginName}/> : <PriceListsView T={T} db={db} products={productsCAD} categories={categories} subCategories={subCategories} subCatDefs={subCatDefs}
                 categoryOrder={Array.isArray(subCatDefs?.categoryOrder)&&subCatDefs.categoryOrder.length?subCatDefs.categoryOrder:CATEGORY_ORDER}
                 loginName={loginName} logo={BMP_LOGO_FULL} usdRate={exchangeRate} costs={costs} canCosts={canSeeCosts(currentUser)}/>}
             </TabPage>;
@@ -1351,6 +1357,7 @@ ${quoteNumLine}
       </div>
 
       <WonOptionPicker T={T} fmt={fmtCur}/>
+      <ProductPreviewHost T={T} products={productsCAD}/>
       {/* PDF Modal */}
       {pdfQuote && (
         <PDFModal quote={pdfQuote} onClose={()=>setPdfQuote(null)}/>
@@ -2007,11 +2014,11 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
                 <div style={{marginBottom:10}}>
                   <div style={{fontSize:9,color:T.tableHeadText,letterSpacing:".08em",marginBottom:4}}>SKU</div>
                   {ro
-                    ? <div style={{fontSize:12,color:T.accent,fontFamily:"monospace"}}>{li.sku||"—"}</div>
-                    : <><input list={`sl-m-${li.id}`} value={li.sku}
+                    ? <div style={{fontSize:12,color:T.accent,fontFamily:"monospace"}}><SkuLink sku={li.sku}/></div>
+                    : <><div style={{display:"flex",alignItems:"center",gap:4}}><input list={`sl-m-${li.id}`} value={li.sku}
                         onChange={e=>updLI(li.id,"sku",e.target.value)}
                         placeholder="SKU…"
-                        style={{width:"100%",fontSize:14,height:40,padding:"0 10px",borderRadius:3,fontFamily:"monospace"}}/>
+                        style={{width:"100%",fontSize:14,height:40,padding:"0 10px",borderRadius:3,fontFamily:"monospace"}}/><SkuInfoButton sku={li.sku} T={T}/></div>
                       <datalist id={`sl-m-${li.id}`}>{(products||[]).map(p=><option key={p.sku} value={p.sku}/>)}</datalist>
                     </>
                   }
@@ -2080,9 +2087,9 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
             const lineTotal=(parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0);
             return <tr key={li.id}>
               <td>
-                {ro?<span style={{fontSize:11}}>{li.sku||"—"}</span>
-                  :<><input list={`sl-${li.id}`} value={li.sku} onChange={e=>updLI(li.id,"sku",e.target.value)}
-                      style={{width:"100%",fontSize:11,height:25}} placeholder="SKU"/>
+                {ro?<SkuLink sku={li.sku} style={{fontSize:11}}/>
+                  :<><div style={{display:"flex",alignItems:"center"}}><input list={`sl-${li.id}`} value={li.sku} onChange={e=>updLI(li.id,"sku",e.target.value)}
+                      style={{width:"100%",fontSize:11,height:25}} placeholder="SKU"/><SkuInfoButton sku={li.sku} T={T}/></div>
                     <datalist id={`sl-${li.id}`}>{(products||[]).map(p=><option key={p.sku} value={p.sku}/>)}</datalist></>}
               </td>
               <td>
@@ -3162,7 +3169,7 @@ function ShippingTab({T}) {
 }
 
 // ─── Products Tab ──────────────────────────────────────────────────────────────
-function ProductEditRow({row,setRow,onSave,onCancel}) {
+function ProductEditRow({row,setRow,onSave,onCancel,T,loginName}) {
   // Defined OUTSIDE ProductsTab so it doesn't remount on every keystroke
   const f=(k,type="text")=>({
     type,
@@ -3174,7 +3181,11 @@ function ProductEditRow({row,setRow,onSave,onCancel}) {
   return (
     <tr style={{verticalAlign:"top"}}>
       <td></td>
-      <td style={{paddingTop:6}}><input {...f("sku")} style={{width:"100%",fontSize:11,height:26,fontFamily:"monospace",color:"#c8a96e"}}/></td>
+      <td style={{paddingTop:6}}><input {...f("sku")} style={{width:"100%",fontSize:11,height:26,fontFamily:"monospace",color:"#c8a96e"}}/>
+        {T && row._origSku && <div style={{marginTop:6}}>
+          <div style={{fontSize:9,color:T.tableHeadText,letterSpacing:".06em",marginBottom:2}}>WEBSITE PAGE</div>
+          <WebsitePagePicker sku={row._origSku} loginName={loginName} T={T} compact/>
+        </div>}</td>
       <td><input {...f("product")}/></td>
       <td style={{minWidth:220}}>
         <textarea value={row.description??""} onChange={e=>setRow(r=>({...r,description:e.target.value}))}
@@ -3202,7 +3213,7 @@ function ProductEditRow({row,setRow,onSave,onCancel}) {
   );
 }
 
-function ProductsTab({products,setProducts,currency,setCurrency,search,setSearch,categories,setCategories,subCategories,setSubCategories,subCatDefs,setSubCatDefs,exchangeRate,setExchangeRate,T,onSkuRenamed}) {
+function ProductsTab({products,setProducts,currency,setCurrency,search,setSearch,categories,setCategories,subCategories,setSubCategories,subCatDefs,setSubCatDefs,exchangeRate,setExchangeRate,T,onSkuRenamed,loginName}) {
   const [editing,      setEditing]      = useState(null);
   const [sortF,        setSortF]        = useState(null);  // null = manual/array order (lets ↑↓ reorder work)
   const [sortD,        setSortD]        = useState(1);
@@ -3694,7 +3705,7 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
     const sub = (subCategories||{})[p.sku];
     // Match the row being edited by its ORIGINAL SKU — the SKU field itself may be changing
     return (editing?._origSku ?? editing?.sku)===p.sku
-      ? <ProductEditRow key={p.sku} row={editing} setRow={setEditing}
+      ? <ProductEditRow key={p.sku} row={editing} setRow={setEditing} T={T} loginName={loginName}
           onSave={()=>{
             const { _origSku: origSku, ...saved } = editing;
             saved.sku = String(saved.sku||"").trim();
@@ -3719,7 +3730,7 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
             <input type="checkbox" checked={isSelected} onChange={()=>toggleSelect(p.sku)}
               style={{cursor:"pointer",accentColor:"#c8a96e",width:13,height:13}}/>
           </td>
-          <td style={{fontFamily:"monospace",fontSize:11,color:T.accent,whiteSpace:"nowrap"}}>{p.sku}</td>
+          <td style={{fontFamily:"monospace",fontSize:11,color:T.accent,whiteSpace:"nowrap"}}><SkuLink sku={p.sku} product={p}/></td>
           <td style={{fontSize:11,fontWeight:500,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.product}</td>
           <td style={{fontSize:11,color:T.muted,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.description}</td>
           <td style={{fontSize:11,fontFamily:"monospace",color:T.tableHeadText,textAlign:"right"}}>{p.pkg||"—"}</td>

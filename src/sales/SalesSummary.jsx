@@ -23,7 +23,7 @@ import {
   today, mondayOf, addDays, monthStart, monthEnd, fyOf, fyStart, fyEnd, daysBetween, parseYmd,
   fmtDate, fmtShort, fmtMonth, weekdayName, presetRange, PRESETS,
   fmtMoney, fmtQty, orderCurrency, orderAmount, sumOrders, displayValue,
-  enrichOrders, filterOrders, groupBy, downloadCSV, findQuoteMatches,
+  enrichOrders, filterOrders, groupBy, downloadCSV, findQuoteMatches, auditWonQuotes,
 } from "./salesUtils";
 
 const DEFAULT_SETTINGS = {
@@ -115,6 +115,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
   const orders = useMemo(() => enrichOrders(rawOrders, settings, products).filter(o => !ownOnly || o.cust.rep === loginName).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.orderNo < b.orderNo ? 1 : -1)), [rawOrders, settings, products, ownOnly, loginName]);
   const opts = useMemo(() => ({ includeFreight, usdToCad: Number(settings.usdToCad) || 1.37, mode: currencyMode }), [includeFreight, settings.usdToCad, currencyMode]);
   const matches = useMemo(() => findQuoteMatches(orders, quotes, settings), [orders, quotes, settings]);
+  const wonAudit = useMemo(() => auditWonQuotes(orders, quotes, settings), [orders, quotes, settings]);
 
   // Everything a sync needs to know about what's already been done
   const ready = loaded && !!stored && seenLoaded && packCount > 0 && !dbError;
@@ -159,7 +160,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
         {views.map(([id, label]) => (
           <button key={id} onClick={() => { setView(id); if (id === "accounts") setAccountKey(null); }}
             style={{ background: view === id ? T.activeBg : "transparent", border: `1px solid ${view === id ? T.borderLight : "transparent"}`, color: view === id ? T.gold : T.subtext, padding: "5px 11px", fontSize: 11, borderRadius: 2, letterSpacing: ".03em" }}>
-            {label}{id === "quotes" && matches.length ? <span style={{ marginLeft: 6, background: T.gold, color: "#0a0a0a", borderRadius: 8, padding: "0 6px", fontSize: 9, fontWeight: 700 }}>{matches.length}</span> : null}
+            {label}{id === "quotes" && matches.length + wonAudit.length ? <span style={{ marginLeft: 6, background: T.gold, color: "#0a0a0a", borderRadius: 8, padding: "0 6px", fontSize: 9, fontWeight: 700 }}>{matches.length + wonAudit.length}</span> : null}
           </button>
         ))}
         <div style={{ flex: 1 }} />
@@ -223,7 +224,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
           : view === "orders" ? <OrdersView {...ctx} />
           : view === "accounts" ? (accountKey ? <AccountDetail {...ctx} accountKey={accountKey} back={() => setAccountKey(null)} /> : <AccountsView {...ctx} />)
           : view === "reports" ? <ReportsView {...ctx} quotes={quotes} leads={leads} adSpend={adSpend} canSeeLeads={canSeeLeads} />
-          : view === "quotes" ? <QuoteMatchesView {...ctx} matches={matches} quotes={quotes} updateQuoteStatus={updateQuoteStatus} />
+          : view === "quotes" ? <QuoteMatchesView {...ctx} matches={matches} wonAudit={wonAudit} quotes={quotes} updateQuoteStatus={updateQuoteStatus} />
           : isAdmin ? <SettingsView {...ctx} connected={connected} setConnected={setConnected} seenCount={Object.keys(seen).length} gaps={gaps} issues={issues} /> : null}
       </div>
     </div>
@@ -1408,7 +1409,68 @@ function quoteFromOrder(quote, order, wonOption = null) {
     wonOrderNo: order.orderNo,
   };
 }
-function QuoteMatchesView({ T, matches, settings, saveSettings, opts, quotes, updateQuoteStatus, openAccount, orders }) {
+// Every Won quote should have its order attached: list the ones that don't, with the likeliest orders
+function WonQuoteAudit({ T, audit, orders, settings, saveSettings, opts, openAccount }) {
+  const [typed, setTyped] = useState({});
+  const [open, setOpen] = useState(true);
+  if (!audit.length) return null;
+  const linkedOrders = settings.quoteLinks || {};
+  const link = (orderNo, q) => saveSettings({ quoteLinks: { [orderNo]: String(q.id) } });
+  // One click for the clear-cut ones: best order scores 85%+ and no other quote wants the same order
+  const strong = [], used = new Set();
+  audit.map(a => ({ a, c: a.candidates[0] })).filter(x => x.c && x.c.score >= 0.85 && (!x.a.candidates[1] || x.a.candidates[1].score < x.c.score - 0.1))
+    .sort((x, y) => y.c.score - x.c.score).forEach(x => { if (!used.has(x.c.order.orderNo)) { used.add(x.c.order.orderNo); strong.push(x); } });
+  const linkTyped = a => {
+    const no = String(typed[a.quote.id] || "").trim().toUpperCase();
+    const o = orders.find(x => x.orderNo.toUpperCase() === no);
+    if (!o) return alert(`Order ${no} isn't in the Sales Summary. Check the number (e.g. BRO10912 or CAL16401).`);
+    if (linkedOrders[o.orderNo]) return alert(`${o.orderNo} is already linked to another quote. Unlink it below first if that one is wrong.`);
+    link(o.orderNo, a.quote); setTyped(t => ({ ...t, [a.quote.id]: "" }));
+  };
+  const head = { fontSize: 10, textTransform: "uppercase", color: T.tableHeadText, letterSpacing: ".06em" };
+  return (
+    <Card T={T} title={`Won quotes without an order (${audit.length})`} pad={0}
+      right={<div style={{ display: "flex", gap: 8 }}>
+        {strong.length > 0 && <button className="btn-gold" style={{ padding: "5px 12px", fontSize: 11 }} onClick={() => {
+          if (!confirm(`Link ${strong.length} Won quote${strong.length > 1 ? "s" : ""} to the order that clearly matches (85%+)?\n\n` + strong.map(x => `${x.a.quote.quoteNum} → ${x.c.order.orderNo}`).join("\n"))) return;
+          saveSettings({ quoteLinks: Object.fromEntries(strong.map(x => [x.c.order.orderNo, String(x.a.quote.id)])) });
+        }}>Link {strong.length} clear match{strong.length > 1 ? "es" : ""}</button>}
+        <button className="btn" onClick={() => setOpen(!open)}>{open ? "Hide" : "Show"}</button>
+      </div>}>
+      <div style={{ fontSize: 12, color: T.subtext, padding: "10px 14px", borderBottom: `1px solid ${T.border}` }}>
+        Every Won quote should have its order attached. These are marked Won but aren't linked yet — pick the right order, or type the order number if it isn't suggested.
+        Linking doesn't change the quote; it just connects it to the order (for the Won quotes → orders report).
+      </div>
+      {open && audit.map(a => (
+        <div key={a.quote.id} style={{ padding: "12px 14px", borderBottom: `1px solid ${T.border}`, display: "grid", gridTemplateColumns: "minmax(220px, 1fr) 2fr", gap: 16 }}>
+          <div>
+            <div style={head}>Won quote</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{a.quote.quoteNum} · {a.quote.company || a.quote.name}</div>
+            <div style={{ fontSize: 11, color: T.subtext }}>{a.quoteDate ? fmtDate(a.quoteDate) : "—"} · {fmtMoney(a.value, 2)} {a.quote.currency || ""} · by {a.quote.savedBy || "—"}</div>
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <input value={typed[a.quote.id] || ""} onChange={e => setTyped(t => ({ ...t, [a.quote.id]: e.target.value }))} onKeyDown={e => e.key === "Enter" && linkTyped(a)} placeholder="Order # e.g. BRO10912" style={{ fontSize: 11, height: 26, width: 150 }} />
+              <button className="btn" disabled={!typed[a.quote.id]} onClick={() => linkTyped(a)}>Link</button>
+            </div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {!a.candidates.length && <div style={{ fontSize: 12, color: T.tableHeadText, alignSelf: "center", marginTop: 14 }}>No likely order found — type the order number on the left.</div>}
+            {a.candidates.map(c => (
+              <div key={c.order.orderNo} style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: T.text }}>{c.order.orderNo} · <a style={{ cursor: "pointer" }} onClick={() => openAccount(c.order.cust.key)}>{c.order.cust.name}</a> <span style={{ fontWeight: 400, color: T.subtext }}>· {fmtDate(c.order.date)} · {fmtMoney(orderAmount(c.order, opts.includeFreight), 2)} {orderCurrency(c.order)} · {Math.round(c.score * 100)}% match</span></div>
+                  <div style={{ fontSize: 11, color: T.tableHeadText, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.reasons.join(" · ")} — {(c.order.lines || []).map(l => `${l.sku} ×${fmtQty(l.qty)}`).join(", ")}</div>
+                </div>
+                <button className="btn-gold" style={{ padding: "4px 12px", fontSize: 11 }} onClick={() => link(c.order.orderNo, a.quote)}>Link</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </Card>
+  );
+}
+
+function QuoteMatchesView({ T, matches, wonAudit = [], settings, saveSettings, opts, quotes, updateQuoteStatus, openAccount, orders }) {
   const link = (m, markWon) => {
     if (markWon) {
       // A quote with options: confirm which option they chose (the closest one is pre-picked)
@@ -1433,6 +1495,7 @@ function QuoteMatchesView({ T, matches, settings, saveSettings, opts, quotes, up
         These orders look like they came from a quote in the Quote Maker — same customer, the same SKUs, and quoted before the order date.
         Mark the quote <b>Won</b> to keep Pipeline and Lead Tracking accurate, or dismiss it if it's not the same deal.
       </div>
+      <WonQuoteAudit T={T} audit={wonAudit} orders={orders} settings={settings} saveSettings={saveSettings} opts={opts} openAccount={openAccount} />
       {!matches.length && <Empty T={T}>No possible quote matches right now.</Empty>}
       {matches.map(m => (
         <div key={m.order.orderNo + m.quote.id} style={{ background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 3, padding: 14, display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 16, alignItems: "center" }}>

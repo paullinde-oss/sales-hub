@@ -237,3 +237,49 @@ export function findQuoteMatches(orders, quotes, settings) {
   }
   return out.sort((a, b) => b.score - a.score || (b.order.date > a.order.date ? 1 : -1));
 }
+
+// ── Audit: quotes marked Won that aren't linked to an order yet ─────────────
+// For each, the orders that most likely came from it: same / similar customer, ordered from a week
+// before to 8 months after the quote, scored on customer, SKUs on both and how close the amounts are.
+// Returns [{ quote, quoteDate, value, candidates: [{ order, score, reasons, option }] }], newest quote first.
+export function auditWonQuotes(orders, quotes, settings) {
+  const links = settings.quoteLinks || {}, dismissed = settings.dismissedMatches || {};
+  const linkedQuotes = new Set(Object.values(links).map(String)), linkedOrders = new Set(Object.keys(links));
+  const rate = Number(settings.usdToCad) || 1.37;
+  const inCad = (amt, cur) => (cur === "USD" ? amt * rate : amt);
+  const pool = orders.filter(o => o.hasPricing && !linkedOrders.has(o.orderNo));
+  return (quotes || []).filter(q => q.saved !== false && q.quoteStatus === "won" && !linkedQuotes.has(String(q.id)))
+    .map(q => {
+      const date = quoteDate(q), name = q.company || q.name || "", cur = q.currency || "CAD";
+      const skus = new Set((q.lineItems || []).map(li => String(li.sku || "").toUpperCase().trim()).filter(Boolean));
+      const totals = hasOptions(q) && q.wonOption == null ? optionTotals(q).map(t => t.total) : [quoteValue(q)];
+      const candidates = [];
+      for (const o of pool) {
+        if (dismissed[`${o.orderNo}|${q.id}`]) continue;
+        const gap = date && o.date ? daysBetween(date, o.date) : null;
+        if (gap != null && (gap < -7 || gap > 240)) continue;
+        const ns = Math.max(nameScore(o.customer, name, settings.accounts, settings.aliases), nameScore(o.cust?.name, name, settings.accounts, settings.aliases));
+        if (ns < 0.5) continue;
+        const oc = orderCurrency(o), ov = [inCad(o.productTotal || 0, oc), inCad(o.total || 0, oc)];
+        let diff = Infinity, close = 0, option = null;
+        totals.forEach((t, i) => {
+          if (!t) return;
+          const qv = inCad(t, cur);
+          ov.forEach(v => { const d = Math.abs(qv - v); if (d < diff) { diff = d; close = Math.max(0, 1 - d / Math.max(qv, v, 1)); option = totals.length > 1 ? i + 1 : null; } });
+        });
+        const oskus = new Set((o.lines || []).map(l => l.sku).filter(Boolean));
+        const hit = [...skus].filter(s => oskus.has(s)).length;
+        const ss = skus.size ? hit / skus.size : 0;
+        const score = ns * 0.4 + ss * 0.35 + close * 0.25;
+        if (score < 0.55) continue;
+        const reasons = [ns >= 1 ? "Same customer" : "Similar customer name"];
+        if (skus.size) reasons.push(`${hit} of ${skus.size} quoted SKU${skus.size > 1 ? "s" : ""} on the order`);
+        if (diff < Infinity) reasons.push((diff < 1 ? "Same dollar amount" : `Amounts ${fmtMoney(diff)} apart`) + (option ? ` (Option ${option})` : ""));
+        if (gap != null) reasons.push(gap >= 0 ? `Ordered ${gap} days after the quote` : `Ordered ${-gap} days before the quote date`);
+        candidates.push({ order: o, score, reasons, option });
+      }
+      candidates.sort((a, b) => b.score - a.score);
+      return { quote: q, quoteDate: date, value: quoteValue(q), candidates: candidates.slice(0, 3) };
+    })
+    .sort((a, b) => (a.quoteDate < b.quoteDate ? 1 : -1));
+}

@@ -101,7 +101,7 @@ Real sales, built from order confirmation PDFs.
 ### Pipeline & Leads
 - **Dashboard:**
   - Pipeline row: open quotes and their value, quotes this week and month, win rate this fiscal
-    year, quotes needing a follow-up, quotes going cold soon, and a "follow up next" list.
+    year, quotes needing a follow-up, overdue / expiring quotes, and a "follow up next" list.
   - Leads row (only for people allowed to see leads): new leads this month, open leads, leads won,
     conversion rate, top lead source, cost per lead.
 - **Pipeline:** one tab per person who made quotes. Open quotes move between folders on their
@@ -110,7 +110,7 @@ Real sales, built from order confirmation PDFs.
   - **Recent** (< 7 days) → **Check In Soon** (7–14) → **Follow Up Now** (14+).
   - **Overdue / Expires Soon**: the quote expires within 7 days (30-day validity by default).
   - **Followed Up**: a follow-up was logged recently. Logging one resets the clock and the expiry.
-  - **Closed:** **Won** / **Lost** are set by hand. **Cold** happens automatically at 60 days, or by hand.
+  - **Closed:** **Won** / **Lost** are set by hand. **Cold** is set by hand too — quotes never go cold on their own; an ignored quote stays in **Overdue / Expires Soon**.
   - The Week / Month / Year buttons make quotes move faster or slower.
 - **Leads (Lead Tracking):** leads by calendar year, with company, contact, type, source,
   potential value, status, last contact, quote #, products and notes. Also holds yearly ad spend

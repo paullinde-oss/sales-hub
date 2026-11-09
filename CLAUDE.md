@@ -88,6 +88,9 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   everywhere = `quoteValue()`: won → chosen option (`wonOption`, asked via `pickWonOption`), otherwise
   the **average** of the options. Win/loss counts are per quote. Quote Matches matches any option;
   "Mark quote won" pre-picks the closest option and collapses the quote to the actual order.
+- **Quotes never go Cold automatically** (Paul): an ignored quote stays in Pipeline "Overdue / Expires Soon"
+  (expired or ≤7 days left; good for `validFor` days, default 30, restarted by a follow-up) until someone
+  marks it Won, Lost or Cold. The old 60-day auto-cold rule was removed.
 - Quote Matches: only suggest when the quote total is **within $3,000** of the order; skip quotes
   already marked Won.
 - **Year in Review** (`src/sales/yearInReview.js`, Reports → Year-End customer reports and the customer

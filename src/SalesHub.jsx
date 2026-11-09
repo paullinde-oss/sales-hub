@@ -6356,14 +6356,8 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
     }
   }
 
-  // Auto-persist cold status for quotes 60+ days old
-  useEffect(()=>{
-    const toFreeze = savedQuotes.filter(q=>{
-      const s = q.quoteStatus||'inprogress';
-      return (s==='inprogress'||s==='followed') && daysSince(q.savedDate)>=60;
-    });
-    toFreeze.forEach(q=>updateQuote(q.id,{quoteStatus:'cold'}));
-  },[savedQuotes.length]);
+  // Quotes are never moved to Cold automatically (Paul): an ignored quote stays in Overdue / Expires Soon
+  // until someone marks it Won, Lost or Cold.
 
   const {recent: recentThresh, checkin: checkinThresh} = getThresholds();
   const BUCKETS = [
@@ -6504,9 +6498,6 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
   // (doesn't mutate data, just affects display bucket)
   function getQuoteStatusEffective(q) {
     const s = q.quoteStatus||'inprogress';
-    if (s==='inprogress' || s==='followed') {
-      if (daysSince(q.savedDate) >= 60) return 'cold';
-    }
     return s;
   }
 
@@ -6526,7 +6517,7 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
         const inPeriod = saved.filter(q=> q.savedDate && (now - new Date(q.savedDate).getTime()) <= periodMs);
         const won      = inPeriod.filter(q=>q.quoteStatus==='won');
         const inprog   = inPeriod.filter(q=>!q.quoteStatus||q.quoteStatus==='inprogress'||q.quoteStatus==='followed');
-        const lostcold = inPeriod.filter(q=>q.quoteStatus==='lost'||q.quoteStatus==='cold'||daysSince(q.savedDate)>=60);
+        const lostcold = inPeriod.filter(q=>q.quoteStatus==='lost'||q.quoteStatus==='cold');
         const sumVal   = qs => qs.reduce((s,q)=>quoteValue(q)+s,0);
         const periodLabel = statPeriod==='week'?'This Week':statPeriod==='month'?'This Month':'This Year';
         return (

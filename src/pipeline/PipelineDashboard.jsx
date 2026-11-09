@@ -37,14 +37,13 @@ export default function PipelineDashboard({ T, quotes, leads, adSpend, canSeeLea
     const week = qs.filter(x => x.date && new Date(x.date + "T00:00") >= monStart);
     const month = qs.filter(x => x.date && x.date.slice(0, 7) === t.slice(0, 7));
     const fy = fyOf(t), fyQ = qs.filter(x => x.date && x.date >= fyStart(fy) && x.date <= t);
-    // Like the Pipeline, an open quote 60+ days old counts as gone cold
-    const savedAge = x => (now - new Date(x.q.savedDate || 0).getTime()) / day;
-    qs.forEach(x => { if (x.s === "open" && savedAge(x) >= 60) x.s = "cold"; });
+    // Quotes only go cold when someone marks them Cold (no automatic 60-day rule)
     const open = qs.filter(x => x.s === "open");
     const sum = l => l.reduce((s, x) => s + x.v, 0);
     const won = fyQ.filter(x => x.s === "won"), decided = fyQ.filter(x => x.s !== "open");
     const followUp = open.filter(x => x.age >= 14);
-    const goingCold = open.filter(x => savedAge(x) >= 45 && savedAge(x) < 60);
+    // Like the Pipeline's "Overdue / Expires Soon": expired, or 7 days or less left (quotes are good for 30 days unless set otherwise; a follow-up restarts that)
+    const goingCold = open.filter(x => (parseInt(x.q.validFor) || 30) - x.age <= 7);
     // Leads (calendar year, like Lead Tracking)
     const yr = String(new Date().getFullYear());
     const yl = (leads || []).filter(l => String(l.year) === yr);
@@ -72,7 +71,7 @@ export default function PipelineDashboard({ T, quotes, leads, adSpend, canSeeLea
           <Tile T={T} label="Quotes this month" value={d.month.length} sub={fmtMoney(d.month.reduce((s, x) => s + x.v, 0))} />
           <Tile T={T} label={`Win rate FY${d.fy}`} value={d.winRate == null ? "—" : `${d.winRate}%`} sub={`${d.wonFy.length} won · ${fmtMoney(d.wonFyV)}`} color={d.winRate == null ? undefined : d.winRate >= 40 ? GREEN : d.winRate < 20 ? RED : undefined} />
           <Tile T={T} label="Need a follow-up" value={d.followUp.length} sub="open, no activity in 14+ days" color={d.followUp.length ? RED : undefined} onClick={() => go("pipeline")} />
-          <Tile T={T} label="Going cold soon" value={d.goingCold.length} sub="45–59 days old (cold at 60)" onClick={() => go("pipeline")} />
+          <Tile T={T} label="Overdue / expires soon" value={d.goingCold.length} sub="expired or 7 days or less left" onClick={() => go("pipeline")} />
         </Row>
 
         {canSeeLeads && <>

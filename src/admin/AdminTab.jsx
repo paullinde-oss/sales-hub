@@ -58,12 +58,13 @@ export default function AdminTab({ T, db, users, loginName, logins = {}, masterO
     catch (e) { setMsg("Couldn't save: " + e.message); }
   };
   const missing = users.filter(u => !entryOf(u)?.hash).map(u => u.name);
+  const th = { textAlign: "center", whiteSpace: "normal", lineHeight: 1.3, minWidth: 64, maxWidth: 110, verticalAlign: "bottom", padding: "8px 6px" };
   const card = { background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 3, marginBottom: 16 };
   const head = { padding: "10px 14px", borderBottom: `1px solid ${T.border}`, fontSize: 11, textTransform: "uppercase", letterSpacing: ".08em", color: T.tableHeadText, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 };
 
   return (
     <div style={{ flex: 1, overflow: "auto", padding: 16 }}>
-      <div style={{ maxWidth: 1200 }}>
+      <div>
         <div style={card}>
           <div style={head}>
             Users<div style={{ flex: 1 }} />
@@ -81,8 +82,8 @@ export default function AdminTab({ T, db, users, loginName, logins = {}, masterO
             <table className="data-table">
               <thead><tr>
                 <th>Name</th>
-                {ALL_TABS.map(t => <th key={t.id} style={{ textAlign: "center", whiteSpace: "nowrap", fontStyle: t.sub ? "italic" : "normal" }}>{t.label}</th>)}
-                <th>Sales data</th><th style={{ textAlign: "center", whiteSpace: "nowrap" }}>Edit price lists</th><th style={{ textAlign: "center", whiteSpace: "nowrap" }}>Costs &amp; margins</th><th style={{ textAlign: "center" }}>Admin</th><th>Password</th><th></th>
+                {ALL_TABS.map(t => <th key={t.id} style={{ ...th, fontStyle: t.sub ? "italic" : "normal" }}>{t.label}</th>)}
+                <th style={th}>Sales data</th><th style={th}>Edit price lists</th><th style={th}>Costs &amp; margins</th><th style={th}>Admin</th><th style={{ ...th, textAlign: "left" }}>Password</th><th></th>
               </tr></thead>
               <tbody>{list.map((u, i) => (
                 <tr key={i}>

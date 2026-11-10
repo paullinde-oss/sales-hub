@@ -18,7 +18,8 @@ import { customerListFor, withCustomerPrices } from "./pricelist/priceLists";
 import SalesSummary from "./sales/SalesSummary";
 import AdminTab from "./admin/AdminTab";
 import { useUsers, findUser, canSee, DEFAULT_USERS, canEditPriceLists, canSeeCosts } from "./admin/users";
-import { checkPassword, currentPasswordHash } from "./sales/auth";
+import { signIn, tokenValid, listenLogins, listenMaster, changeOwnPassword } from "./sales/auth";
+import { setCostKey } from "./pricelist/costs";
 import { SS_OPEN_TAB } from "./sales/dropbox";
 import { ProductPreviewHost, SkuLink, SkuInfoButton, WebsitePagePicker, WebsitePagesView } from "./products/ProductPreview";
 import { moveSkuPage, useProductPages } from "./products/webPages";
@@ -666,20 +667,50 @@ class TabErrorBoundary extends Component {
   }
 }
 
+// 🔑 in the top bar: a person changes their own password (keeps their costs access)
+function ChangeMyPassword({ T, loginName, onToken }) {
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState({ old: "", a: "", b: "", msg: "" });
+  const go = async () => {
+    if (f.a.length < 6) return setF({ ...f, msg: "Use at least 6 characters." });
+    if (f.a !== f.b) return setF({ ...f, msg: "The two new passwords don't match." });
+    try { onToken(await changeOwnPassword(db, loginName, f.old, f.a)); setF({ old: "", a: "", b: "", msg: "" }); setOpen(false); alert("Password changed."); }
+    catch (e) { setF({ ...f, msg: e.message }); }
+  };
+  const inp = { display: "block", width: "100%", height: 32, fontSize: 13, marginBottom: 8 };
+  return <>
+    <button title="Change my password" onClick={() => setOpen(true)}
+      style={{background:"transparent",border:`1px solid ${T.border}`,color:T.muted,padding:"3px 8px",fontSize:10,cursor:"pointer",borderRadius:1}}>🔑</button>
+    {open && <div className="modal-overlay" onClick={() => setOpen(false)}>
+      <div className="modal" style={{ maxWidth: 360 }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Change my password</div>
+        <input type="password" placeholder="Current password" value={f.old} onChange={e => setF({ ...f, old: e.target.value, msg: "" })} style={inp} autoFocus />
+        <input type="password" placeholder="New password" value={f.a} onChange={e => setF({ ...f, a: e.target.value, msg: "" })} style={inp} />
+        <input type="password" placeholder="New password again" value={f.b} onChange={e => setF({ ...f, b: e.target.value, msg: "" })} onKeyDown={e => e.key === "Enter" && go()} style={inp} />
+        {f.msg && <div style={{ fontSize: 11, color: "#e8472c", marginBottom: 8 }}>{f.msg}</div>}
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button className="btn" onClick={() => setOpen(false)}>Cancel</button>
+          <button className="btn-gold" onClick={go}>Change password</button>
+        </div>
+      </div>
+    </div>}
+  </>;
+}
+
 export default function SalesHub() {
   const isMobile = useIsMobile();
-  // bmp_auth holds the password hash the user signed in with; if Paul changes the
-  // master password, it no longer matches and everyone is asked to sign in again.
+  // bmp_auth remembers the sign-in on this computer (a fingerprint of the person's password);
+  // if their password is reset, or the master password is switched off, they're asked to sign in again.
   const [authHash, setAuthHash] = useLocalStorage('bmp_auth', '');
   const authed = !!authHash;
-  const setAuthed = v => { if (!v) setAuthHash(''); };
+  const setAuthed = v => { if (!v) { setAuthHash(''); setCostKey(''); } };
   const [loginName, setLoginName] = useLocalStorage('bmp_user', '');
   const [loginPass, setLoginPass] = useState("");
   const [loginError, setLoginError] = useState("");
-  useEffect(() => {
-    if (!authHash) return;
-    currentPasswordHash(db).then(h => { if (h && h !== authHash) setAuthHash(''); });
-  }, []);
+  const [logins, setLogins] = useState(null), [masterAuth, setMasterAuth] = useState(null);
+  useEffect(() => listenLogins(db, setLogins), []);
+  useEffect(() => listenMaster(db, setMasterAuth), []);
+  useEffect(() => { if (authHash && !tokenValid(authHash, loginName, logins, masterAuth)) setAuthed(false); }, [authHash, loginName, logins, masterAuth]); // eslint-disable-line
 
   // Who can sign in and what each person can see — managed in the Admin tab
   const users = useUsers(db);
@@ -693,14 +724,15 @@ export default function SalesHub() {
       setLoginError("Name not recognised. Please enter your first name.");
       return;
     }
-    if (!(await checkPassword(db, loginPass))) {
-      setLoginError("Wrong password.");
+    const r = await signIn(db, match, loginPass);
+    if (!r.ok) {
+      setLoginError(r.noPassword && !logins?.[match.toLowerCase()] ? "You don't have a password yet — ask Paul to set one for you." : "Wrong password.");
       return;
     }
     setLoginName(match); // normalise capitalisation
     setLoginError("");
     setLoginPass("");
-    setAuthHash(await currentPasswordHash(db));
+    setAuthHash(r.token);
   }
 
 
@@ -1285,6 +1317,7 @@ ${quoteNumLine}
           <div style={{fontSize:10,color:T.muted,borderLeft:`1px solid ${T.border}`,paddingLeft:12}}>
             <span style={{color:T.subtext,fontWeight:600}}>{loginName}</span>
           </div>
+          {logins?.[String(loginName).toLowerCase()]?.hash && <ChangeMyPassword T={T} loginName={loginName} onToken={setAuthHash}/>}
           <button onClick={()=>{setAuthed(false);setLoginName("");setLoginPass("");}}
             style={{background:"transparent",border:`1px solid ${T.border}`,color:T.muted,padding:"3px 10px",fontSize:9,cursor:"pointer",letterSpacing:".06em",borderRadius:1}}>
             Sign out
@@ -1351,7 +1384,7 @@ ${quoteNumLine}
             {shipSection==="curtain"&&<ShippingTab T={T}/>}
             {shipSection==="dims"&&<DimsTab dims={dims} setDims={setDims} T={T}/>}
           </TabPage>}
-          {activeTab==="admin"&&canSee(currentUser,"admin")&&<TabPage T={T} title="USERS & ACCESS"><AdminTab T={T} db={db} users={users||DEFAULT_USERS} loginName={loginName}/></TabPage>}
+          {activeTab==="admin"&&canSee(currentUser,"admin")&&<TabPage T={T} title="USERS & ACCESS"><AdminTab T={T} db={db} users={users||DEFAULT_USERS} loginName={loginName} logins={logins} masterOff={!!masterAuth?.off} onOwnToken={setAuthHash}/></TabPage>}
           </TabErrorBoundary>
         </div>
       </div>
@@ -1482,7 +1515,7 @@ ${quoteNumLine}
         {/* Card */}
         <div style={{background:"#ffffff",border:"1px solid #d8d8d4",borderRadius:6,padding:"36px 32px",boxShadow:"0 2px 20px rgba(0,0,0,.08)"}}>
           <div style={{fontSize:17,fontWeight:600,color:"#111",marginBottom:6}}>Sign in</div>
-          <div style={{fontSize:12,color:"#aaa",marginBottom:28,lineHeight:1.5}}>Enter your first name and the team password.</div>
+          <div style={{fontSize:12,color:"#aaa",marginBottom:28,lineHeight:1.5}}>Enter your first name and your password.</div>
 
           <input
             value={loginName}

@@ -21,7 +21,7 @@ sales** (from order confirmations), and looks up **prices, stock and shipping**.
   after the account" (shown as **Held by**), not sales rep.
 - **Leon** — Grant's AI tool that creates the order confirmation PDFs the hub reads.
 
-**Signing in:** first name + one shared master password (set by Paul in Users & Access).
+**Signing in:** first name + their own password (set by Paul in Users & Access; anyone can change theirs with the 🔑 button at the top). Costs & margins open with that same password.
 
 ---
 
@@ -149,7 +149,7 @@ Real sales, built from order confirmation PDFs.
   "Leads section" tick), Products & Price List, Stock Levels, Shipping.
 - Sales data scope: "All customers" or "Own accounts only".
 - Admin tick.
-- **Master password:** view the current one (Show) or change it. Changing it signs everyone out.
+- **Passwords:** "Set password" / "Reset" on each person's row (the hub can't show passwords afterwards). Resetting signs that person out.
 
 ---
 

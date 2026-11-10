@@ -20,35 +20,18 @@ export function marginColor(m, target) {
   return m < target ? RED : m < target + 5 ? AMBER : GREEN;
 }
 
-export function CostGate({ T, costs, loginName, children }) {
-  const [a, setA] = useState(""), [b, setB] = useState(""), [msg, setMsg] = useState("");
+export function CostGate({ T, costs, children }) {
   if (costs.status === "loading") return <div style={{ fontSize: 12, color: T.tableHeadText }}>Loading costs…</div>;
-  if (costs.status === "hidden") return <div style={{ fontSize: 12, color: T.tableHeadText }}>Costs and margins are only shown to people with "Costs & margins" in Users & Access.</div>;
+  if (costs.status === "hidden") return <div style={{ fontSize: 12, color: T.tableHeadText }}>Costs and margins are only shown to people with "Costs &amp; margins" in Users &amp; Access.</div>;
   if (costs.status === "ready") return children;
   const box = { background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 3, padding: 16, maxWidth: 620 };
-  if (costs.status === "none") return (
-    <div style={box}>
-      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Set up the cost password</div>
-      <div style={{ fontSize: 12, color: T.subtext, lineHeight: 1.6, marginBottom: 12 }}>Costs are locked with their own password, separate from the hub's sign-in password, so they stay private even though the database is open. Give it only to the people who should see costs (Paul, Mark, Jeff, Grant). Each person types it once per computer. If it's ever forgotten, set up a new one and refresh the costs from the calculators.</div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <input type="password" placeholder="Cost password" value={a} onChange={e => setA(e.target.value)} style={{ height: 30 }} />
-        <input type="password" placeholder="Type it again" value={b} onChange={e => setB(e.target.value)} style={{ height: 30 }} />
-        <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} onClick={async () => {
-          if (a.length < 6) return setMsg("Use at least 6 characters."); if (a !== b) return setMsg("The two don't match.");
-          await costs.save({}, loginName, a);
-        }}>Set password</button>
-        {msg && <span style={{ fontSize: 11, color: RED }}>{msg}</span>}
-      </div>
-    </div>
-  );
   return (
     <div style={box}>
-      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>🔒 Costs are locked on this computer</div>
-      <div style={{ fontSize: 12, color: T.subtext, marginBottom: 12 }}>Type the cost password once — this computer will remember it.</div>
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <input type="password" placeholder="Cost password" value={a} onChange={e => setA(e.target.value)} onKeyDown={e => e.key === "Enter" && costs.unlock(a)} style={{ height: 30 }} />
-        <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} onClick={() => costs.unlock(a)}>Unlock</button>
-        {costs.error && <span style={{ fontSize: 11, color: RED }}>{costs.error}</span>}
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>🔒 Costs are locked</div>
+      <div style={{ fontSize: 12, color: T.subtext, lineHeight: 1.6 }}>
+        {costs.status === "none"
+          ? <>Costs open with each person's own password. They switch on the first time an admin sets a password for someone with "Costs &amp; margins" in <b>Users &amp; Access</b>.</>
+          : <>Costs open automatically when you sign in with your own password. <b>Sign out and sign back in</b> with your password — if they're still locked, ask Paul to set your password again in Users &amp; Access.</>}
       </div>
     </div>
   );
@@ -119,7 +102,6 @@ export default function CostsView({ T, costs, loginName, products, draftProducts
         {busy && <span style={{ fontSize: 11, color: T.gold }}>{busy}</span>}
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: 11, color: T.tableHeadText }}>{withCost} of {products.length} SKUs have a cost{costs.at ? ` · last saved ${when(costs.at)}${costs.by ? " by " + costs.by : ""}` : ""}</span>
-        <button className="btn" title="Lock costs again on this computer" onClick={costs.forget}>🔒 Lock</button>
       </div>
       <div style={{ fontSize: 11, color: T.tableHeadText, marginBottom: 10, lineHeight: 1.5 }}>
         Refresh reads the Erosion Control Blanket and Turbidity Curtain calculators from Dropbox <b>{CALC_FOLDER}</b> (the Canada "Total Cost"). Costs for other SKUs can be typed in or imported from a CSV (SKU, Cost).

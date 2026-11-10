@@ -1,67 +1,80 @@
 // ─── Product costs (for margins) ─────────────────────────────────────────────
 // Costs are the most sensitive numbers in the hub and the database is open to anyone who knows
-// how to look, so they're stored ENCRYPTED in config/productCosts. The key comes from a separate
-// "cost password" that only cost viewers (Users & Access → Costs & margins) know; it's typed once
-// per computer and kept only in that browser. Forgotten password → re-import from the calculators.
-//   map: { SKU: { cost, at, by, source } }  (cost in CAD per unit — per roll, section, package …)
-import { doc, onSnapshot, setDoc } from "firebase/firestore";
+// how to look, so they're stored ENCRYPTED in config/productCosts ({ v: 2, box }) with a random
+// "cost key". Each person with "Costs & margins" has a copy of that key locked with their own
+// sign-in password (config/logins, see sales/auth.js); signing in unlocks it and keeps it on that
+// computer only (localStorage bmp_cost_key). No separate cost password.
+//   map: { SKU: { cost, at, by, source }, __targets: {...}, __incomeSheet: "<published CSV link>" }
+import { doc, onSnapshot, setDoc, getDoc } from "firebase/firestore";
 import { useEffect, useState, useCallback } from "react";
 import { up, priceNum, PRICE_FIELDS } from "./priceLists";
 
-const LS = "bmp_cost_pass";
+const LS = "bmp_cost_key";
 const enc = new TextEncoder(), dec = new TextDecoder();
 const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
 const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
-
-async function keyFrom(pass, salt) {
+export const getCostKey = () => { try { return localStorage.getItem(LS) || ""; } catch { return ""; } };
+export const setCostKey = k => { try { k ? localStorage.setItem(LS, k) : localStorage.removeItem(LS); } catch {} try { localStorage.removeItem("bmp_cost_pass"); } catch {} try { window.dispatchEvent(new Event("bmp-cost-key")); } catch {} };
+const aesKey = (raw, uses) => crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, uses);
+async function passKey(pass, saltB64) {
   const base = await crypto.subtle.importKey("raw", enc.encode(pass), "PBKDF2", false, ["deriveKey"]);
-  return crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: 200000, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+  return crypto.subtle.deriveKey({ name: "PBKDF2", salt: unb64(saltB64), iterations: 200000, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
 }
-async function seal(obj, pass, salt) {
+async function sealWith(key, bytes) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const data = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await keyFrom(pass, salt), enc.encode(JSON.stringify(obj)));
-  return { iv: b64(iv), data: b64(data) };
+  return { iv: b64(iv), data: b64(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, bytes)) };
 }
-async function open(box, pass, salt) {
-  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(box.iv) }, await keyFrom(pass, salt), unb64(box.data));
-  return JSON.parse(dec.decode(plain));
-}
-const readPass = () => { try { return localStorage.getItem(LS) || ""; } catch { return ""; } };
-const writePass = p => { try { p ? localStorage.setItem(LS, p) : localStorage.removeItem(LS); } catch {} };
+const openWith = async (key, box) => new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(box.iv) }, key, unb64(box.data)));
+// The cost key locked / unlocked with a person's password
+export const wrapCostKey = async (keyB64, pass, saltB64) => sealWith(await passKey(pass, saltB64), unb64(keyB64));
+export const unwrapCostKey = async (box, pass, saltB64) => b64(await openWith(await passKey(pass, saltB64), box));
+const sealCosts = async (costs, keyB64) => sealWith(await aesKey(unb64(keyB64), ["encrypt"]), enc.encode(JSON.stringify(costs)));
+const openCosts = async (box, keyB64) => JSON.parse(dec.decode(await openWith(await aesKey(unb64(keyB64), ["decrypt"]), box)));
 
-// status: "loading" | "none" (never set up) | "locked" (need the cost password) | "ready" | "hidden"
+// For Users & Access: the cost key to give someone. First time ever: makes a new key and an empty,
+// locked cost list (the old list locked with the forgotten cost password is replaced).
+export async function costKeyToGive(db, by) {
+  const s = await getDoc(doc(db, "config", "productCosts"));
+  const d = s.exists() ? s.data() : null;
+  const mine = getCostKey();
+  if (d?.v === 2) {
+    if (!mine) throw new Error("Your computer doesn't have the costs unlocked — sign out and back in with your own password first.");
+    try { await openCosts(d.box, mine); return mine; } catch { throw new Error("The costs on this computer are out of date — sign out and back in with your own password first."); }
+  }
+  const key = b64(crypto.getRandomValues(new Uint8Array(32)));
+  await setDoc(doc(db, "config", "productCosts"), { v: 2, box: await sealCosts({}, key), updatedAt: new Date().toISOString(), updatedBy: by || "" });
+  setCostKey(key);
+  return key;
+}
+
+// status: "loading" | "none" (not set up yet) | "locked" (this computer has no key) | "ready" | "hidden"
 export function useCosts(db, allowed) {
   const [docData, setDocData] = useState(undefined);
   const [state, setState] = useState({ status: "loading", costs: {}, error: "" });
+  const [keyTick, setKeyTick] = useState(0);
   useEffect(() => {
     if (!allowed) { setState({ status: "hidden", costs: {} }); return; }
     return onSnapshot(doc(db, "config", "productCosts"), s => setDocData(s.exists() ? s.data() : null), () => setDocData(null));
   }, [db, allowed]);
-  const tryOpen = useCallback(async (pass, d = docData) => {
-    if (!d) return false;
-    try { const costs = await open(d.box, pass, unb64(d.salt)); writePass(pass); setState({ status: "ready", costs, error: "", at: d.updatedAt, by: d.updatedBy }); return true; }
-    catch { return false; }
-  }, [docData]);
+  // Signing in stores the key — look again
+  useEffect(() => { const f = () => setKeyTick(t => t + 1); window.addEventListener("bmp-cost-key", f); return () => window.removeEventListener("bmp-cost-key", f); }, []);
   useEffect(() => {
     if (!allowed || docData === undefined) return;
-    if (docData === null) { setState({ status: "none", costs: {} }); return; }
-    const p = readPass();
-    (async () => { if (!(p && await tryOpen(p, docData))) setState(s => ({ ...s, status: "locked", costs: {} })); })();
-  }, [docData, allowed]); // eslint-disable-line
+    if (!docData || docData.v !== 2) { setState({ status: "none", costs: {} }); return; }
+    const k = getCostKey();
+    if (!k) { setState({ status: "locked", costs: {} }); return; }
+    openCosts(docData.box, k).then(costs => setState({ status: "ready", costs, error: "", at: docData.updatedAt, by: docData.updatedBy }))
+      .catch(() => setState({ status: "locked", costs: {} }));
+  }, [docData, allowed, keyTick]);
 
-  const unlock = async pass => { const ok = await tryOpen(pass); if (!ok) setState(s => ({ ...s, error: "That cost password didn't work." })); return ok; };
-  // Save the whole cost list (re-encrypted). setUp: first time, choose the cost password.
-  const save = async (costs, by, setUpPass) => {
-    const pass = setUpPass || readPass();
-    if (!pass) throw new Error("Unlock costs first.");
-    const salt = docData?.salt ? unb64(docData.salt) : crypto.getRandomValues(new Uint8Array(16));
-    const box = await seal(costs, pass, salt);
-    await setDoc(doc(db, "config", "productCosts"), { salt: b64(salt), box, updatedAt: new Date().toISOString(), updatedBy: by || "" });
-    if (setUpPass) writePass(setUpPass);
+  // Save the whole cost list (re-encrypted with the cost key)
+  const save = useCallback(async (costs, by) => {
+    const k = getCostKey();
+    if (!k || docData?.v !== 2) throw new Error("Costs aren't unlocked on this computer.");
+    await setDoc(doc(db, "config", "productCosts"), { v: 2, box: await sealCosts(costs, k), updatedAt: new Date().toISOString(), updatedBy: by || "" });
     setState({ status: "ready", costs, error: "" });
-  };
-  const forget = () => { writePass(""); setState(s => ({ ...s, status: "locked", costs: {} })); };
-  return { ...state, unlock, save, forget };
+  }, [db, docData]);
+  return { ...state, save };
 }
 
 // ── Margins ──────────────────────────────────────────────────────────────────

@@ -79,7 +79,7 @@ export default function IncomeStatement({ T, costs, loginName }) {
       <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Connect the Income Statement sheet</div>
       <div style={{ fontSize: 12, color: T.subtext, lineHeight: 1.6, marginBottom: 10 }}>
         In Google Sheets: File → Share → <b>Publish to web</b> → choose the <b>Income Statement</b> tab and <b>CSV</b>, then paste the link here.
-        It's saved locked with the cost password (never in the public code), and the numbers are read fresh from the sheet each time.
+        It's saved locked (only people with Costs &amp; margins can open it — never in the public code), and the numbers are read fresh from the sheet each time.
       </div>
       <div style={{ display: "flex", gap: 8 }}>
         <input value={draft} onChange={e => setDraft(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/e/…/pub?gid=…&single=true&output=csv" style={{ flex: 1, height: 30, fontSize: 12 }} />

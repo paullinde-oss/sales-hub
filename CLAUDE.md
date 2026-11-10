@@ -34,9 +34,10 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   dots/spaces). PDF: `pdf.js` (notes on page 1, file "BMP Supplies - 2027 Price List - Customer").
   **The GitHub repo is public — never commit price sheets, customer prices or costs.**
 - **Costs & margins** (`src/pricelist/costs.js`, `CostsView.jsx`, `Projection.jsx`): users with "Costs &
-  margins" (Paul, Mark, Jeff, Grant). Costs are **AES-encrypted** in `config/productCosts` with a key from
-  a separate cost password (typed once per browser, kept in localStorage `bmp_cost_pass`, never stored
-  online) because Firestore is open — Paul postponed per-person email logins. "Refresh costs from
+  margins" (Paul, Mark, Jeff, Grant). Costs are **AES-encrypted** in `config/productCosts` ({v:2, box}) with a random
+  **cost key**; each cost viewer's login entry holds that key locked with their own password, so signing in
+  unlocks it (kept in localStorage `bmp_cost_key`, cleared on sign-out). No separate cost password (the old
+  v1 list locked with a forgotten cost password was replaced). `costKeyToGive` makes the key the first time. "Refresh costs from
   calculators" reads the ECB + Turbidity Curtain calculators (xlsx, SheetJS) from Dropbox
   `/Documents/Cost Calculators` or an upload: Canada "Total Cost"; 16'/jumbo blankets estimated from the
   8' roll (×2/×5/×10, marked estimate). Margin = (price − cost) ÷ price at the lowest price; optional
@@ -55,8 +56,13 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   New product family on the Products list → add a rule to `FAMILIES`.
 - `src/pipeline/PipelineDashboard.jsx` — Pipeline & Leads dashboard (lead tiles hidden without "leads").
 - `src/admin/` — Users & Access: per-user area access (+ "leads" sub-permission; old ids loadcalc/dims
-  map to shipping via `userTabs`), sales-data scope, master password (viewable — stored readable
-  in `config/auth.password` at Paul's request).
+  map to shipping via `userTabs`), sales-data scope, and **each person's password** (Set password / Reset).
+- **Sign-in** (`src/sales/auth.js`): first name + **own password** (Paul, Nov 2026 — hard switch). `config/logins`
+  {users: {name: {salt, hash (PBKDF2), wrapSalt/wrap = cost key for cost viewers, setBy, setAt}}}. Passwords
+  are never stored readable (the DB is open). 🔑 in the top bar = change my password. The old shared master
+  password (`config/auth`) stops when Paul clicks "Switch everyone to personal passwords" (`masterOff: true`).
+  Remembered sign-in `bmp_auth` = "u:"+hash; a reset signs that person out. Ticking Costs & margins for
+  someone who already has a password → set their password again (the key can only be wrapped with it).
 - `src/sales/` — Sales Summary:
   - `SalesSummary.jsx` — the tab UI (Dashboard, Orders, Accounts, Reports, Quote Matches, Settings)
   - `sync.js` — Dropbox → Firestore sync; `dropbox.js` — Dropbox OAuth (PKCE, browser only) + API
@@ -81,8 +87,8 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   (editable). Account list started from Paul's list in `accounts.js` (DEFAULT_ACCOUNTS) and is now
   edited in the app (stored in Firestore).
 - Users & access (Admin tab): Paul admin; Mark, Grant, Jeff full access; **John sees only his own
-  accounts** in Sales Summary and no Lead Tracking. Sign-in = first name + shared master password
-  (only Paul changes it). This is app-level access only, not real security (Firestore is open).
+  accounts** in Sales Summary and no Lead Tracking. Sign-in = first name + their own password
+  (set by Paul in Users & Access). This is app-level access only, not real security (Firestore is open).
 - Order line clean-up (in `cleanOrder`): **GST/PST/HST (and "GTS") are tax — never sales**, removed
   from totals if a PDF added them in. FRT / "Shipping to…" / 4420-0005 etc. are all **"Freight"**.
   Processing fees, expedited service, import duty recovery are **fees** (count in sales, grouped).

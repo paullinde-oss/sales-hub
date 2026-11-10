@@ -17,7 +17,7 @@ const MARKET = [["both", "Canada & USA"], ["ca", "Canada only"], ["us", "USA onl
 export default function CostCalculator({ T, book: stored, saveBook, costs, loginName, productsCAD = [], productsUSD = [], hubUsdRate, focusSku, onFocusDone }) {
   const [book, setBook] = useState(() => clone(stored.book));
   const [dirty, setDirty] = useState(false);
-  const [sel, setSel] = useState(() => stored.book.calcs[0]?.id || "rates");
+  const [sel, setSel] = useState(() => stored.book.calcs[0]?.id || "start");
   const [market, setMarket] = useState("ca");
   const [busy, setBusy] = useState("");
   const [linkEdit, setLinkEdit] = useState(null); // { lineId, colId }
@@ -98,6 +98,8 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
     setBusy("Reading the Excel files…");
     try {
       const results = [];
+      const csv = files.filter(f => /\.csv$/i.test(f.name));
+      if (csv.length) { setBusy(""); return alert("Please pick the Excel files (.xlsx) — a .csv only holds one tab, so the other types would be missing. Each Excel file has all its types (every curtain type, every blanket) and they all load at once."); }
       for (const f of files) results.push(await importWorkbook(await f.arrayBuffer(), f.name));
       const n = results.reduce((s, r) => s + r.calcs.length, 0);
       change(b => {
@@ -119,7 +121,7 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
   const ImportButton = ({ big }) => (
     <label className={big ? "btn-gold" : "btn"} style={{ cursor: "pointer", ...(big ? { padding: "8px 16px", fontSize: 12, display: "inline-block" } : {}) }}>
       ⬆ Import from Excel
-      <input type="file" accept=".xlsx,.xls" multiple style={{ display: "none" }} onChange={e => { const f = [...e.target.files]; e.target.value = ""; if (f.length) doImport(f); }} />
+      <input type="file" accept=".xlsx,.xls,.csv" multiple style={{ display: "none" }} onChange={e => { const f = [...e.target.files]; e.target.value = ""; if (f.length) doImport(f); }} />
     </label>
   );
 
@@ -136,7 +138,7 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
           </div>
         ))}
         <div style={{ borderTop: `1px solid ${T.border}`, margin: "6px 0", paddingTop: 6 }}>
-          {[["rates", "⚙ Shared rates"], ["log", "🕘 Change log"]].map(([k, l]) => (
+          {[["start", "⬆ Import from Excel"], ["rates", "⚙ Shared rates"], ["log", "🕘 Change log"]].map(([k, l]) => (
             <button key={k} onClick={() => setSel(k)} style={{ display: "block", width: "100%", textAlign: "left", padding: "6px 14px", border: "none", borderLeft: `2px solid ${sel === k ? T.gold : "transparent"}`, background: sel === k ? T.activeBg : "transparent", color: sel === k ? T.text : T.subtext, fontSize: 12, cursor: "pointer" }}>{l}</button>
           ))}
           <button onClick={() => {
@@ -166,12 +168,13 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
         </div>
 
         {busy && <div style={{ fontSize: 12, color: T.gold, fontWeight: 600, margin: "-4px 0 10px" }}>{busy}</div>}
-        {!book.calcs.length && sel !== "rates" && sel !== "log" && (
+        {(!book.calcs.length || sel === "start") && sel !== "rates" && sel !== "log" && (
           <div style={{ ...card, padding: 20, maxWidth: 680 }}>
-            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Set up the Cost Calculator</div>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>{book.calcs.length ? "Import from Excel" : "Set up the Cost Calculator"}</div>
+            {book.calcs.length > 0 && <div style={{ fontSize: 12, color: AMBER, marginBottom: 8 }}>A type that's already here with the same name (e.g. Turbidity Curtains › Type 2 DOT) is replaced by the one in the file.</div>}
             <div style={{ fontSize: 12, color: T.subtext, lineHeight: 1.6, marginBottom: 14 }}>
-              Upload your Excel cost calculators (Turbidity Curtains, Erosion Control Blankets, Donuts, Dewatering Bags — you can pick them all at once).
-              The hub builds a calculator for each standard product type, with the same lines and numbers; custom one-offs are left out.
+              Click below and pick your Excel cost calculators (.xlsx) — select all four at once (Turbidity Curtains, Erosion Control Blankets, Donuts, Dewatering Bags).
+              <b>You don't need to create anything first:</b> every standard type in each file (all the curtain types, all the blankets…) is built automatically, with the same lines and numbers; custom one-offs are left out.
               Nothing is saved until you check them and click <b>Save changes</b>.
             </div>
             <ImportButton big />

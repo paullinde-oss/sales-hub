@@ -1215,7 +1215,7 @@ ${quoteNumLine}
 
   // ── Mobile layout ────────────────────────────────────────────────────────
   if (authed && isMobile) return (<>
-    <ProductPreviewHost T={T} products={productsCAD}/>
+    <ProductPreviewHost T={T} products={productsCAD} extras={productExtras}/>
     <MobileLayout
       T={T} theme={theme} setTheme={setTheme}
       activeTab={mobileTab} setActiveTab={setMobileTab}
@@ -1357,7 +1357,7 @@ ${quoteNumLine}
       </div>
 
       <WonOptionPicker T={T} fmt={fmtCur}/>
-      <ProductPreviewHost T={T} products={productsCAD}/>
+      <ProductPreviewHost T={T} products={productsCAD} extras={productExtras}/>
       {/* PDF Modal */}
       {pdfQuote && (
         <PDFModal quote={pdfQuote} onClose={()=>setPdfQuote(null)}/>
@@ -2436,6 +2436,28 @@ const stockNum = v => { const n = parseFloat(String(v ?? "").replace(/[^0-9.\-]/
 const stockSku = s => String(s || "").replace(/^BMP-?/i, "").trim().toUpperCase();
 // Which column is compared with the quote qty on each sheet (blankets are quoted in rolls)
 const STOCK_COMPARE = { calgary: "Qty in Stock", curtains: "In Stock", blankets: "Rolls" };
+
+// For the product pop-up: dimensions (DIMS sheet) and stock (the 3 stock sheets) for one SKU
+let dimsCache = null;
+async function productExtras(sku) {
+  const k = stockSku(sku);
+  const [dims, stock] = await Promise.all([
+    (dimsCache && Date.now() - dimsCache.at < 10 * 60 * 1000 ? Promise.resolve(dimsCache.rows)
+      : fetchDimsFromSheet().then(rows => { dimsCache = { at: Date.now(), rows }; return rows; })).then(rows => rows.filter(r => stockSku(r.sku) === k)).catch(() => null),
+    loadStockSheets(false).then(d => {
+      const rows = [];
+      Object.entries(STOCK_SHEETS).forEach(([key, sheet]) => {
+        const row = (d[key]?.rows || []).find(r => stockSku(r[sheet.skuCol]) === k);
+        if (!row) return;
+        const cols = sheet.stockCols.map(sc => ({ label: sc.label, value: row[sc.col] ?? "", n: stockNum(row[sc.col]) }));
+        const main = cols.find(c => c.label === STOCK_COMPARE[key]) || cols[0];
+        rows.push({ sheet: sheet.label, main, extra: cols.filter(c => c !== main && String(c.value).trim() !== "") });
+      });
+      return { rows, error: Object.values(d).some(x => x.error) };
+    }).catch(() => null),
+  ]);
+  return { dims, stock };
+}
 
 function StockCheck({ quote, T }) {
   const [data, setData] = useState(stockCache?.data || null);

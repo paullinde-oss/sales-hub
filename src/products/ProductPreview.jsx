@@ -1,6 +1,7 @@
 // ─── Product preview pop-up, SKU links and the "Website page" picker ─────────
 // See webPages.js for how a SKU finds its page on bmpsupplies.com.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { PRICE_FIELDS, FIELD_LABEL } from "../pricelist/priceLists";
 import { useProductPages, previewFor, resolveSku, setSkuPage, setPreviewOpener, openPreview, FAMILIES, skuKey, pageUrl, SITE } from "./webPages";
 
 // A SKU you can click for the website preview. Renders as plain text styling of the caller.
@@ -27,8 +28,16 @@ export function SkuInfoButton({ sku, product, T }) {
 
 const W = 320;
 // Mount once near the top of the app. products = the Products list (fallback name/description).
-export function ProductPreviewHost({ T, products }) {
+export function ProductPreviewHost({ T, products, extras }) {
   const [open, setOpen] = useState(null);
+  const [more, setMore] = useState(null); // { dims, stock } for the open SKU (null while loading)
+  useEffect(() => {
+    setMore(null);
+    if (!open || !extras) return;
+    let ok = true;
+    extras(open.sku).then(m => ok && setMore(m)).catch(() => ok && setMore({ dims: null, stock: null }));
+    return () => { ok = false; };
+  }, [open?.sku]); // eslint-disable-line
   const data = useProductPages();
   const boxRef = useRef(null);
   useEffect(() => { setPreviewOpener(setOpen); return () => setPreviewOpener(null); }, []);
@@ -46,9 +55,17 @@ export function ProductPreviewHost({ T, products }) {
     const k = skuKey(open.sku);
     return (products || []).find(p => skuKey(p.sku) === k) || null;
   }, [open, products]);
+  // Prices always come from the current CAD price list (the Products list), whatever list the click came from
+  const listed = useMemo(() => { if (!open) return null; const k = skuKey(open.sku); return (products || []).find(x => skuKey(x.sku) === k) || null; }, [open, products]);
   if (!open) return null;
 
   const p = previewFor(open.sku, data, product);
+  const money = v => { const n = parseFloat(String(v ?? "").replace(/[^0-9.\-]/g, "")); return isNaN(n) || !n ? null : "$" + n.toLocaleString(undefined, { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }); };
+  const prices = listed ? PRICE_FIELDS.map(f => [FIELD_LABEL[f], money(listed[f])]).filter(x => x[1]) : [];
+  const head = { fontSize: 9, textTransform: "uppercase", letterSpacing: ".1em", color: T.tableHeadText, marginBottom: 4 };
+  const sec = { borderTop: `1px solid ${T.border}`, paddingTop: 8, marginBottom: 10 };
+  const inch = v => { const t = String(v || "").trim(); return t ? (/["″]$/.test(t) ? t : t + '"') : ""; };
+  const stockCol = n => n == null ? T.subtext : n <= 0 ? "#e8472c" : "#34c77b";
   const vw = window.innerWidth, vh = window.innerHeight, phone = vw < 520;
   // Next to the SKU on a computer; a sheet at the bottom on a phone
   const pos = phone || !open.rect
@@ -76,6 +93,43 @@ export function ProductPreviewHost({ T, products }) {
           </div>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, lineHeight: 1.3 }}>{p.name || "—"}</div>
           {p.desc && <div style={{ fontSize: 12, color: T.subtext, lineHeight: 1.5, marginBottom: 12, maxHeight: 130, overflow: "hidden" }}>{p.desc}</div>}
+          {/* Current price list (CAD) */}
+          <div style={sec}>
+            <div style={head}>Current price list (CAD)</div>
+            {prices.length
+              ? <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "2px 12px", fontSize: 12 }}>
+                  {prices.map(([l, v]) => <Fragment key={l}><span style={{ color: T.subtext }}>{l}</span><b style={{ fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{v}</b></Fragment>)}
+                  {(listed.pkg || listed.pallet) && <span style={{ gridColumn: "1 / -1", fontSize: 10, color: T.tableHeadText, marginTop: 2 }}>{[listed.pkg && `${listed.pkg} per package`, listed.pallet && `${listed.pallet} per pallet`].filter(Boolean).join(" · ")}</span>}
+                </div>
+              : <div style={{ fontSize: 11, color: T.tableHeadText }}>Not on the current price list</div>}
+          </div>
+          {/* Dimensions (DIMS sheet) */}
+          <div style={sec}>
+            <div style={head}>Dimensions</div>
+            {!more ? <div style={{ fontSize: 11, color: T.tableHeadText }}>Loading…</div>
+              : more.dims == null ? <div style={{ fontSize: 11, color: T.tableHeadText }}>Couldn't read the DIMS sheet</div>
+              : !more.dims.length ? <div style={{ fontSize: 11, color: T.tableHeadText }}>Not on the DIMS sheet</div>
+              : more.dims.map((d, i) => (
+                <div key={i} style={{ fontSize: 12, marginBottom: 2 }}>
+                  {d.section && <b style={{ fontSize: 10, color: T.subtext, marginRight: 6 }}>{d.section[0] + d.section.slice(1).toLowerCase()}</b>}
+                  <span style={{ fontVariantNumeric: "tabular-nums" }}>{[inch(d.L), inch(d.W), inch(d.H)].filter(Boolean).join(" × ")}</span>
+                  {d.weight && <span style={{ color: T.subtext }}> · {d.weight}{/[a-z]/i.test(d.weight) ? "" : " lb"}</span>}
+                  {d.location && <span style={{ color: T.tableHeadText }}> · {d.location}</span>}
+                </div>))}
+          </div>
+          {/* Stock (the 3 stock sheets) */}
+          <div style={sec}>
+            <div style={head}>Stock</div>
+            {!more ? <div style={{ fontSize: 11, color: T.tableHeadText }}>Loading…</div>
+              : more.stock == null ? <div style={{ fontSize: 11, color: T.tableHeadText }}>Couldn't read the stock sheets</div>
+              : !more.stock.rows.length ? <div style={{ fontSize: 11, color: T.tableHeadText }}>Not on the stock sheets</div>
+              : more.stock.rows.map(r => (
+                <div key={r.sheet} style={{ fontSize: 12, display: "flex", gap: 8, marginBottom: 2 }}>
+                  <span style={{ color: T.subtext, flex: 1 }}>{r.sheet}</span>
+                  <b style={{ color: stockCol(r.main.n), fontVariantNumeric: "tabular-nums" }}>{r.main.n == null ? (r.main.value || "—") : r.main.n <= 0 ? "Out of stock" : `${r.main.value}${r.main.label === "Rolls" ? " rolls" : ""} in stock`}</b>
+                  {r.extra.length > 0 && <span style={{ fontSize: 10, color: T.tableHeadText, alignSelf: "center" }}>{r.extra.map(c => `${c.label} ${c.value}`).join(" · ")}</span>}
+                </div>))}
+          </div>
           {p.slug
             ? <>
                 <a href={p.url} target="_blank" rel="noopener noreferrer" onClick={() => setOpen(null)}

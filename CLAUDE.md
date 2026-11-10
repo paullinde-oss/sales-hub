@@ -104,6 +104,9 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   button/drawer): reads the 3 published Google stock sheets (`STOCK_SHEETS`: Calgary Stock, Turbidity Curtains,
   ECB/Wattles — blankets compared in Rolls) automatically (5-min cache), shows only sheets carrying a quoted SKU,
   in stock vs need (with options: most any one option needs + common), plus "Not on the stock sheets".
+- **Product pop-up** (click a SKU; `src/products/ProductPreview.jsx`) also shows the current CAD price list prices
+  (from `productsCAD`, whatever list was clicked), DIMS rows for the SKU and stock from the 3 stock sheets
+  (`productExtras` in SalesHub.jsx, passed as `extras`; DIMS cached 10 min, stock 5 min).
 - Quote Matches: only suggest when the quote total is **within $3,000** of the order; skip quotes
   already marked Won.
 - **Every Won quote should have an order attached** (Paul). Quote Matches → "Won quotes without an order"

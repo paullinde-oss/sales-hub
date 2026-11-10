@@ -1734,7 +1734,6 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
   }, [quote.lineItems, quote.options, products]);
   const [qtyWarnings,setQtyWarnings] = useState({});
   const [priceFlash, setPriceFlash] = useState({}); // lineItemId -> bool
-  const [stockOpen, setStockOpen] = useState(false);
 
   // Self-heal: if a SKU was typed before Firestore's product sync finished (e.g. right
   // after opening the app), the lookup below would have found nothing. Once real product
@@ -2225,6 +2224,9 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
         );
       })()}</Fragment>)}
 
+      {/* Stock Check — automatic, replaces the old "Check Stock" button */}
+      <StockCheck quote={quote} T={T}/>
+
       {/* Load Validation Warnings */}
       {Array.isArray(loadWarnings) && loadWarnings.length > 0 && (
         <div style={{border:`1px solid ${T.border}`,marginBottom:8,overflow:"hidden"}}>
@@ -2350,16 +2352,13 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
                   <button className="btn" style={{flex:1,fontSize:11,color:"#c8a96e"}} onClick={()=>onPDF(quote)}>↓ PDF</button>
                 </div>
                 <button className="btn" style={{fontSize:11}} onClick={()=>onEdit(quote)}>Make Edits</button>
-                <button className="btn" style={{fontSize:11,color:"#4a90d9",borderColor:"#4a90d9"}} onClick={()=>setStockOpen(true)}>📦 Check Stock</button>
               </div>
             : <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"stretch"}}>
                 <button className="btn-gold" onClick={()=>onSave(quote)}>SAVE</button>
-                <button className="btn" style={{fontSize:11,color:"#4a90d9",borderColor:"#4a90d9"}} onClick={()=>setStockOpen(true)}>📦 Check Stock</button>
               </div>}
         </div>
       </div>
     </div>
-    {stockOpen&&<StockDrawer quote={quote} onClose={()=>setStockOpen(false)} T={T}/>}
     </>
   );
 }
@@ -2415,179 +2414,103 @@ function stockStatus(val) {
   return 'ok';
 }
 
-function StockDrawer({quote, onClose, T}) {
-  const [data,    setData]    = useState({}); // sheetKey -> {rows, error}
-  const [loading, setLoading] = useState(true);
-  const [lastFetch, setLastFetch] = useState(null);
+// ─── Stock Check on a quote (under Coverage Totals) ─────────────────────────
+// Reads the three Google stock sheets automatically and shows, per sheet that carries any of the
+// quoted SKUs, how many are in stock vs how many the quote needs. Sheets with none are hidden.
+// With options, "need" = the most any one option needs (+ common lines) — only one option ships.
+let stockCache = null; // { at, data } shared by every quote for 5 minutes
+async function loadStockSheets(force) {
+  if (!force && stockCache && Date.now() - stockCache.at < 5 * 60 * 1000) return stockCache.data;
+  const results = {};
+  await Promise.all(Object.entries(STOCK_SHEETS).map(async ([key, sheet]) => {
+    try {
+      const res = await fetch(sheet.url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      results[key] = { rows: parseCSV(await res.text()), error: null };
+    } catch (e) { results[key] = { rows: [], error: e.message }; }
+  }));
+  stockCache = { at: Date.now(), data: results };
+  return results;
+}
+const stockNum = v => { const n = parseFloat(String(v ?? "").replace(/[^0-9.\-]/g, "")); return isNaN(n) ? null : n; };
+const stockSku = s => String(s || "").replace(/^BMP-?/i, "").trim().toUpperCase();
+// Which column is compared with the quote qty on each sheet (blankets are quoted in rolls)
+const STOCK_COMPARE = { calgary: "Qty in Stock", curtains: "In Stock", blankets: "Rolls" };
 
-  // SKUs in the current quote
-  const quotedSkus = useMemo(()=>{
-    return new Set((quote.lineItems||[]).map(li=>(li.sku||'').trim().toUpperCase()));
-  },[quote.lineItems]);
+function StockCheck({ quote, T }) {
+  const [data, setData] = useState(stockCache?.data || null);
+  const [busy, setBusy] = useState(false);
+  const refresh = force => { setBusy(true); loadStockSheets(force).then(d => { setData(d); setBusy(false); }); };
+  useEffect(() => { refresh(false); }, []); // eslint-disable-line
 
-  async function fetchAll() {
-    setLoading(true);
-    const results = {};
-    await Promise.all(Object.entries(STOCK_SHEETS).map(async ([key,sheet])=>{
-      try {
-        const res = await fetch(sheet.url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const text = await res.text();
-        results[key] = {rows: parseCSV(text), error:null};
-      } catch(e) {
-        results[key] = {rows:[], error:e.message};
-      }
-    }));
-    setData(results);
-    setLastFetch(new Date());
-    setLoading(false);
-  }
-
-  useEffect(()=>{ fetchAll(); },[]);
-
-  // Match quoted SKUs against each sheet
-  const matches = useMemo(()=>{
-    const out = [];
-    // Normalize: strip BMP- prefix since sheets don't have it
-    const normalize = s => s.replace(/^BMP-?/i,'').trim().toUpperCase();
-
-    (quote.lineItems||[]).forEach(li=>{
-      const sku = (li.sku||'').trim();
-      if (!sku) return;
-      const skuNorm = normalize(sku);
-      let found = false;
-
-      Object.entries(STOCK_SHEETS).forEach(([key, sheet])=>{
-        const sheetData = data[key];
-        if (!sheetData || !sheetData.rows.length) return;
-
-        sheetData.rows.forEach(row=>{
-          const rowSku = normalize(row[sheet.skuCol]||'');
-          if (!rowSku || rowSku !== skuNorm) return;
-
-          // For curtains: check if stock value (col F) is empty/zero — if so, try Calgary fallback
-          let stocks = sheet.stockCols.map(sc=>({
-            label: sc.label,
-            value: row[sc.col]??'—',
-            status: stockStatus(row[sc.col]),
-          }));
-
-          // Curtain: always show the row even if 0 — just don't add a redundant Calgary fallback card
-          // Calgary Stock row above already shows any Calgary qty
-
-          found = true;
-          out.push({sku, qty: li.qty, sheet: sheet.label, stocks});
-        });
-      });
-
-      if (!found && sku) {
-        out.push({sku, qty:li.qty, sheet:'—', stocks:[{label:'Stock', value:'Not found', status:'unknown'}]});
-      }
+  // How many of each SKU the quote needs
+  const need = useMemo(() => {
+    const add = (m, li) => { const k = stockSku(li.sku); if (!k) return; m[k] = m[k] || { sku: String(li.sku).trim(), qty: 0 }; m[k].qty += parseFloat(li.qty) || 0; };
+    if (!hasOptions(quote)) { const m = {}; (quote.lineItems || []).forEach(li => add(m, li)); return m; }
+    const best = {};
+    quote.options.forEach((_, i) => {
+      const m = {}; [...linesOf(quote, i + 1), ...linesOf(quote, 0)].forEach(li => add(m, li));
+      Object.entries(m).forEach(([k, v]) => { if (!best[k] || v.qty > best[k].qty) best[k] = v; });
     });
-    return out;
-  },[data, quote.lineItems]);
+    return best;
+  }, [quote.lineItems, quote.options]);
+  const skus = Object.keys(need);
+  if (!skus.length) return null;
 
-  const statusColor = s => s==='ok'?'#34c77b': s==='low'?'#f5a623': s==='out'?'#e8472c': '#666';
-  const statusIcon  = s => s==='ok'?'✅': s==='low'?'⚠️': s==='out'?'🔴': '—';
-  const worstStatus = stocks => {
-    if (stocks.some(s=>s.status==='out'))     return 'out';
-    if (stocks.some(s=>s.status==='low'))     return 'low';
-    if (stocks.some(s=>s.status==='ok'))      return 'ok';
-    return 'unknown';
-  };
+  const boxes = [], found = new Set();
+  if (data) Object.entries(STOCK_SHEETS).forEach(([key, sheet]) => {
+    const rows = data[key]?.rows || [];
+    const items = [];
+    skus.forEach(k => {
+      const row = rows.find(r => stockSku(r[sheet.skuCol]) === k);
+      if (!row) return;
+      found.add(k);
+      const cols = sheet.stockCols.map(sc => ({ label: sc.label, value: row[sc.col] ?? "", n: stockNum(row[sc.col]) }));
+      const main = cols.find(c => c.label === STOCK_COMPARE[key]) || cols[0];
+      items.push({ ...need[k], have: main.n, mainLabel: main.label, extra: cols.filter(c => c !== main && c.value !== "") });
+    });
+    if (items.length) boxes.push({ key, label: sheet.label, items });
+  });
+  const missing = data ? skus.filter(k => !found.has(k)).map(k => need[k]) : [];
+  const errors = data ? Object.entries(STOCK_SHEETS).filter(([k]) => data[k]?.error).map(([, s]) => s.label) : [];
+  const fmtN = n => Number.isInteger(n) ? n.toLocaleString() : n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const GREEN = "#34c77b", ORANGE = "#f5a623", RED = "#e8472c";
 
   return (
-    <div style={{position:'fixed',top:0,right:0,bottom:0,width:480,maxWidth:'95vw',
-      background:T.cardBg,borderLeft:`1px solid ${T.border}`,
-      boxShadow:'-4px 0 24px rgba(0,0,0,.4)',zIndex:200,display:'flex',flexDirection:'column'}}>
-
-      {/* Header */}
-      <div style={{padding:'12px 16px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
-        <span style={{fontSize:16}}>📦</span>
-        <div style={{flex:1}}>
-          <div style={{fontSize:12,fontWeight:600,color:T.subtext,letterSpacing:'.04em'}}>Stock Check</div>
-          <div style={{fontSize:9,color:T.muted,marginTop:1}}>{quote.quoteNum} · {(quote.lineItems||[]).filter(l=>l.sku).length} items</div>
-        </div>
-        <button className="btn" style={{fontSize:10,padding:'3px 10px'}} onClick={fetchAll} disabled={loading}>
-          {loading ? '…' : '⟳ Refresh'}
-        </button>
-        <button style={{background:'none',border:'none',color:T.muted,fontSize:16,cursor:'pointer',padding:'0 4px'}} onClick={onClose}>✕</button>
+    <div style={{ border: `1px solid ${T.border}`, marginBottom: 8, overflow: "hidden" }}>
+      <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: ".12em", color: T.muted, padding: "5px 10px", background: T.tableHead, borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 6 }}>
+        <span>📦</span> Stock Check
+        <span style={{ flex: 1 }} />
+        {errors.length > 0 && <span style={{ color: RED, textTransform: "none", letterSpacing: 0 }}>Couldn't read: {errors.join(", ")}</span>}
+        <button className="btn" style={{ fontSize: 9, padding: "1px 8px" }} disabled={busy} onClick={() => refresh(true)}>{busy ? "…" : "⟳"}</button>
       </div>
-
-      {/* Source legend */}
-      <div style={{padding:'6px 16px',borderBottom:`1px solid ${T.border}`,display:'flex',gap:12,flexWrap:'wrap',flexShrink:0}}>
-        {Object.entries(STOCK_SHEETS).map(([key,sheet])=>{
-          const d = data[key];
-          const status = !d ? 'loading' : d.error ? 'error' : 'ok';
-          return (
-            <div key={key} style={{display:'flex',alignItems:'center',gap:4}}>
-              <div style={{width:6,height:6,borderRadius:'50%',background:status==='ok'?'#34c77b':status==='error'?'#e8472c':'#888'}}/>
-              <span style={{fontSize:9,color:T.muted}}>{sheet.label}</span>
-              {d?.error&&<span style={{fontSize:9,color:'#e8472c'}}>(error)</span>}
-            </div>
-          );
-        })}
-        {lastFetch&&<span style={{fontSize:9,color:T.muted,marginLeft:'auto'}}>
-          Updated {lastFetch.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
-        </span>}
-      </div>
-
-      {/* Body */}
-      <div style={{flex:1,overflowY:'auto',padding:'8px 0'}}>
-        {loading ? (
-          <div style={{padding:32,textAlign:'center',color:T.muted,fontSize:12}}>
-            Fetching stock levels…
-          </div>
-        ) : matches.length===0 ? (
-          <div style={{padding:32,textAlign:'center',color:T.muted,fontSize:12}}>
-            No matching SKUs found in stock sheets
-          </div>
-        ) : matches.map((m,i)=>{
-          const worst = worstStatus(m.stocks);
-          return (
-            <div key={i} style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`,
-              borderLeft:`3px solid ${statusColor(worst)}`}}>
-              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:5}}>
-                <span style={{fontSize:10,fontFamily:'monospace',fontWeight:600,color:T.accent}}>{m.sku}</span>
-                <span style={{fontSize:9,color:T.muted}}>qty: {m.qty}</span>
-                <span style={{fontSize:9,color:T.muted,marginLeft:'auto'}}>{m.sheet}</span>
-              </div>
-              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-                {m.stocks.map((s,j)=>{
-                  const n = parseFloat(String(s.value).replace(/[^0-9.\-]/g,''));
-                  const qtyNum = parseInt(m.qty)||0;
-                  const enough = !isNaN(n) && n >= qtyNum;
-                  return (
-                    <div key={j} style={{background:T.tableHead,padding:'4px 10px',borderRadius:2,
-                      border:`1px solid ${s.status==='unknown'?T.border:statusColor(s.status)}22`}}>
-                      <div style={{fontSize:8,color:T.muted,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:1}}>{s.label}</div>
-                      <div style={{fontSize:13,fontWeight:600,color:statusColor(s.status),fontVariantNumeric:'tabular-nums'}}>
-                        {s.value}
-                      </div>
-                      {!isNaN(n) && qtyNum>0 && (
-                        <div style={{fontSize:8,color:enough?'#34c77b':'#f5a623',marginTop:1}}>
-                          {enough ? `covers ${qtyNum} ✓` : `short by ${qtyNum-n}`}
-                        </div>
-                      )}
+      {!data ? <div style={{ padding: "10px 14px", fontSize: 11, color: T.muted }}>Checking stock…</div> : (
+        <div style={{ display: "flex", flexWrap: "wrap" }}>
+          {[...boxes, ...(missing.length ? [{ key: "none", label: "Not on the stock sheets", items: missing.map(m => ({ ...m, have: undefined })) }] : [])].map(b => (
+            <div key={b.key} style={{ padding: "8px 14px", borderRight: `1px solid ${T.border}`, minWidth: 200 }}>
+              <div style={{ fontSize: 9, color: T.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 5 }}>{b.label}</div>
+              {b.items.map(it => {
+                const short = it.have == null ? null : it.qty - it.have;
+                const st = it.have === undefined ? "none" : it.have == null ? "unknown" : it.have <= 0 ? "out" : short > 0 ? "short" : "ok";
+                const col = { ok: GREEN, short: ORANGE, out: RED }[st] || T.muted;
+                return (
+                  <div key={it.sku} style={{ borderLeft: `3px solid ${col}`, paddingLeft: 8, marginBottom: 6 }}>
+                    <div style={{ fontSize: 10, fontFamily: "monospace", fontWeight: 600, color: T.accent }}>{it.sku}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: col, fontVariantNumeric: "tabular-nums" }}>
+                      {st === "ok" && <>✅ {fmtN(it.have)} in stock · need {fmtN(it.qty)}</>}
+                      {st === "short" && <>⚠️ {fmtN(it.have)} in stock · need {fmtN(it.qty)} · short {fmtN(short)}</>}
+                      {st === "out" && <>🔴 Out of stock · need {fmtN(it.qty)}</>}
+                      {st === "unknown" && <span style={{ fontWeight: 400 }}>No stock number on the sheet · need {fmtN(it.qty)}</span>}
+                      {st === "none" && <span style={{ fontWeight: 400 }}>Need {fmtN(it.qty)} — check stock by hand</span>}
                     </div>
-                  );
-                })}
-              </div>
+                    {(it.mainLabel && it.mainLabel !== "Qty in Stock" && it.mainLabel !== "In Stock" || it.extra?.length > 0) && st !== "none" && (
+                      <div style={{ fontSize: 9, color: T.muted }}>{[it.mainLabel && `Counted in ${it.mainLabel.toLowerCase()}`, ...(it.extra || []).map(c => `${c.label}: ${c.value}`)].filter(Boolean).join(" · ")}</div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
-      </div>
-
-      {/* Footer summary */}
-      {!loading && matches.length>0 && (
-        <div style={{padding:'8px 16px',borderTop:`1px solid ${T.border}`,display:'flex',gap:12,flexShrink:0}}>
-          {['ok','low','out'].map(s=>{
-            const count = matches.filter(m=>worstStatus(m.stocks)===s).length;
-            if(!count) return null;
-            return <div key={s} style={{fontSize:10,color:statusColor(s),display:'flex',alignItems:'center',gap:4}}>
-              {statusIcon(s)} <span>{count} {s==='ok'?'in stock':s==='low'?'low':s==='out'?'out of stock':''}</span>
-            </div>;
-          })}
+          ))}
         </div>
       )}
     </div>

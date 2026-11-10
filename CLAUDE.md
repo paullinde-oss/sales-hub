@@ -100,6 +100,10 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
 - **Quotes never go Cold automatically** (Paul): an ignored quote stays in Pipeline "Overdue / Expires Soon"
   (expired or ≤7 days left; good for `validFor` days, default 30, restarted by a follow-up) until someone
   marks it Won, Lost or Cold. The old 60-day auto-cold rule was removed.
+- **Stock Check on quotes** (`StockCheck` in SalesHub.jsx, under Coverage Totals; replaced the old "Check Stock"
+  button/drawer): reads the 3 published Google stock sheets (`STOCK_SHEETS`: Calgary Stock, Turbidity Curtains,
+  ECB/Wattles — blankets compared in Rolls) automatically (5-min cache), shows only sheets carrying a quoted SKU,
+  in stock vs need (with options: most any one option needs + common), plus "Not on the stock sheets".
 - Quote Matches: only suggest when the quote total is **within $3,000** of the order; skip quotes
   already marked Won.
 - **Every Won quote should have an order attached** (Paul). Quote Matches → "Won quotes without an order"

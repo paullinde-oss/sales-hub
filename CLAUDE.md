@@ -107,6 +107,11 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
 - **Product pop-up** (click a SKU; `src/products/ProductPreview.jsx`) also shows the current CAD price list prices
   (from `productsCAD`, whatever list was clicked), DIMS rows for the SKU and stock from the 3 stock sheets
   (`productExtras` in SalesHub.jsx, passed as `extras`; DIMS cached 10 min, stock 5 min).
+- **Income Statement** (Reports → Financials; `src/sales/IncomeStatement.jsx`, cost viewers only, behind
+  `CostGate`): shows ONLY the Google Sheet tab "Income Statement" (Sage 50 figures) — A1 title, A2 source,
+  A4:G5 summary boxes, table in AA:AJ (Account, 6 value cols, RowType, ShowInSummary, Section); "Show detail
+  for" = None / All / a section. The published-CSV link is stored **inside the encrypted cost store**
+  (`costs.__incomeSheet`) — never commit it; figures are read fresh, never saved in Firestore.
 - Quote Matches: only suggest when the quote total is **within $3,000** of the order; skip quotes
   already marked Won.
 - **Every Won quote should have an order attached** (Paul). Quote Matches → "Won quotes without an order"

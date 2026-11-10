@@ -19,6 +19,7 @@ import { openYearInReview, reviewPeriod } from "./yearInReview";
 import WrappedReport from "./WrappedReport";
 import { buildCatalog, suggestSkus, isGenericSku } from "./skus";
 import { SkuLink } from "../products/ProductPreview";
+import IncomeStatement from "./IncomeStatement";
 import { QuoteWinRateReport, OpenPipelineReport, QuoteToOrderReport, LeadReport, SalesForecastReport, ReorderReport, ProductTrendsReport } from "./pipelineReports";
 import {
   today, mondayOf, addDays, monthStart, monthEnd, fyOf, fyStart, fyEnd, daysBetween, parseYmd,
@@ -1110,6 +1111,8 @@ const REPORTS = [
   ["wintype", "Win rate: Distributors vs End Users"],
   ["pipeline", "Open pipeline & expected wins"],
   ["quoteorder", "Won quotes → orders"],
+  ["__h", "Financials", "margins"],
+  ["income", "Income Statement", "margins"],
   ["__h", "Margins", "margins"],
   ["mproduct", "Profit by product (SKU)", "margins"],
   ["mcustomer", "Profit by customer", "margins"],
@@ -1257,7 +1260,8 @@ function ReportsView({ T, db, orders, settings, opts, currencyMode, openAccount,
           <button key={k} onClick={() => setRep(k)} style={{ textAlign: "left", background: rep === k ? T.activeBg : "transparent", border: "none", borderLeft: `2px solid ${rep === k ? T.gold : "transparent"}`, color: rep === k ? T.text : T.subtext, padding: "7px 10px 7px 14px", fontSize: 12 }}>{l}</button>
         ))}
       </div>
-      {MARGIN_REPORTS.includes(rep) && canCosts ? <div style={{ flex: 1, minWidth: 0 }}><CostGate T={T} costs={costs} loginName={loginName}><MarginReport key={rep} T={T} rep={rep} orders={orders} settings={settings} costs={costs?.costs || {}} categories={categories} /></CostGate></div>
+      {rep === "income" && canCosts ? <div style={{ flex: 1, minWidth: 0 }}><CostGate T={T} costs={costs} loginName={loginName}><IncomeStatement T={T} costs={costs} loginName={loginName} /></CostGate></div>
+      : MARGIN_REPORTS.includes(rep) && canCosts ? <div style={{ flex: 1, minWidth: 0 }}><CostGate T={T} costs={costs} loginName={loginName}><MarginReport key={rep} T={T} rep={rep} orders={orders} settings={settings} costs={costs?.costs || {}} categories={categories} /></CostGate></div>
       : PIPELINE_REPORTS.includes(rep) ? (() => {
         const pp = { T, orders, opts, currencyMode, settings, quotes, ownOnly, loginName, openAccount };
         return rep === "winrate" ? <QuoteWinRateReport key="winrate" {...pp} />

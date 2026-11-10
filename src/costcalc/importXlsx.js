@@ -12,7 +12,7 @@ import { uid } from "./model";
 
 const DEPTH = { "2.5": "0250", "5": "0550", "7.5": "7550", "10": "1050", "12.5": "1250", "15": "1550", "17.5": "1750", "20": "2050", "25": "2550", "30": "3050", "40": "4050" };
 const CURTAIN_TYPE = { "type 1 industrial": "T1IND", "type 1 dot": "T1DOT", "type 2 dot": "T2DOT", "type 2 industrial": "T2IND", "type 3 dot": "T3DOT" };
-const SKIP_SHEET = /^(data|sheet\d*|currency rates|labour and overhead lookup|donuts)$|custom|xr5/i;
+const SKIP_SHEET = /^(data|sheet\d*|currency rates|labour and overhead lookup|donuts|production cost calculator)$|custom|xr5/i;
 const norm = s => String(s ?? "").replace(/\s+/g, " ").trim();
 const isNum = v => typeof v === "number" && isFinite(v);
 const round = v => Math.round(v * 10000) / 10000;
@@ -43,12 +43,31 @@ const classify = label => {
 const otherName = label => /overhead/i.test(label) ? "Overhead" : /commis/i.test(label) ? "Sales commission" : /tar+if/i.test(label) ? "Tariffs" : /shipping/i.test(label) ? "Shipping" : label;
 
 // ── column layout ──
-function columnSheet(XLSX, ws, family, name, skuFor) {
+// Where each calculator starts: a row of size headings (text in columns B+, no numbers) followed by cost lines.
+// A sheet can hold several stacked scenarios (e.g. "Current Production Scenario", "Machine Capacity Scenario").
+function findBlocks(XLSX, ws) {
   const { r, get } = sheetCells(XLSX, ws);
-  // Column headings: row 1, or the "Size:" row when row 1 is just the title
-  let headRow = 0;
+  const isHead = R => {
+    let text = 0, nums = 0;
+    for (let C = 1; C <= r.e.c; C++) { const v = get(R, C)?.v; if (isNum(v)) nums++; else if (v != null && norm(v)) text++; }
+    if (!text || nums) return false;
+    for (let k = 1; k <= 3; k++) { const a = norm(get(R + k, 0)?.v); if (a && classify(a) === "line") { for (let C = 1; C <= r.e.c; C++) if (isNum(get(R + k, C)?.v)) return true; } }
+    return false;
+  };
+  const heads = [];
+  // A second heading row right under the first (e.g. "Fabric Dimensions") belongs to the same block
+  for (let R = 0; R <= r.e.r; R++) if (isHead(R) && !(heads.length && R - heads[heads.length - 1] <= 2)) heads.push(R);
+  return heads.map((h, i) => {
+    let title = "";
+    for (let k = 1; k <= 2 && h - k >= 0; k++) { const a = norm(get(h - k, 0)?.v); if (a) { title = a; break; } }
+    return { headRow: h, endRow: (heads[i + 1] ?? r.e.r + 1) - 1, title };
+  });
+}
+
+function columnSheet(XLSX, ws, family, name, skuFor, block) {
+  const { r, get } = sheetCells(XLSX, ws);
+  const headRow = block?.headRow ?? 0, endRow = block?.endRow ?? r.e.r;
   const heads = R => { const out = []; for (let C = 1; C <= r.e.c; C++) { const v = get(R, C)?.v; if (v != null && norm(v)) out.push([C, norm(v)]); } return out; };
-  if (!heads(0).length) for (let R = 1; R <= Math.min(r.e.r, 6); R++) if (/^size/i.test(norm(get(R, 0)?.v))) { headRow = R; break; }
   const columns = [], colOf = new Map();
   let lastDepth = "";
   heads(headRow).forEach(([C, h]) => {
@@ -60,7 +79,7 @@ function columnSheet(XLSX, ws, family, name, skuFor) {
   });
   if (!columns.length) return null;
   const rowsInfo = [];
-  for (let R = headRow + 1; R <= r.e.r; R++) { const label = norm(get(R, 0)?.v); if (label) rowsInfo.push({ R, label, kind: classify(label) }); }
+  for (let R = headRow + 1; R <= endRow; R++) { const label = norm(get(R, 0)?.v); if (label) rowsInfo.push({ R, label, kind: classify(label) }); }
   const priceRow = rowsInfo.find(x => x.kind === "price")?.R, tmlRow = rowsInfo.find(x => x.kind === "tml")?.R;
   const lines = [], lineOfRow = new Map(), manual = {};
   let section = "materials";
@@ -70,13 +89,15 @@ function columnSheet(XLSX, ws, family, name, skuFor) {
     if (x.kind === "tml") { section = "other"; continue; }
     if (x.kind === "tc") { section = "done"; continue; }
     if (x.kind === "price") { for (const [C, id] of colOf) { const v = get(x.R, C)?.v; if (isNum(v)) manual[id] = v; } continue; }
-    if (x.kind !== "line" || section === "done") continue;
-    const line = { id: uid(), section, name: section === "other" ? otherName(x.label) : x.label, basis: "$", market: "both", values: {} };
+    if (x.kind !== "line") continue;
+    if (section === "done" && !/overhead/i.test(x.label)) continue;
+    const sec = section === "done" ? "other" : section; // overhead written under Total Cost
+    const line = { id: uid(), section: sec, name: sec === "other" ? otherName(x.label) : x.label, basis: "$", market: "both", values: {} };
     // A % line: overhead / commission written as a formula on the Price row or Materials + Labour row
     for (const [C, id] of colOf) {
       const c = get(x.R, C);
       const ref = c?.f ? parseRef(XLSX, c.f) : null;
-      if (section === "other" && ref && (ref.row === priceRow || ref.row === tmlRow) && ref.col === C) {
+      if (sec === "other" && ref && (ref.row === priceRow || ref.row === tmlRow) && ref.col === C) {
         line.basis = ref.row === priceRow ? "pctPrice" : "pctCost";
         line.values[id] = round(ref.k * 100);
       } else if (isNum(c?.v)) line.values[id] = round(c.v);
@@ -190,7 +211,7 @@ export async function importWorkbook(arrayBuffer, fileName) {
   const XLSX = await import("xlsx");
   const wb = XLSX.read(arrayBuffer, { type: "array", cellFormula: true });
   const fn = fileName.toLowerCase();
-  const family = /blanket/.test(fn) ? "Erosion Control Blankets" : /turbidity|curtain/.test(fn) ? "Turbidity Curtains" : /donut|sack|catch ?basin|\bcb\b/.test(fn) ? "Catch Basin Protection" : /dewater/.test(fn) ? "Dewatering Bags" : fileName.replace(/\.xlsx?$/i, "").replace(/[_-]+/g, " ").replace(/\s*cost calculator\s*/i, " ").trim();
+  const family = /blanket/.test(fn) ? "Erosion Control Blankets" : /wattle|excelsior|aspen/.test(fn) ? "Wattles & Aspen" : /turbidity|curtain/.test(fn) ? "Turbidity Curtains" : /donut|sack|catch ?basin|\bcb\b/.test(fn) ? "Catch Basin Protection" : /dewater/.test(fn) ? "Dewatering Bags" : fileName.replace(/\.xlsx?$/i, "").replace(/[_-]+/g, " ").replace(/\s*cost calculator\s*/i, " ").trim();
   const calcs = [];
   for (const sheet of wb.SheetNames) {
     const n = sheet.trim();
@@ -207,9 +228,23 @@ export async function importWorkbook(arrayBuffer, fileName) {
         if (type) { const d = s.match(/^([\d.]+)'\s*depth$/i); return d && DEPTH[d[1]] ? `TBC${DEPTH[d[1]]}${type}` : ""; }
         if (/oil boom/i.test(n)) return /^18"/.test(s) ? "OCB1850" : /^12"/.test(s) ? "OCB1250" : "";
         if (/^[A-Z0-9-]{6,}$/.test(s)) return s; // the heading is the SKU itself (donuts)
+        const size = /9"\s*x\s*25'/i.test(s) ? "0925" : /12"\s*x\s*20'/i.test(s) ? "1220" : "";
+        if (size && /wattle/i.test(fileName + " " + s)) {
+          const aspen = /aspen|wood/i.test(s);
+          const pre = /rapid/i.test(s) ? "RDSTW" : aspen ? (/burlap/i.test(s) ? "BAEW" : "AEW") : /burlap/i.test(s) ? "BSTW" : "STW";
+          return pre + size;
+        }
         return "";
       };
-      calc = columnSheet(XLSX, ws, family, isRevisedDonuts ? "Donuts" : n, skuFor);
+      const blocks = findBlocks(XLSX, ws);
+      const base = isRevisedDonuts ? "Donuts" : n;
+      (blocks.length ? blocks : [null]).forEach((b, i) => {
+        const nm = blocks.length > 1 ? `${base} – ${b.title && !/^size/i.test(b.title) ? b.title.replace(/\s+scenario$/i, "") : "Scenario " + (i + 1)}` : base;
+        const c = columnSheet(XLSX, ws, family, nm, skuFor, b);
+        if (c && i > 0) c.forCosts = false; // extra scenarios are "what-ifs" — only the first sets product costs
+        if (c && c.columns.length && c.lines.length) calcs.push(c);
+      });
+      continue;
     }
     if (calc && calc.columns.length && calc.lines.length) calcs.push(calc);
   }

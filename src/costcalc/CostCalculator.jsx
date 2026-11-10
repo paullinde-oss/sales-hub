@@ -148,7 +148,7 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
               <button title="Rename this category" onClick={() => { const v = prompt("Rename category:", f); if (v && v.trim() && v.trim() !== f) change(b => b.calcs.forEach(c => { if (c.family === f) c.family = v.trim(); })); }} style={{ border: "none", background: "transparent", color: T.tableHeadText, cursor: "pointer", fontSize: 10, padding: 0 }}>✎</button>
             </div>
             {book.calcs.filter(c => c.family === f).map(c => (
-              <button key={c.id} onClick={() => { setSel(c.id); setHiCol(null); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "6px 14px 6px 20px", border: "none", borderLeft: `2px solid ${sel === c.id ? T.gold : "transparent"}`, background: sel === c.id ? T.activeBg : "transparent", color: sel === c.id ? T.text : T.subtext, fontSize: 12, cursor: "pointer" }}>{c.name}</button>
+              <button key={c.id} onClick={() => { setSel(c.id); setHiCol(null); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "6px 14px 6px 20px", border: "none", borderLeft: `2px solid ${sel === c.id ? T.gold : "transparent"}`, background: sel === c.id ? T.activeBg : "transparent", color: sel === c.id ? T.text : T.subtext, fontSize: 12, cursor: "pointer", fontStyle: c.forCosts === false ? "italic" : "normal" }} title={c.forCosts === false ? "What-if: doesn't set product costs" : ""}>{c.name}{c.forCosts === false ? " (what-if)" : ""}</button>
             ))}
           </div>
         ))}
@@ -177,6 +177,8 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
             <div style={{ display: "inline-flex", border: `1px solid ${T.border}`, borderRadius: 2, marginLeft: 8 }}>
               {[["ca", "🇨🇦 Canada"], ["us", "🇺🇸 USA"]].map(([k, l]) => <button key={k} onClick={() => setMarket(k)} style={{ border: "none", padding: "4px 10px", fontSize: 11, cursor: "pointer", background: market === k ? T.gold : "transparent", color: market === k ? "#111" : T.subtext }}>{l}</button>)}
             </div>
+            <label style={{ fontSize: 11, color: calc.forCosts === false ? AMBER : T.subtext }} title="Untick for a what-if scenario: it still calculates, but doesn't change the product costs">
+              <input type="checkbox" checked={calc.forCosts !== false} onChange={e => editCalc(c => { c.forCosts = e.target.checked; })} /> Sets product costs</label>
             <label style={{ fontSize: 11, color: T.subtext }}>Price: <select value={calc.priceField || "price"} onChange={e => editCalc(c => { c.priceField = e.target.value; })} style={{ ...inp, height: 26 }}>{PRICE_FIELDS.map(f => <option key={f} value={f}>{FIELD_LABEL[f]}</option>)}</select></label>
           </> : <div style={{ fontSize: 15, fontWeight: 600 }}>{sel === "rates" ? "Shared rates" : sel === "log" ? "Change log" : "Cost Calculator"}</div>}
           <div style={{ flex: 1 }} />
@@ -218,7 +220,7 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
                       const onList = col.sku && findProduct(productsCAD, col.sku);
                       return (
                         <th key={col.id} style={{ background: hiCol === col.id ? "rgba(200,169,110,.25)" : T.tableHead, padding: "6px 6px", minWidth: 118, verticalAlign: "top" }}>
-                          <input value={col.label} onChange={e => editCalc(c => { c.columns.find(x => x.id === col.id).label = e.target.value; })} style={{ ...inp, width: 108, fontWeight: 600 }} />
+                          <input value={col.label} title={col.label} onChange={e => editCalc(c => { c.columns.find(x => x.id === col.id).label = e.target.value; })} style={{ ...inp, width: 108, fontWeight: 600 }} />
                           <div style={{ display: "flex", gap: 3, marginTop: 3, alignItems: "center" }}>
                             <input list="cc-skus" value={col.sku || ""} placeholder="SKU" onChange={e => editCalc(c => { c.columns.find(x => x.id === col.id).sku = e.target.value.trim().toUpperCase(); })} style={{ ...inp, width: 86, fontSize: 10, fontFamily: "monospace", borderColor: col.sku ? (onList ? GREEN : AMBER) : T.border }} title={col.sku ? (onList ? "On the Products list" : "Not on the Products list") : "Which SKU this size is"} />
                             <button title="Remove this size" onClick={() => { if (confirm(`Remove ${col.label}?`)) editCalc(c => { c.columns = c.columns.filter(x => x.id !== col.id); c.lines.forEach(l => delete l.values[col.id]); }); }} style={{ border: "none", background: "transparent", color: T.tableHeadText, cursor: "pointer", fontSize: 12 }}>×</button>
@@ -325,11 +327,12 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
           <datalist id="cc-families">{[...new Set([...families, ...pending.rows.map(r => r.calc.family)])].map(f => <option key={f} value={f} />)}</datalist>
           <div style={{ maxHeight: 360, overflowY: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-              <thead><tr style={{ fontSize: 10, color: T.tableHeadText, textTransform: "uppercase" }}><th style={{ textAlign: "left" }}>Category</th><th style={{ textAlign: "left" }}>Calculator</th><th style={{ textAlign: "right" }}>Sizes</th></tr></thead>
+              <thead><tr style={{ fontSize: 10, color: T.tableHeadText, textTransform: "uppercase" }}><th style={{ textAlign: "left" }}>Category</th><th style={{ textAlign: "left" }}>Calculator</th><th style={{ textAlign: "right" }}>Sizes</th><th title="Sets the product costs (untick for what-if scenarios)">Costs</th></tr></thead>
               <tbody>{pending.rows.map((r, i) => <tr key={i}>
                 <td style={{ padding: "3px 6px 3px 0" }}><input list="cc-families" value={r.family} onChange={e => setPending(p => ({ ...p, rows: p.rows.map((x, j) => j === i ? { ...x, family: e.target.value } : x) }))} style={{ ...inp, width: 230 }} /></td>
                 <td style={{ padding: "3px 6px 3px 0" }}><input value={r.name} onChange={e => setPending(p => ({ ...p, rows: p.rows.map((x, j) => j === i ? { ...x, name: e.target.value } : x) }))} style={{ ...inp, width: 200 }} /></td>
                 <td style={{ textAlign: "right", color: T.subtext }}>{r.calc.columns.length}</td>
+                <td style={{ textAlign: "center" }}><input type="checkbox" checked={r.calc.forCosts !== false} onChange={e => setPending(p => ({ ...p, rows: p.rows.map((x, j) => j === i ? { ...x, calc: { ...x.calc, forCosts: e.target.checked } } : x) }))} /></td>
               </tr>)}</tbody>
             </table>
           </div>

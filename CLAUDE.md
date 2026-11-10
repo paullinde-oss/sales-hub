@@ -63,7 +63,7 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   (markup shown small). **Save** → change log + Canada totals written into the cost list (`costsFromBook`).
   Stored encrypted in `config/costCalcs` ({v:2, box}) with the cost key (`useCostBook`). "Import from Excel"
   (`importXlsx.js`, in the browser) builds calculators from Paul's xlsx calculators — standard sheets only
-  (custom/Data/Sheet1 skipped); after reading, a "Where should these go?" box picks the category + name for each one. Category = dropdown in the header (＋ New category…), ✎ renames a category. **No cost numbers in the code** (DEFAULT_RATES is empty on purpose).
+  (custom/Data/Sheet1/Production Cost Calculator skipped; headings can be on any row; stacked scenarios become separate calculators, extra ones marked `forCosts:false` = what-if, only calcs that "Set product costs" feed the cost list; overhead under Total Cost counts as a cost; wattle SKUs guessed from 9"x25'/12"x20' + burlap/rapid/aspen); after reading, a "Where should these go?" box picks the category + name for each one. Category = dropdown in the header (＋ New category…), ✎ renames a category. **No cost numbers in the code** (DEFAULT_RATES is empty on purpose).
 - **Product page** (`src/products/ProductPage.jsx`; "Open product page →" in the SKU pop-up): information only —
   website photo/name/description, current CAD/USD prices, DIMS rows, stock, sales (this FY vs last, top customers,
   last order; own accounts for John), quotes; cost + margins and a 🧮 Cost Calculator jump for cost viewers.

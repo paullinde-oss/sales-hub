@@ -88,9 +88,9 @@ export function compute(calc, rates, market, priceOf) {
 // Canada totals for every SKU in the book → the hub's product costs
 export function costsFromBook(book, priceOf) {
   const out = {};
-  (book.calcs || []).forEach(calc => {
+  (book.calcs || []).filter(c => c.forCosts !== false).forEach(calc => {
     const r = compute(calc, book.rates, "ca", priceOf);
-    calc.columns.forEach(col => { if (col.sku && r[col.id]?.total > 0) out[col.sku.toUpperCase()] = { cost: Math.round(r[col.id].total * 100) / 100, source: `Cost Calculator › ${calc.family} › ${calc.name}` }; });
+    calc.columns.forEach(col => { if (col.sku && r[col.id]?.total > 0 && !out[col.sku.toUpperCase()]) out[col.sku.toUpperCase()] = { cost: Math.round(r[col.id].total * 100) / 100, source: `Cost Calculator › ${calc.family} › ${calc.name}` }; });
   });
   return out;
 }

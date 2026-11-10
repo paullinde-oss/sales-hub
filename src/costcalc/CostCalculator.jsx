@@ -22,6 +22,7 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
   const [busy, setBusy] = useState("");
   const [linkEdit, setLinkEdit] = useState(null); // { lineId, colId }
   const [hiCol, setHiCol] = useState(null);
+  const [pending, setPending] = useState(null); // imported calculators waiting for "which category?"
   // Someone else saved while we have no unsaved changes → take their version
   useEffect(() => { if (!dirty) setBook(clone(stored.book)); }, [stored.book]); // eslint-disable-line
   useEffect(() => {
@@ -101,19 +102,30 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
       const csv = files.filter(f => /\.csv$/i.test(f.name));
       if (csv.length) { setBusy(""); return alert("Please pick the Excel files (.xlsx) — a .csv only holds one tab, so the other types would be missing. Each Excel file has all its types (every curtain type, every blanket) and they all load at once."); }
       for (const f of files) results.push(await importWorkbook(await f.arrayBuffer(), f.name));
-      const n = results.reduce((s, r) => s + r.calcs.length, 0);
-      change(b => {
-        results.forEach(r => {
-          r.calcs.forEach(c => { b.calcs = b.calcs.filter(x => !(x.family === c.family && x.name === c.name)); b.calcs.push(c); });
-          if (r.blanket) b.rates.blanket = { ...b.rates.blanket, ...r.blanket };
-          if (r.usdRate) b.rates.usdRate = r.usdRate;
-        });
-        b.log = [...(b.log || []), { at: new Date().toISOString(), by: loginName, calc: "Import", what: `Imported ${files.map(f => f.name).join(", ")}`, from: "", to: "" }];
-      });
-      const first = results.flatMap(r => r.calcs)[0];
-      if (first) setSel(first.id);
-      setBusy(`Imported ${n} calculator${n === 1 ? "" : "s"} — check them, then click Save.`);
+      if (!results.some(r => r.calcs.length)) { setBusy(""); return alert("No standard calculators found in that file."); }
+      // Ask which category each one goes under (guessed from the file name; pick any existing one or type a new one)
+      setPending({ results, names: files.map(f => f.name), rows: results.flatMap(r => r.calcs.map(c => ({ calc: c, family: c.family, name: c.name }))) });
+      setBusy("");
     } catch (e) { setBusy(""); alert("Couldn't read that file: " + e.message); }
+  };
+  const finishImport = () => {
+    const { results, names, rows } = pending;
+    change(b => {
+      rows.forEach(r => {
+        const c = { ...r.calc, family: r.family.trim() || r.calc.family, name: r.name.trim() || r.calc.name };
+        b.calcs = b.calcs.filter(x => !(x.family === c.family && x.name === c.name)); b.calcs.push(c);
+      });
+      results.forEach(r => { if (r.blanket) b.rates.blanket = { ...b.rates.blanket, ...r.blanket }; if (r.usdRate) b.rates.usdRate = r.usdRate; });
+      b.log = [...(b.log || []), { at: new Date().toISOString(), by: loginName, calc: "Import", what: `Imported ${names.join(", ")}`, from: "", to: "" }];
+    });
+    setSel(rows[0].calc.id);
+    setBusy(`Imported ${rows.length} calculator${rows.length === 1 ? "" : "s"} — check them, then click Save.`);
+    setPending(null);
+  };
+  // Move a calculator to another (or a new) category
+  const pickFamily = (current, onPick) => {
+    const v = prompt(`Category for this calculator.\nExisting: ${families.join(", ")}\n\nType one of those, or a new name:`, current);
+    if (v && v.trim()) onPick(v.trim());
   };
 
   const card = { background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 3 };
@@ -131,7 +143,10 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
       <div style={{ width: 230, flexShrink: 0, borderRight: `1px solid ${T.border}`, overflowY: "auto", padding: "12px 0", background: T.sidebarBg || T.cardBg }}>
         {families.map(f => (
           <div key={f} style={{ marginBottom: 10 }}>
-            <div style={{ padding: "0 14px 4px", fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: T.gold }}>{f}</div>
+            <div style={{ padding: "0 14px 4px", fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: T.gold, display: "flex", gap: 6 }}>
+              <span style={{ flex: 1 }}>{f}</span>
+              <button title="Rename this category" onClick={() => { const v = prompt("Rename category:", f); if (v && v.trim() && v.trim() !== f) change(b => b.calcs.forEach(c => { if (c.family === f) c.family = v.trim(); })); }} style={{ border: "none", background: "transparent", color: T.tableHeadText, cursor: "pointer", fontSize: 10, padding: 0 }}>✎</button>
+            </div>
             {book.calcs.filter(c => c.family === f).map(c => (
               <button key={c.id} onClick={() => { setSel(c.id); setHiCol(null); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "6px 14px 6px 20px", border: "none", borderLeft: `2px solid ${sel === c.id ? T.gold : "transparent"}`, background: sel === c.id ? T.activeBg : "transparent", color: sel === c.id ? T.text : T.subtext, fontSize: 12, cursor: "pointer" }}>{c.name}</button>
             ))}
@@ -153,7 +168,10 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
       <div style={{ flex: 1, minWidth: 0, overflow: "auto", padding: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
           {calc ? <>
-            <input value={calc.family} onChange={e => editCalc(c => { c.family = e.target.value; })} style={{ ...inp, width: 190, fontWeight: 600 }} title="Product family" />
+            <select value={calc.family} title="Category" onChange={e => { const v = e.target.value; if (v === "__new") pickFamily("", f => editCalc(c => { c.family = f; })); else editCalc(c => { c.family = v; }); }} style={{ ...inp, width: 200, fontWeight: 600 }}>
+              {families.map(f => <option key={f} value={f}>{f}</option>)}
+              <option value="__new">＋ New category…</option>
+            </select>
             <span style={{ color: T.tableHeadText }}>›</span>
             <input value={calc.name} onChange={e => editCalc(c => { c.name = e.target.value; })} style={{ ...inp, width: 190, fontWeight: 600 }} title="Calculator name" />
             <div style={{ display: "inline-flex", border: `1px solid ${T.border}`, borderRadius: 2, marginLeft: 8 }}>
@@ -300,6 +318,27 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
           </>
         )}
       </div>
+      {pending && <div className="modal-overlay" onClick={() => setPending(null)}>
+        <div className="modal" style={{ maxWidth: 640 }} onClick={e => e.stopPropagation()}>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Where should these go?</div>
+          <div style={{ fontSize: 11, color: T.subtext, marginBottom: 10 }}>Pick a category for each calculator (or type a new one), and rename it if you like. One with the same category and name as an existing calculator replaces it.</div>
+          <datalist id="cc-families">{[...new Set([...families, ...pending.rows.map(r => r.calc.family)])].map(f => <option key={f} value={f} />)}</datalist>
+          <div style={{ maxHeight: 360, overflowY: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead><tr style={{ fontSize: 10, color: T.tableHeadText, textTransform: "uppercase" }}><th style={{ textAlign: "left" }}>Category</th><th style={{ textAlign: "left" }}>Calculator</th><th style={{ textAlign: "right" }}>Sizes</th></tr></thead>
+              <tbody>{pending.rows.map((r, i) => <tr key={i}>
+                <td style={{ padding: "3px 6px 3px 0" }}><input list="cc-families" value={r.family} onChange={e => setPending(p => ({ ...p, rows: p.rows.map((x, j) => j === i ? { ...x, family: e.target.value } : x) }))} style={{ ...inp, width: 230 }} /></td>
+                <td style={{ padding: "3px 6px 3px 0" }}><input value={r.name} onChange={e => setPending(p => ({ ...p, rows: p.rows.map((x, j) => j === i ? { ...x, name: e.target.value } : x) }))} style={{ ...inp, width: 200 }} /></td>
+                <td style={{ textAlign: "right", color: T.subtext }}>{r.calc.columns.length}</td>
+              </tr>)}</tbody>
+            </table>
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "space-between", marginTop: 12, alignItems: "center" }}>
+            <span style={{ fontSize: 11, color: T.tableHeadText }}>Set all to: <select onChange={e => { const v = e.target.value; if (v) setPending(p => ({ ...p, rows: p.rows.map(x => ({ ...x, family: v })) })); }} defaultValue="" style={{ ...inp, height: 24 }}><option value="">—</option>{families.map(f => <option key={f}>{f}</option>)}</select></span>
+            <span style={{ display: "flex", gap: 8 }}><button className="btn" onClick={() => setPending(null)}>Cancel</button><button className="btn-gold" onClick={finishImport}>Add {pending.rows.length} calculator{pending.rows.length === 1 ? "" : "s"}</button></span>
+          </div>
+        </div>
+      </div>}
       {linkEdit && calc && <LinkModal T={T} calc={calc} R={R} target={linkEdit} inp={inp} onClose={() => setLinkEdit(null)} onSet={v => { setCell(linkEdit.lineId, linkEdit.colId, v); setLinkEdit(null); }} />}
     </div>
   );

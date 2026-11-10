@@ -190,7 +190,7 @@ export async function importWorkbook(arrayBuffer, fileName) {
   const XLSX = await import("xlsx");
   const wb = XLSX.read(arrayBuffer, { type: "array", cellFormula: true });
   const fn = fileName.toLowerCase();
-  const family = /blanket/.test(fn) ? "Erosion Control Blankets" : /turbidity|curtain/.test(fn) ? "Turbidity Curtains" : /donut/.test(fn) ? "Catch Basin Donuts" : /dewater/.test(fn) ? "Dewatering Bags" : fileName.replace(/\.xlsx?$/i, "").replace(/[_-]+/g, " ");
+  const family = /blanket/.test(fn) ? "Erosion Control Blankets" : /turbidity|curtain/.test(fn) ? "Turbidity Curtains" : /donut|sack|catch ?basin|\bcb\b/.test(fn) ? "Catch Basin Protection" : /dewater/.test(fn) ? "Dewatering Bags" : fileName.replace(/\.xlsx?$/i, "").replace(/[_-]+/g, " ").replace(/\s*cost calculator\s*/i, " ").trim();
   const calcs = [];
   for (const sheet of wb.SheetNames) {
     const n = sheet.trim();

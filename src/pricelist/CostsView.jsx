@@ -89,8 +89,9 @@ export default function CostsView({ T, costs, loginName, products, draftProducts
   return (
     <div>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
-        <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} disabled={!!busy} onClick={fromDropbox}>↻ Refresh costs from calculators</button>
-        <button className="btn" disabled={!!busy} onClick={() => fileRef.current?.click()}>⬆ Upload calculator files</button>
+        {/* Calculator costs now come from the hub's own Cost Calculator (left-hand menu); these old Excel buttons are kept out of the way */}
+        {false && <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} disabled={!!busy} onClick={fromDropbox}>↻ Refresh costs from calculators</button>}
+        {false && <button className="btn" disabled={!!busy} onClick={() => fileRef.current?.click()}>⬆ Upload calculator files</button>}
         <input ref={fileRef} type="file" accept=".xlsx,.xls" multiple style={{ display: "none" }} onChange={async e => { const fs = [...(e.target.files || [])]; e.target.value = ""; if (fs.length) await fromCalculators(await Promise.all(fs.map(async f => ({ name: f.name, data: new Uint8Array(await f.arrayBuffer()) })))); }} />
         <button className="btn" onClick={() => csvRef.current?.click()}>⬆ Import costs CSV</button>
         <input ref={csvRef} type="file" accept=".csv" style={{ display: "none" }} onChange={async e => {
@@ -104,7 +105,7 @@ export default function CostsView({ T, costs, loginName, products, draftProducts
         <span style={{ fontSize: 11, color: T.tableHeadText }}>{withCost} of {products.length} SKUs have a cost{costs.at ? ` · last saved ${when(costs.at)}${costs.by ? " by " + costs.by : ""}` : ""}</span>
       </div>
       <div style={{ fontSize: 11, color: T.tableHeadText, marginBottom: 10, lineHeight: 1.5 }}>
-        Refresh reads the Erosion Control Blanket and Turbidity Curtain calculators from Dropbox <b>{CALC_FOLDER}</b> (the Canada "Total Cost"). Costs for other SKUs can be typed in or imported from a CSV (SKU, Cost).
+        Costs for products in the <b>Cost Calculator</b> (left-hand menu) are set there — they update here every time a calculator is saved. Costs for other SKUs can be typed in or imported from a CSV (SKU, Cost).
         Margin = (price − cost) ÷ price, shown for the <b>lowest</b> price of each SKU (its biggest discount — usually FTL or pallet). Hover for every price.
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>

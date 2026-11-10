@@ -139,3 +139,7 @@ export function estimateBlankets(found, knownSkus) {
   });
   return out;
 }
+
+// ── Other locked cost data (the Cost Calculator) — same cost key as the cost list ──
+export const sealLocked = async obj => sealCosts(obj, getCostKey());
+export const openLocked = async box => openCosts(box, getCostKey());

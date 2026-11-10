@@ -2,6 +2,7 @@
 // See webPages.js for how a SKU finds its page on bmpsupplies.com.
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { PRICE_FIELDS, FIELD_LABEL } from "../pricelist/priceLists";
+import { openProductPage } from "./ProductPage";
 import { useProductPages, previewFor, resolveSku, setSkuPage, setPreviewOpener, openPreview, FAMILIES, skuKey, pageUrl, SITE } from "./webPages";
 
 // A SKU you can click for the website preview. Renders as plain text styling of the caller.
@@ -130,10 +131,12 @@ export function ProductPreviewHost({ T, products, extras }) {
                   {r.extra.length > 0 && <span style={{ fontSize: 10, color: T.tableHeadText, alignSelf: "center" }}>{r.extra.map(c => `${c.label} ${c.value}`).join(" · ")}</span>}
                 </div>))}
           </div>
+          <button onClick={() => { const s = open.sku; setOpen(null); openProductPage(listed?.sku || s); }}
+            style={{ display: "block", width: "100%", textAlign: "center", padding: "8px 12px", marginBottom: 8, fontSize: 12, fontWeight: 600, letterSpacing: ".04em", borderRadius: 3, background: "transparent", color: T.text, border: `1px solid ${T.borderMid}`, cursor: "pointer" }}>Open product page →</button>
           {p.slug
             ? <>
                 <a href={p.url} target="_blank" rel="noopener noreferrer" onClick={() => setOpen(null)}
-                  style={{ display: "block", textAlign: "center", textDecoration: "none", padding: "8px 12px", fontSize: 12, fontWeight: 600, letterSpacing: ".04em", borderRadius: 3, background: "#c8a96e", color: "#0a0a0a" }}>View more ↗</a>
+                  style={{ display: "block", textAlign: "center", textDecoration: "none", padding: "8px 12px", fontSize: 12, fontWeight: 600, letterSpacing: ".04em", borderRadius: 3, background: "#c8a96e", color: "#0a0a0a" }}>View on website ↗</a>
                 {!p.fromSite && <div style={{ fontSize: 10, color: T.tableHeadText, marginTop: 8 }}>Photo and website description appear after the weekly website read.</div>}
               </>
             : <div style={{ fontSize: 11, color: T.tableHeadText }}>No website page for this product{p.how === "picked" ? " (set on Products & Price List → Website pages)" : p.family ? "" : " — not part of a known product family"}. Pick one on Products & Price List → Website pages.</div>}

@@ -20,6 +20,9 @@ import AdminTab from "./admin/AdminTab";
 import { useUsers, findUser, canSee, DEFAULT_USERS, canEditPriceLists, canSeeCosts } from "./admin/users";
 import { signIn, tokenValid, listenLogins, listenMaster, changeOwnPassword } from "./sales/auth";
 import { setCostKey } from "./pricelist/costs";
+import { ProductPageHost } from "./products/ProductPage";
+import CostCalculator from "./costcalc/CostCalculator";
+import { useCostBook } from "./costcalc/store";
 import { SS_OPEN_TAB } from "./sales/dropbox";
 import { ProductPreviewHost, SkuLink, SkuInfoButton, WebsitePagePicker, WebsitePagesView } from "./products/ProductPreview";
 import { moveSkuPage, useProductPages } from "./products/webPages";
@@ -57,6 +60,7 @@ const LIGHT = {
 const Icon = ({ name, size=18, color="currentColor" }) => {
   const paths = {
     quote: <><rect x="3" y="3" width="18" height="18" rx="2" stroke={color} strokeWidth="1.5" fill="none"/><line x1="7" y1="8" x2="17" y2="8" stroke={color} strokeWidth="1.5"/><line x1="7" y1="12" x2="14" y2="12" stroke={color} strokeWidth="1.5"/><line x1="7" y1="16" x2="11" y2="16" stroke={color} strokeWidth="1.5"/></>,
+    calc: <><rect x="4" y="2" width="16" height="20" rx="2" stroke={color} strokeWidth="1.5" fill="none"/><rect x="7" y="5" width="10" height="4" stroke={color} strokeWidth="1.5" fill="none"/><circle cx="8.5" cy="13" r="1" fill={color}/><circle cx="12" cy="13" r="1" fill={color}/><circle cx="15.5" cy="13" r="1" fill={color}/><circle cx="8.5" cy="17" r="1" fill={color}/><circle cx="12" cy="17" r="1" fill={color}/><circle cx="15.5" cy="17" r="1" fill={color}/></>,
     truck: <><rect x="1" y="6" width="14" height="12" rx="1" stroke={color} strokeWidth="1.5" fill="none"/><path d="M15 9h4l3 4v5h-7V9z" stroke={color} strokeWidth="1.5" fill="none"/><circle cx="5" cy="19" r="2" stroke={color} strokeWidth="1.5" fill="none"/><circle cx="18" cy="19" r="2" stroke={color} strokeWidth="1.5" fill="none"/></>,
     leads: <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke={color} strokeWidth="1.5" fill="none"/><circle cx="9" cy="7" r="4" stroke={color} strokeWidth="1.5" fill="none"/><path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke={color} strokeWidth="1.5" fill="none"/><path d="M16 3.13a4 4 0 0 1 0 7.75" stroke={color} strokeWidth="1.5" fill="none"/></>,
     pipeline: <><circle cx="6" cy="6" r="3" stroke={color} strokeWidth="1.5" fill="none"/><circle cx="18" cy="12" r="3" stroke={color} strokeWidth="1.5" fill="none"/><circle cx="6" cy="18" r="3" stroke={color} strokeWidth="1.5" fill="none"/><line x1="9" y1="6" x2="15" y2="11" stroke={color} strokeWidth="1.5"/><line x1="9" y1="18" x2="15" y2="13" stroke={color} strokeWidth="1.5"/></>,
@@ -751,6 +755,8 @@ export default function SalesHub() {
   useEffect(() => listenCustomerPrices(db, setCustomerPrices), []);
   // Product costs (encrypted; only for people with "Costs & margins")
   const costs = useCosts(db, canSeeCosts(currentUser));
+  const costBook = useCostBook(db, canSeeCosts(currentUser));
+  const [costFocus, setCostFocus] = useState(null); // a SKU to jump to in the Cost Calculator
   CUSTOMER_PRICES = customerPrices;
   const [productsCAD, setProductsCAD] = useLocalStorage('bmp_products_cad', INITIAL_PRODUCTS_CAD);
   const [productsUSD, setProductsUSD] = useLocalStorage('bmp_products_usd',
@@ -1237,9 +1243,10 @@ ${quoteNumLine}
     {id:"products", label:"Products & Price List", icon:"products"},
     {id:"stock",    label:"Stock Levels",          icon:"stock"},
     {id:"shipping", label:"Shipping",              icon:"truck"},
+    {id:"costcalc", label:"Cost Calculator",       icon:"calc"},
     {id:"admin",    label:"Users & Access",        icon:"admin"},
   ];
-  const TABS = ALL_SIDEBAR_TABS.filter(t => canSee(currentUser, t.id));
+  const TABS = ALL_SIDEBAR_TABS.filter(t => t.id === "costcalc" ? canSeeCosts(currentUser) : canSee(currentUser, t.id));
   // If someone lands on a tab they can't see (e.g. after permissions change), move them to one they can
   useEffect(() => {
     if (authed && TABS.length && !TABS.some(t => t.id === activeTab)) setActiveTab(TABS[0].id);
@@ -1248,6 +1255,7 @@ ${quoteNumLine}
   // ── Mobile layout ────────────────────────────────────────────────────────
   if (authed && isMobile) return (<>
     <ProductPreviewHost T={T} products={productsCAD} extras={productExtras}/>
+    <ProductPageHost T={T} db={db} productsCAD={productsCAD} productsUSD={productsUSD} categories={categories} quotes={quotes} extras={productExtras} user={currentUser} loginName={loginName} usdToCad={exchangeRate?1/exchangeRate:1.37} canCosts={canSeeCosts(currentUser)} costs={costs} onCostCalc={s=>{setCostFocus(s);setActiveTab("costcalc");}}/>
     <MobileLayout
       T={T} theme={theme} setTheme={setTheme}
       activeTab={mobileTab} setActiveTab={setMobileTab}
@@ -1384,6 +1392,7 @@ ${quoteNumLine}
             {shipSection==="curtain"&&<ShippingTab T={T}/>}
             {shipSection==="dims"&&<DimsTab dims={dims} setDims={setDims} T={T}/>}
           </TabPage>}
+          {activeTab==="costcalc"&&canSeeCosts(currentUser)&&<TabPage T={T} title="COST CALCULATOR"><div style={{flex:1,minHeight:0,display:"flex",overflow:"hidden"}}><CostGate T={T} costs={costs}>{costBook.status!=="ready"?<div style={{padding:16,fontSize:12,color:T.tableHeadText}}>{costBook.status==="locked"?"The Cost Calculator is locked — sign out and back in with your own password.":"Loading…"}</div>:<CostCalculator T={T} book={costBook} saveBook={costBook.save} costs={costs} loginName={loginName} productsCAD={productsCAD} productsUSD={productsUSD} hubUsdRate={exchangeRate?1/exchangeRate:1.38} focusSku={costFocus} onFocusDone={()=>setCostFocus(null)}/>}</CostGate></div></TabPage>}
           {activeTab==="admin"&&canSee(currentUser,"admin")&&<TabPage T={T} title="USERS & ACCESS"><AdminTab T={T} db={db} users={users||DEFAULT_USERS} loginName={loginName} logins={logins} masterOff={!!masterAuth?.off} onOwnToken={setAuthHash}/></TabPage>}
           </TabErrorBoundary>
         </div>
@@ -1391,6 +1400,7 @@ ${quoteNumLine}
 
       <WonOptionPicker T={T} fmt={fmtCur}/>
       <ProductPreviewHost T={T} products={productsCAD} extras={productExtras}/>
+    <ProductPageHost T={T} db={db} productsCAD={productsCAD} productsUSD={productsUSD} categories={categories} quotes={quotes} extras={productExtras} user={currentUser} loginName={loginName} usdToCad={exchangeRate?1/exchangeRate:1.37} canCosts={canSeeCosts(currentUser)} costs={costs} onCostCalc={s=>{setCostFocus(s);setActiveTab("costcalc");}}/>
       {/* PDF Modal */}
       {pdfQuote && (
         <PDFModal quote={pdfQuote} onClose={()=>setPdfQuote(null)}/>

@@ -54,6 +54,19 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   → `scripts/productPages.mjs`, reads the Wix store sitemap + each page's JSON-LD/Open Graph; keeps the old
   copy on failure); `links` {SKUKEY: slug | "" = no page} written by the picker. One listener = 1 read per open.
   New product family on the Products list → add a rule to `FAMILIES`.
+- **Cost Calculator** (left-hand area, "Costs & margins" people only; `src/costcalc/`): one calculator per
+  product type (family › name, e.g. Turbidity Curtains › Type 2 DOT) with a column per size/SKU and lines in
+  Materials / Labour / Overhead & other. Cells: number, link to another cell × factor, or a shared rate
+  (blanket labour = employees × wage × hours ÷ rolls/day; blanket overhead from the rolls/day table; your own
+  rates). Other-cost lines can be $, % of price or % of materials+labour, and Canada / USA / both. Price =
+  current price list (USA = USD list × USD rate), typed only when the SKU isn't listed. Margin = profit ÷ price
+  (markup shown small). **Save** → change log + Canada totals written into the cost list (`costsFromBook`).
+  Stored encrypted in `config/costCalcs` ({v:2, box}) with the cost key (`useCostBook`). "Import from Excel"
+  (`importXlsx.js`, in the browser) builds calculators from Paul's xlsx calculators — standard sheets only
+  (custom/Data/Sheet1 skipped). **No cost numbers in the code** (DEFAULT_RATES is empty on purpose).
+- **Product page** (`src/products/ProductPage.jsx`; "Open product page →" in the SKU pop-up): information only —
+  website photo/name/description, current CAD/USD prices, DIMS rows, stock, sales (this FY vs last, top customers,
+  last order; own accounts for John), quotes; cost + margins and a 🧮 Cost Calculator jump for cost viewers.
 - `src/pipeline/PipelineDashboard.jsx` — Pipeline & Leads dashboard (lead tiles hidden without "leads").
 - `src/admin/` — Users & Access: per-user area access (+ "leads" sub-permission; old ids loadcalc/dims
   map to shipping via `userTabs`), sales-data scope, and **each person's password** (Set password / Reset).

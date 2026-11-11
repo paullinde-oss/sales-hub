@@ -18,7 +18,7 @@ export const ALL_TABS = [
   { id: "pipeline", label: "Pipeline & Leads" },
   { id: "leads",    label: "↳ Leads section", sub: true },
   { id: "products", label: "Products & Price List" },
-  { id: "stock",    label: "Stock Levels" },
+  // Stock Levels was folded into Products & Price List (Stock column), Nov 2026
   { id: "shipping", label: "Shipping" },
 ];
 const ALL_IDS = ALL_TABS.map(t => t.id);

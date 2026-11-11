@@ -17,7 +17,7 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
 - React 18 + Vite 5, Firebase Firestore (project `bmp-sales-hub`, **free Spark plan**), pdfjs-dist 3.11.174.
 - `src/SalesHub.jsx` — the original app (one very large file: all the older tabs, login, layout).
 - Left-hand areas (Paul's grouping): Quotes · Sales Summary · Pipeline & Leads (Dashboard /
-  Pipeline / Leads) · Products & Price List · Stock Levels · Shipping (Load Calculator / Turbidity
+  Pipeline / Leads) · Products & Price List · Shipping (Load Calculator / Turbidity
   Curtain Shipping / Package Dimensions) · Users & Access. Every area uses `TabPage` (in
   `SalesHub.jsx`) for the same top bar as Sales Summary — keep new areas consistent with it.
 - `src/pricelist/` — **Price Lists** (Products & Price List → Price Lists; only users with "Edit price
@@ -123,6 +123,11 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   button/drawer): reads the 3 published Google stock sheets (`STOCK_SHEETS`: Calgary Stock, Turbidity Curtains,
   ECB/Wattles — blankets compared in Rolls) automatically (5-min cache), shows only sheets carrying a quoted SKU,
   in stock vs need (with options: most any one option needs + common), plus "Not on the stock sheets".
+- **Stock column on Products & Price List** (replaced the Stock Levels tab, Nov 2026): `stockBySku` / `StockBadges`
+  in SalesHub.jsx read the 3 stock sheets (Calgary Stock = **Calgary**; Turbidity Curtains + ECB/Wattles = **Brooks**;
+  blankets/wattles show pallets + trucks). Green = in stock, neutral = 0 / not stocked, red = negative only; two
+  badges if a SKU is on two sheets. "Stocked, not on price list (N)" button lists sheet items not on the Products list.
+  Price columns grouped with dividers/shading (Price/Unit+Pallet $ · Prepaid+Pre.Pallet · Trk Qty+FTL $).
 - **Product pop-up** (click a SKU; `src/products/ProductPreview.jsx`) also shows the current CAD price list prices
   (from `productsCAD`, whatever list was clicked), DIMS rows for the SKU and stock from the 3 stock sheets
   (`productExtras` in SalesHub.jsx, passed as `extras`; DIMS cached 10 min, stock 5 min).

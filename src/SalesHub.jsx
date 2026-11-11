@@ -1241,7 +1241,6 @@ ${quoteNumLine}
     {id:"sales",    label:"Sales Summary",         icon:"sales"},
     {id:"pipeline", label:"Pipeline & Leads",      icon:"pipeline"},
     {id:"products", label:"Products & Price List", icon:"products"},
-    {id:"stock",    label:"Stock Levels",          icon:"stock"},
     {id:"shipping", label:"Shipping",              icon:"truck"},
     {id:"costcalc", label:"Cost Calculator",       icon:"calc"},
     {id:"admin",    label:"Users & Access",        icon:"admin"},
@@ -1386,7 +1385,6 @@ ${quoteNumLine}
                 loginName={loginName} logo={BMP_LOGO_FULL} usdRate={exchangeRate} costs={costs} canCosts={canSeeCosts(currentUser)}/>}
             </TabPage>;
           })()}
-          {activeTab==="stock"&&<TabPage T={T} title="STOCK LEVELS"><StockLevelsTab T={T}/></TabPage>}
           {activeTab==="shipping"&&<TabPage T={T} title="SHIPPING" sections={[["loadcalc","Load Calculator"],["curtain","Turbidity Curtain Shipping"],["dims","Package Dimensions"]]} active={shipSection} onSelect={setShipSection}>
             {shipSection==="loadcalc"&&<LoadCalcTab T={T}/>}
             {shipSection==="curtain"&&<ShippingTab T={T}/>}
@@ -2502,6 +2500,49 @@ async function productExtras(sku) {
   return { dims, stock };
 }
 
+// ── Stock on the Products list ──────────────────────────────────────────────
+// Calgary Stock = Calgary warehouse; the Turbidity Curtains and ECB/Wattles sheets = Brooks.
+const STOCK_LOC = { calgary: "Calgary", curtains: "Brooks", blankets: "Brooks" };
+// skuKey → [{ loc, n, text, title }]  (blankets/wattles show pallets + trucks)
+function stockBySku(data) {
+  const out = new Map(), extra = [];
+  if (!data) return { map: out, rows: extra };
+  Object.entries(STOCK_SHEETS).forEach(([key, sheet]) => {
+    (data[key]?.rows || []).forEach(r => {
+      const sku = String(r[sheet.skuCol] || "").trim(), k = stockSku(sku);
+      if (!k || /^sku$/i.test(sku)) return;
+      const cols = sheet.stockCols.map(sc => ({ label: sc.label, value: String(r[sc.col] ?? "").trim(), n: stockNum(r[sc.col]) }));
+      let e;
+      if (key === "blankets") {
+        const pal = cols.find(c => /pallet/i.test(c.label)), trk = cols.find(c => /truck/i.test(c.label));
+        if (pal?.n == null && trk?.n == null) return;
+        e = { loc: STOCK_LOC[key], n: pal?.n ?? trk?.n, text: `${pal?.value || 0} pallets · ${trk?.value || 0} trucks`, title: cols.filter(c => c.value).map(c => `${c.label}: ${c.value}`).join(" · ") };
+      } else {
+        const c = cols[0]; if (c.n == null && !c.value) return;
+        e = { loc: STOCK_LOC[key], n: c.n, text: c.value || "0", title: `${sheet.label}: ${c.value || 0}` };
+      }
+      if (!out.has(k)) out.set(k, []);
+      out.get(k).push(e);
+      extra.push({ sku, desc: String(r[1] || "").trim(), sheet: sheet.label, ...e, k });
+    });
+  });
+  return { map: out, rows: extra };
+}
+function StockBadges({ items, T }) {
+  if (!items || !items.length) return <span style={{ color: T.muted }}>—</span>;
+  return <div style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: "flex-start" }}>
+    {items.map((e, i) => {
+      const neg = e.n != null && e.n < 0, pos = e.n != null && e.n > 0;
+      return <span key={i} title={e.title} style={{ display: "inline-flex", gap: 6, alignItems: "center", whiteSpace: "nowrap" }}>
+        <span style={{ fontSize: 10, fontWeight: 700, fontVariantNumeric: "tabular-nums", padding: "1px 7px", borderRadius: 9,
+          background: neg ? "rgba(232,71,44,.15)" : pos ? "rgba(52,199,123,.15)" : "transparent",
+          color: neg ? "#e8472c" : pos ? "#2fa866" : T.muted, border: `1px solid ${neg ? "rgba(232,71,44,.4)" : pos ? "rgba(52,199,123,.45)" : "transparent"}` }}>{e.text}</span>
+        <span style={{ fontSize: 10, color: pos || neg ? T.subtext : T.muted }}>{e.loc}</span>
+      </span>;
+    })}
+  </div>;
+}
+
 function StockCheck({ quote, T }) {
   const [data, setData] = useState(stockCache?.data || null);
   const [busy, setBusy] = useState(false);
@@ -3185,6 +3226,7 @@ function ProductEditRow({row,setRow,onSave,onCancel,T,loginName}) {
           onInput={e=>{e.target.style.height="auto";e.target.style.height=e.target.scrollHeight+"px";}}
         />
       </td>
+      <td></td>
       <td><input {...f("pkg")}/></td>
       <td><input {...f("pallet")}/></td>
       <td><input {...f("price","number")} step="0.01"/></td>
@@ -3203,6 +3245,14 @@ function ProductEditRow({row,setRow,onSave,onCancel,T,loginName}) {
 
 function ProductsTab({products,setProducts,currency,setCurrency,search,setSearch,categories,setCategories,subCategories,setSubCategories,subCatDefs,setSubCatDefs,exchangeRate,setExchangeRate,T,onSkuRenamed,loginName}) {
   const [editing,      setEditing]      = useState(null);
+  // Stock from the three stock sheets (shown in the Stock column)
+  const [stockData,    setStockData]    = useState(null);
+  const [stockBusy,    setStockBusy]    = useState(false);
+  const [showUnlisted, setShowUnlisted] = useState(false);
+  const loadStock = force => { setStockBusy(true); loadStockSheets(force).then(d=>setStockData(d)).catch(()=>setStockData({})).finally(()=>setStockBusy(false)); };
+  useEffect(()=>{ loadStock(false); },[]); // eslint-disable-line
+  const stock = useMemo(()=>stockBySku(stockData),[stockData]);
+  const unlisted = useMemo(()=>{ const have=new Set((products||[]).map(p=>stockSku(p.sku))); return stock.rows.filter(r=>!have.has(r.k)); },[stock,products]);
   const [sortF,        setSortF]        = useState(null);  // null = manual/array order (lets ↑↓ reorder work)
   const [sortD,        setSortD]        = useState(1);
   const [importResult, setImportResult] = useState(null);
@@ -3721,13 +3771,14 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
           <td style={{fontFamily:"monospace",fontSize:11,color:T.accent,whiteSpace:"nowrap"}}><SkuLink sku={p.sku} product={p}/></td>
           <td style={{fontSize:11,fontWeight:500,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.product}</td>
           <td style={{fontSize:11,color:T.muted,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.description}</td>
+          <td style={{borderLeft:divider,borderRight:divider,padding:"3px 8px"}}>{stockData?<StockBadges items={stock.map.get(stockSku(p.sku))} T={T}/>:<span style={{fontSize:10,color:T.muted}}>…</span>}</td>
           <td style={{fontSize:11,fontFamily:"monospace",color:T.tableHeadText,textAlign:"right"}}>{p.pkg||"—"}</td>
           <td style={{fontSize:11,fontFamily:"monospace",color:T.tableHeadText,textAlign:"right"}}>{p.pallet||"—"}</td>
-          <td style={{fontSize:11,fontFamily:"monospace",textAlign:"right",color:parsePrice(p.price)>0?T.subtext:T.muted}}>{fmtCur(p.price)}</td>
-          <td style={{fontSize:11,fontFamily:"monospace",textAlign:"right",color:parsePrice(p.palletPrice)>0?T.subtext:T.muted}}>{fmtCur(p.palletPrice)}</td>
-          <td style={{fontSize:11,fontFamily:"monospace",textAlign:"right",color:parsePrice(p.prepaid)>0?"#9ec89e":T.muted}}>{fmtCur(p.prepaid)}</td>
-          <td style={{fontSize:11,fontFamily:"monospace",textAlign:"right",color:parsePrice(p.prepaidPallet)>0?"#9ec89e":T.muted}}>{fmtCur(p.prepaidPallet)}</td>
-          <td style={{fontSize:11,fontFamily:"monospace",textAlign:"right",color:T.tableHeadText}}>{p.truckQty||"—"}</td>
+          <td style={{fontSize:11,fontFamily:"monospace",textAlign:"right",color:parsePrice(p.price)>0?T.subtext:T.muted,borderLeft:divider,background:shadePrice}}>{fmtCur(p.price)}</td>
+          <td style={{fontSize:11,fontFamily:"monospace",textAlign:"right",color:parsePrice(p.palletPrice)>0?T.subtext:T.muted,background:shadePrice}}>{fmtCur(p.palletPrice)}</td>
+          <td style={{fontSize:11,fontFamily:"monospace",textAlign:"right",color:parsePrice(p.prepaid)>0?"#9ec89e":T.muted,borderLeft:divider,background:shadePre}}>{fmtCur(p.prepaid)}</td>
+          <td style={{fontSize:11,fontFamily:"monospace",textAlign:"right",color:parsePrice(p.prepaidPallet)>0?"#9ec89e":T.muted,background:shadePre}}>{fmtCur(p.prepaidPallet)}</td>
+          <td style={{fontSize:11,fontFamily:"monospace",textAlign:"right",color:T.tableHeadText,borderLeft:divider}}>{p.truckQty||"—"}</td>
           <td style={{fontSize:11,fontFamily:"monospace",textAlign:"right",color:parsePrice(p.truckPrice)>0?T.subtext:T.muted}}>{fmtCur(p.truckPrice)}</td>
           {isSelected&&(
             <td style={{whiteSpace:"nowrap"}}>
@@ -3743,6 +3794,9 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
         </tr>;
   };
 
+  // Column groups: Stock | Pkg Pallet | Price/Unit Pallet $ | Prepaid Pre.Pallet | Trk Qty FTL $
+  const divider = `2px solid ${T.borderMid||T.border}`;
+  const shadePrice = "rgba(200,169,110,.07)", shadePre = "rgba(52,199,123,.06)";
   const tableHeaders = (
     <tr>
       <th style={{width:32,padding:"7px 8px"}}>
@@ -3752,13 +3806,14 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
       <Th l="SKU" f="sku" style={{width:110,whiteSpace:"nowrap"}}/>
       <Th l="Product" f="product" style={{width:140,whiteSpace:"nowrap"}}/>
       <Th l="Description" f="description" style={{minWidth:280}}/>
+      <th style={{width:180,minWidth:180,borderLeft:divider,borderRight:divider,whiteSpace:"nowrap"}}>Stock <button title="Read the stock sheets again" disabled={stockBusy} onClick={e=>{e.stopPropagation();loadStock(true);}} style={{border:"none",background:"transparent",color:T.muted,cursor:"pointer",fontSize:11,padding:0,marginLeft:4}}>{stockBusy?"…":"⟳"}</button></th>
       <Th l="Pkg" f="pkg" style={{textAlign:"right",width:50}}/>
       <Th l="Pallet" f="pallet" style={{textAlign:"right",width:55}}/>
-      <Th l="Price/Unit" f="price" style={{textAlign:"right",width:80}}/>
-      <Th l="Pallet $" f="palletPrice" style={{textAlign:"right",width:75}}/>
-      <Th l="Prepaid" f="prepaid" style={{textAlign:"right",width:75}}/>
-      <Th l="Pre.Pallet" f="prepaidPallet" style={{textAlign:"right",width:80}}/>
-      <Th l="Trk Qty" f="truckQty" style={{textAlign:"right",width:65}}/>
+      <Th l="Price/Unit" f="price" style={{textAlign:"right",width:80,borderLeft:divider,background:shadePrice}}/>
+      <Th l="Pallet $" f="palletPrice" style={{textAlign:"right",width:75,background:shadePrice}}/>
+      <Th l="Prepaid" f="prepaid" style={{textAlign:"right",width:75,borderLeft:divider,background:shadePre}}/>
+      <Th l="Pre.Pallet" f="prepaidPallet" style={{textAlign:"right",width:80,background:shadePre}}/>
+      <Th l="Trk Qty" f="truckQty" style={{textAlign:"right",width:65,borderLeft:divider}}/>
       <Th l="FTL $" f="truckPrice" style={{textAlign:"right",width:70}}/>
       <th style={{width:150}}></th>
     </tr>
@@ -3970,6 +4025,15 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
         )}
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search SKU, product, description…"
           style={{flex:1,maxWidth:260,height:26,fontSize:11}}/>
+        {unlisted.length>0&&<button className="btn" style={{fontSize:10,padding:"3px 8px",color:T.muted}} title="Items on the stock sheets that aren't on the price list" onClick={()=>setShowUnlisted(true)}>Stocked, not on price list ({unlisted.length})</button>}
+        {showUnlisted&&<div className="modal-overlay" onClick={()=>setShowUnlisted(false)}>
+          <div className="modal" style={{maxWidth:640,maxHeight:"80vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",alignItems:"center",marginBottom:8}}><div style={{fontSize:14,fontWeight:600,flex:1}}>Stocked, not on the price list</div><button className="btn" onClick={()=>setShowUnlisted(false)}>Close</button></div>
+            <div style={{fontSize:11,color:T.muted,marginBottom:10}}>On the stock sheets but not on the Products list.</div>
+            <table className="data-table"><thead><tr><th>SKU</th><th>Description</th><th>Stock</th></tr></thead>
+              <tbody>{unlisted.map((r,i)=><tr key={i}><td style={{fontFamily:"monospace",fontSize:11}}>{r.sku}</td><td style={{fontSize:11}}>{r.desc}</td><td><StockBadges items={[r]} T={T}/></td></tr>)}</tbody></table>
+          </div>
+        </div>}
         {/* Selected actions */}
         {selected.size>0&&(
           <div style={{display:"flex",gap:6,alignItems:"center",background:T.tableHead,border:`1px solid ${T.accent}`,padding:"3px 10px",borderRadius:2}}>
@@ -4075,7 +4139,7 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
                       onDragOver={e=>onDragOver(e,dropTargetId)}
                       onDragLeave={onDragLeave}
                       onDrop={e=>onDrop(e,dropTargetId)}>
-                      <td colSpan={13} style={{padding:"7px 12px",userSelect:"none"}}>
+                      <td colSpan={14} style={{padding:"7px 12px",userSelect:"none"}}>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
                           <span style={{fontSize:12,color:T.accent,transition:"transform .15s",display:"inline-block",transform:isCollapsed?"rotate(-90deg)":"rotate(0deg)"}}>▾</span>
                           <span style={{fontSize:11,fontWeight:600,color:T.subtext,letterSpacing:".04em"}}>{cat}</span>
@@ -4140,7 +4204,7 @@ NEW-SKU-001,New Product Name,Full product description here,,6,48,$99.00,$94.00,,
                           onDragOver={e=>onDragOver(e,subDropId)}
                           onDragLeave={onDragLeave}
                           onDrop={e=>onDrop(e,subDropId)}>
-                          <td colSpan={13} style={{padding:"5px 12px 5px 28px",userSelect:"none"}}>
+                          <td colSpan={14} style={{padding:"5px 12px 5px 28px",userSelect:"none"}}>
                             <div style={{display:"flex",alignItems:"center",gap:6}}>
                               <span style={{fontSize:10,color:T.accent,opacity:.6,transition:"transform .15s",display:"inline-block",
                                 transform:subCollapsed?"rotate(-90deg)":"rotate(0deg)"}}>▾</span>

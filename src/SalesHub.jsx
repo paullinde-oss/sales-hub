@@ -1177,10 +1177,10 @@ export default function SalesHub() {
 
     const opts = hasOptions(q);
     const cell = (html, extra) => `<td colspan="5" bgcolor="#EFEFEF" style="border:1px solid #000;padding:6px 10px;font-family:Calibri,Arial,sans-serif;font-size:12px;background-color:#EFEFEF;color:#000000;${extra||""}">${html}</td>`;
-    // With options: each option's lines + its total (common lines included), then the common lines
+    // With options: each option's lines (no option total lines — Paul), then the common lines
     const rowsHtml = !opts ? (q.lineItems||[]).map(rowHtml).join("") : [
-      ...optionTotals(q).map(o => `<tr>${cell(`<b>${o.label}</b>`)}</tr>${o.lines.map(rowHtml).join("")}<tr>${cell(`<b>${o.label.split(" — ")[0]} total (${q.currency}): ${fmtCur(o.total)}</b>${linesOf(q,0).length?" &nbsp;<i>incl. items common to all options</i>":""}`,"text-align:right;background-color:#F5F5F5;")}</tr>`),
-      ...(linesOf(q,0).length ? [`<tr>${cell("<b>Common to all options</b> (included in each option total)")}</tr>${linesOf(q,0).map(rowHtml).join("")}`] : []),
+      ...optionTotals(q).map(o => `<tr>${cell(`<b>${o.label}</b>`)}</tr>${o.lines.map(rowHtml).join("")}`),
+      ...(linesOf(q,0).length ? [`<tr>${cell("<b>Common to all options</b>")}</tr>${linesOf(q,0).map(rowHtml).join("")}`] : []),
     ].join("");
     const bottomRow = opts ? `<tr><td colspan="5" bgcolor="#F9F9F9" style="border:1px solid #000;padding:6px 12px;font-family:Calibri,Arial,sans-serif;font-size:12px;color:#555555;font-style:italic;background-color:#F9F9F9;">Please choose one option.${q.notes?" Notes: "+q.notes:""}</td></tr>` : `<tr>
       <td colspan="3" bgcolor="#F9F9F9" style="border:1px solid #000;padding:6px 12px;font-family:Calibri,Arial,sans-serif;font-size:12px;color:#555555;font-style:italic;background-color:#F9F9F9;">${q.notes?"Notes: "+q.notes:""}</td>
@@ -1225,7 +1225,7 @@ ${quoteNumLine}
     // Plain-text fallback
     const lineTxt=li=>`${li.sku||"—"}  |  ${li.description||"—"}  |  Qty: ${li.qty}  |  Unit: ${fmtCur(li.unitPrice)}  |  Total: ${fmtCur((parseFloat(li.unitPrice)||0)*(parseInt(li.qty)||0))}`;
     const plain = opts
-      ? `${optionTotals(q).map(o=>`${o.label}\n${o.lines.map(lineTxt).join("\n")}\n${o.label.split(" — ")[0]} total (${q.currency}): ${fmtCur(o.total)}`).join("\n\n")}${linesOf(q,0).length?`\n\nCommon to all options (included in each option total)\n${linesOf(q,0).map(lineTxt).join("\n")}`:""}\n\nPlease choose one option.${q.notes?`\nNotes: ${q.notes}`:""}${q.quoteNum?`\n\nQuote #: ${q.quoteNum}`:""}\n\nLet me know if you have any questions or need additional information.\n\nThank you,`
+      ? `${optionTotals(q).map(o=>`${o.label}\n${o.lines.map(lineTxt).join("\n")}`).join("\n\n")}${linesOf(q,0).length?`\n\nCommon to all options\n${linesOf(q,0).map(lineTxt).join("\n")}`:""}\n\nPlease choose one option.${q.notes?`\nNotes: ${q.notes}`:""}${q.quoteNum?`\n\nQuote #: ${q.quoteNum}`:""}\n\nLet me know if you have any questions or need additional information.\n\nThank you,`
       : `${(q.lineItems||[]).map(lineTxt).join("\n")}\n\nTotal (${q.currency}): ${fmtCur(total)}${q.notes?`\nNotes: ${q.notes}`:""}${q.quoteNum?`\n\nQuote #: ${q.quoteNum}`:""}\n\nLet me know if you have any questions or need additional information.\n\nThank you,`;
 
     setEmailModal({html, plain});

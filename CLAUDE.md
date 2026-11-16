@@ -107,6 +107,12 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   Processing fees, expedited service, import duty recovery are **fees** (count in sales, grouped).
   **Labels / Label Fees** are charged items → one product "LABELS". **"Credit Applied" is negative.**
   BRO10480's blank line = tax; BRO10881's blank $350 line = freight.
+- **Order corrections** (order row → detail → "✎ Edit products & freight"; Orders tab, account pages, Settings):
+  `override.lines` [{sku, desc, qty, price}] + `override.freight` replace what the PDF gave (`applyCorrections` in
+  salesUtils.js, applied in `enrichOrders` before `cleanOrder`, so every report uses them; a sync never overwrites
+  `override`). Total = products + freight + other charges (typed `override.total` cleared). "Go back to the PDF's
+  numbers" removes them. Settings → **"Orders at $0 — check these"** lists `needsLook` orders ($0 / no price, not
+  `override.zeroOk`); count badge on the Settings tab; "It's right at $0" sets `zeroOk`.
 - **"CUSTOM" SKU can be anything** — match those lines by description, never treat as one product.
 - SKUs are standardised to the **Products list** (Settings → Product SKU clean-up for the rest).
   Renaming a SKU on the Products tab also maps past orders' old SKU to the new one.
@@ -216,4 +222,7 @@ logo on a customer page wins. Dropbox logos were dropped.
   `firebase/firestore` import is aliased to an in-memory mock, seeded with fake orders — never test
   against the live database. Parser changes: run sample PDFs through `parseOrderPdf` with
   `pdfjs-dist/legacy/build/pdf.js` in Node. Bundle with esbuild when Node ESM import paths complain.
+- A ready test copy lives in `.autosync/h/` (gitignored; recreate if the workspace was reset): `mockfs.js` (in-memory
+  firebase/firestore), `main.jsx` seeds orders via `writeOrder`; run `npx vite --config .autosync/h/vite.config.js`
+  (port 5310), sign in as Paul / BMP2026.
 - Chromium for Playwright is preinstalled in the cloud environment (`PLAYWRIGHT_BROWSERS_PATH`).

@@ -81,6 +81,26 @@ export function displayValue(sum, mode) { return mode === "CAD" ? sum.cad : mode
 export const inCurrencyMode = (o, mode) => mode === "combined" || orderCurrency(o) === mode;
 
 // ── Enrichment: attach customer/account info used everywhere ────────────────
+// Hand corrections (Sales Summary → order → Edit): override.lines replaces the products read from the PDF,
+// override.freight the freight. Kept apart from the PDF data so a later Dropbox sync can't overwrite them.
+const r2c = n => Math.round((Number(n) || 0) * 100) / 100;
+export function applyCorrections(o) {
+  const ov = o.override || {};
+  const hasLines = Array.isArray(ov.lines), hasFreight = ov.freight != null && ov.freight !== "";
+  if (!hasLines && !hasFreight) return o;
+  const lines = hasLines ? ov.lines.map(l => ({ sku: String(l.sku || "").trim(), desc: l.desc || "", qty: Number(l.qty) || 0, price: Number(l.price) || 0, amount: r2c((Number(l.qty) || 0) * (Number(l.price) || 0)), edited: true })) : (o.lines || []);
+  const isFr = c => c.kind === "freight" || /freight|shipping|delivery|^frt\b/i.test(c.label || "");
+  const others = (o.charges || []).filter(c => !isFr(c));
+  const freightAmt = hasFreight ? r2c(ov.freight) : r2c((o.charges || []).filter(isFr).reduce((s, c) => s + (c.amount || 0), 0));
+  const charges = [...others, ...(freightAmt ? [{ label: "Freight", kind: "freight", amount: freightAmt, note: "corrected by hand" }] : [])];
+  const productTotal = r2c(lines.reduce((s, l) => s + (l.amount || 0), 0));
+  const otherCharges = r2c(others.reduce((s, c) => s + (c.amount || 0), 0));
+  return { ...o, lines, charges, productTotal, freight: freightAmt, otherCharges, total: r2c(productTotal + freightAmt + otherCharges), hasPricing: true, corrected: true,
+    warnings: (o.warnings || []).filter(w => !/no line items|no pric|don't add up/i.test(w)) };
+}
+// Orders that came out at $0 (or with no price) and haven't been confirmed as really $0
+export const needsLook = o => orderAmount(o, true) === 0 && !o.override?.zeroOk;
+
 export function enrichOrders(orders, settings, products = []) {
   const accounts = settings.accounts, aliases = settings.aliases || {}, custTypes = settings.custTypes || {};
   // A corrected date wins; orders still without a valid date are left out of the date-based views
@@ -92,7 +112,7 @@ export function enrichOrders(orders, settings, products = []) {
   const skuMap = settings.skuMap || {};
   // Lines marked in the clean-up as not a product at all (tax / freight / fee)
   const kindOverride = l => { const v = skuMap[lineKey(l)]; return ["__tax", "__freight", "__fee"].includes(v) ? v.slice(2) : null; };
-  const cleaned = orders.map(o => cleanOrder(o, kindOverride)); // freight/tax/fees typed in as line items on older OCs
+  const cleaned = orders.map(o => cleanOrder(applyCorrections(o), kindOverride)); // freight/tax/fees typed in as line items on older OCs
   const catalog = buildCatalog(products, cleaned.flatMap(o => o.lines || []));
   return normalizeCities(cleaned) // "CALGARY", "Calgary, Alberta", "Calgary (pickup)" → "Calgary, AB"
     // Fill in a blank/numeric SKU from other orders with the same description first, then standardise it

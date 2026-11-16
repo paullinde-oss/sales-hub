@@ -25,7 +25,7 @@ import {
   today, mondayOf, addDays, monthStart, monthEnd, fyOf, fyStart, fyEnd, daysBetween, parseYmd,
   fmtDate, fmtShort, fmtMonth, weekdayName, presetRange, PRESETS,
   fmtMoney, fmtQty, orderCurrency, orderAmount, sumOrders, displayValue,
-  enrichOrders, filterOrders, groupBy, downloadCSV, findQuoteMatches, auditWonQuotes,
+  enrichOrders, filterOrders, groupBy, downloadCSV, findQuoteMatches, auditWonQuotes, needsLook,
 } from "./salesUtils";
 
 const DEFAULT_SETTINGS = {
@@ -84,7 +84,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
     const unsub = listenOrders(db, (all, n, fresh) => {
       latest = all; latestFresh = fresh;
       if (fresh) setPackCount(n);
-      if (first || (fresh && !loadedRef.current)) { first = false; clearTimeout(timer); flush(); } else if (!timer) timer = setTimeout(flush, 2000);
+      if (first || (fresh && !loadedRef.current)) { first = false; clearTimeout(timer); flush(); } else if (!timer) timer = setTimeout(flush, 400); // short: batches a sync's burst of saves, but an edit shows almost at once
       if (fresh) loadedRef.current = true;
     }, e => { onDbError(e); setLoaded(true); });
     return () => { unsub(); clearTimeout(timer); };
@@ -118,6 +118,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
   const opts = useMemo(() => ({ includeFreight, usdToCad: Number(settings.usdToCad) || 1.37, mode: currencyMode }), [includeFreight, settings.usdToCad, currencyMode]);
   const matches = useMemo(() => findQuoteMatches(orders, quotes, settings), [orders, quotes, settings]);
   const wonAudit = useMemo(() => auditWonQuotes(orders, quotes, settings), [orders, quotes, settings]);
+  const zeroCount = useMemo(() => orders.filter(needsLook).length, [orders]);
 
   // Everything a sync needs to know about what's already been done
   const ready = loaded && !!stored && seenLoaded && packCount > 0 && !dbError;
@@ -163,6 +164,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
           <button key={id} onClick={() => { setView(id); if (id === "accounts") setAccountKey(null); }}
             style={{ background: view === id ? T.activeBg : "transparent", border: `1px solid ${view === id ? T.borderLight : "transparent"}`, color: view === id ? T.gold : T.subtext, padding: "5px 11px", fontSize: 11, borderRadius: 2, letterSpacing: ".03em" }}>
             {label}{id === "quotes" && matches.length + wonAudit.length ? <span style={{ marginLeft: 6, background: T.gold, color: "#0a0a0a", borderRadius: 8, padding: "0 6px", fontSize: 9, fontWeight: 700 }}>{matches.length + wonAudit.length}</span> : null}
+            {id === "settings" && zeroCount ? <span title="Orders at $0 to check" style={{ marginLeft: 6, background: "#c8a030", color: "#0a0a0a", borderRadius: 8, padding: "0 6px", fontSize: 9, fontWeight: 700 }}>{zeroCount}</span> : null}
           </button>
         ))}
         <div style={{ flex: 1 }} />
@@ -581,7 +583,7 @@ function DateRange({ value, onChange }) {
   );
 }
 
-function OrdersView({ T, db, orders, opts, currencyMode, openAccount, settings, saveSettings }) {
+function OrdersView({ T, db, orders, opts, currencyMode, openAccount, settings, saveSettings, products = [] }) {
   const fl = useFilters("fytd");
   const list = filterOrders(orders, { ...fl.filters, currency: currencyMode });
   const sum = sumOrders(list, opts);
@@ -598,12 +600,12 @@ function OrdersView({ T, db, orders, opts, currencyMode, openAccount, settings, 
         <div style={{ flex: 1 }} />
         <button className="btn" onClick={exportCsv}>Export CSV</button>
       </div>
-      <Card T={T} pad={0}><OrderTable T={T} db={db} orders={list} opts={opts} openAccount={openAccount} settings={settings} saveSettings={saveSettings} editable /></Card>
+      <Card T={T} pad={0}><OrderTable T={T} db={db} orders={list} opts={opts} openAccount={openAccount} settings={settings} saveSettings={saveSettings} products={products} editable /></Card>
     </div>
   );
 }
 
-function OrderTable({ T, db, orders, opts, openAccount, compact, editable, settings, saveSettings }) {
+function OrderTable({ T, db, orders, opts, openAccount, compact, editable, settings, saveSettings, products = [] }) {
   const [open, setOpen] = useState(null);
   const [limit, setLimit] = useState(200);
   if (!orders.length) return <div style={{ fontSize: 12, color: T.tableHeadText, padding: 12 }}>No orders.</div>;
@@ -617,6 +619,7 @@ function OrderTable({ T, db, orders, opts, openAccount, compact, editable, setti
           {orders.slice(0, limit).map(o => {
             const cur = orderCurrency(o), amt = orderAmount(o, opts.includeFreight);
             const noPrice = !o.hasPricing && (o.override?.total == null || o.override.total === "");
+            const zero = !noPrice && orderAmount(o, true) === 0 && !o.override?.zeroOk;
             return [
               <tr key={o.orderNo} onClick={() => setOpen(open === o.orderNo ? null : o.orderNo)} style={{ cursor: "pointer" }}>
                 <td style={{ whiteSpace: "nowrap" }}>{fmtShort(o.date)}{!compact && <span style={{ color: T.tableHeadText }}> {o.date?.slice(0, 4)}</span>}</td>
@@ -628,12 +631,12 @@ function OrderTable({ T, db, orders, opts, openAccount, compact, editable, setti
                 {!compact && <td style={{ color: T.subtext }}>{o.po}</td>}
                 <td style={{ color: T.subtext, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(o.lines || []).map(l => `${l.sku} ×${fmtQty(l.qty)}`).join(", ")}</td>
                 <td style={{ textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
-                  {noPrice ? <span style={{ color: "#c8a030" }} title="Bill of lading only — no pricing">no price</span> : fmtMoney(amt, 2)}
+                  {noPrice ? <span style={{ color: "#c8a030" }} title="Bill of lading only — no pricing">no price</span> : <span style={zero ? { color: "#c8a030" } : undefined} title={zero ? "$0 — click to check and edit" : undefined}>{fmtMoney(amt, 2)}</span>}{o.corrected && <span title="Corrected by hand" style={{ color: T.gold, marginLeft: 4 }}>✎</span>}
                   <span style={{ color: cur === "USD" ? T.gold : T.muted, fontSize: 10, marginLeft: 4 }}>{cur}</span>
                 </td>
               </tr>,
               open === o.orderNo && <tr key={o.orderNo + "-d"}><td colSpan={compact ? 6 : 8} style={{ background: T.panelBg, padding: 14 }}>
-                <OrderDetail T={T} db={db} o={o} editable={editable} settings={settings} saveSettings={saveSettings} />
+                <OrderDetail T={T} db={db} o={o} editable={editable} settings={settings} saveSettings={saveSettings} products={products} />
               </td></tr>,
             ];
           })}
@@ -644,22 +647,90 @@ function OrderTable({ T, db, orders, opts, openAccount, compact, editable, setti
   );
 }
 
-function OrderDetail({ T, db, o, editable }) {
-  const [ov, setOv] = useState({ customer: o.override?.customer || "", currency: o.override?.currency || "", total: o.override?.total ?? "", date: o.override?.date || "" });
-  const save = () => writeOrder(db, o.orderNo, { override: { customer: ov.customer.trim(), currency: ov.currency, total: ov.total === "" ? "" : Number(ov.total), date: ov.date || "" } });
+function OrderDetail({ T, db, o, editable, products = [] }) {
+  // Starting point for editing: the corrected lines if there are any, otherwise what was read from the PDF
+  const startLines = () => (o.override?.lines || o.lines || []).map(l => ({ sku: l.sku || "", desc: l.desc || "", qty: l.qty ?? "", price: l.price ?? "" }));
+  const startFreight = () => o.override?.freight ?? (o.freight || "");
+  const [ov, setOv] = useState({ customer: o.override?.customer || "", currency: o.override?.currency || "", date: o.override?.date || "" });
+  const [editing, setEditing] = useState(false);
+  const [lines, setLines] = useState(startLines);
+  const [freight, setFreight] = useState(startFreight);
+  const [msg, setMsg] = useState("");
+  const byKey = useMemo(() => new Map(products.map(p => [String(p.sku).toUpperCase(), p])), [products]);
+  const n = v => Number(v) || 0;
+  const linesTotal = lines.reduce((t, l) => t + n(l.qty) * n(l.price), 0);
+  const others = (o.charges || []).filter(c => c.kind !== "freight" && !/freight/i.test(c.label || "")).reduce((t, c) => t + (c.amount || 0), 0);
+  const newTotal = linesTotal + n(freight) + others;
+  const setLine = (i, patch) => setLines(ls => ls.map((l, j) => {
+    if (j !== i) return l;
+    const next = { ...l, ...patch };
+    // Picking a SKU from the Products list fills in the description and price (if blank)
+    if (patch.sku != null) { const p = byKey.get(String(patch.sku).trim().toUpperCase()); if (p) { if (!l.desc) next.desc = p.description || p.product || ""; if (l.price === "" || l.price == null) next.price = parseFloat(String(p.price || "").replace(/[^0-9.]/g, "")) || ""; } }
+    return next;
+  }));
+  const done = t => { setMsg(t); setTimeout(() => setMsg(""), 3500); };
+  const save = async () => {
+    try {
+      const patch = { ...(o.override || {}), customer: ov.customer.trim(), currency: ov.currency, date: ov.date || "", total: "" };
+      if (editing) {
+        patch.lines = lines.filter(l => String(l.sku).trim() || String(l.desc).trim() || n(l.qty) || n(l.price)).map(l => ({ sku: String(l.sku).trim().toUpperCase(), desc: String(l.desc).trim(), qty: n(l.qty), price: n(l.price) }));
+        patch.freight = n(freight);
+        delete patch.zeroOk;
+      }
+      await writeOrder(db, o.orderNo, { override: patch });
+      setEditing(false); done("Saved ✓ — reports update straight away.");
+    } catch (e) { done("Couldn't save: " + e.message); }
+  };
+  const undoEdits = async () => {
+    if (!confirm("Go back to the products and freight read from the PDF?")) return;
+    const patch = { ...(o.override || {}) }; delete patch.lines; delete patch.freight;
+    await writeOrder(db, o.orderNo, { override: patch }); setLines(startLines()); setFreight(""); setEditing(false); done("Back to the PDF's numbers ✓");
+  };
+  const zeroOk = async () => { await writeOrder(db, o.orderNo, { override: { ...(o.override || {}), zeroOk: true } }); done("Marked as correct at $0 ✓"); };
   const remove = () => { if (confirm(`Remove ${o.orderNo} from Sales Summary? (It will come back on the next sync if the PDF is still in Dropbox and is changed.)`)) removeOrder(db, o.orderNo); };
+  const inp = { height: 26, fontSize: 11, width: "100%" };
+  const isZero = orderAmount(o, true) === 0;
   return (
     <div style={{ display: "flex", gap: 24, flexWrap: "wrap", fontSize: 12 }}>
-      <div style={{ flex: "2 1 420px" }}>
-        <table className="data-table" style={{ background: T.cardBg }}>
-          <thead><tr><th>SKU</th><th>Description</th><th style={{ textAlign: "right" }}>Qty</th><th style={{ textAlign: "right" }}>Price</th><th style={{ textAlign: "right" }}>Amount</th></tr></thead>
-          <tbody>
-            {(o.lines || []).map((l, i) => <tr key={i}><td>{isGenericSku(l.sku) ? l.sku : <SkuLink sku={l.sku} />}</td><td>{l.desc}</td><td style={{ textAlign: "right" }}>{fmtQty(l.qty)}</td><td style={{ textAlign: "right" }}>{o.hasPricing ? fmtMoney(l.price, 2) : "—"}</td><td style={{ textAlign: "right" }}>{o.hasPricing ? fmtMoney(l.amount, 2) : "—"}</td></tr>)}
-            {(o.charges || []).map((c, i) => <tr key={"c" + i}><td></td><td style={{ color: T.subtext }}>{c.label}{c.note && <span style={{ color: T.tableHeadText, fontSize: 10 }}> · {c.note}</span>}</td><td></td><td></td><td style={{ textAlign: "right" }}>{fmtMoney(c.amount, 2)}</td></tr>)}
-            {(o.taxes || []).map((c, i) => <tr key={"t" + i}><td></td><td style={{ color: T.tableHeadText }}>{c.label} <span style={{ fontSize: 10 }}>(tax — not counted in sales)</span></td><td></td><td></td><td style={{ textAlign: "right", color: T.tableHeadText }}>{fmtMoney(c.amount, 2)}</td></tr>)}
-            {o.hasPricing && <tr><td></td><td style={{ fontWeight: 600 }}>Total before tax</td><td></td><td></td><td style={{ textAlign: "right", fontWeight: 600 }}>{fmtMoney(o.total, 2)} {orderCurrency(o)}</td></tr>}
-          </tbody>
-        </table>
+      <div style={{ flex: "2 1 520px" }}>
+        {!editing ? <>
+          <table className="data-table" style={{ background: T.cardBg }}>
+            <thead><tr><th>SKU</th><th>Description</th><th style={{ textAlign: "right" }}>Qty</th><th style={{ textAlign: "right" }}>Price</th><th style={{ textAlign: "right" }}>Amount</th></tr></thead>
+            <tbody>
+              {(o.lines || []).map((l, i) => <tr key={i}><td>{isGenericSku(l.sku) ? l.sku : <SkuLink sku={l.sku} />}</td><td>{l.desc}</td><td style={{ textAlign: "right" }}>{fmtQty(l.qty)}</td><td style={{ textAlign: "right" }}>{o.hasPricing ? fmtMoney(l.price, 2) : "—"}</td><td style={{ textAlign: "right" }}>{o.hasPricing ? fmtMoney(l.amount, 2) : "—"}</td></tr>)}
+              {(o.charges || []).map((c, i) => <tr key={"c" + i}><td></td><td style={{ color: T.subtext }}>{c.label}{c.note && <span style={{ color: T.tableHeadText, fontSize: 10 }}> · {c.note}</span>}</td><td></td><td></td><td style={{ textAlign: "right" }}>{fmtMoney(c.amount, 2)}</td></tr>)}
+              {(o.taxes || []).map((c, i) => <tr key={"t" + i}><td></td><td style={{ color: T.tableHeadText }}>{c.label} <span style={{ fontSize: 10 }}>(tax — not counted in sales)</span></td><td></td><td></td><td style={{ textAlign: "right", color: T.tableHeadText }}>{fmtMoney(c.amount, 2)}</td></tr>)}
+              <tr><td></td><td style={{ fontWeight: 600 }}>Total before tax{o.override?.total !== "" && o.override?.total != null ? <span style={{ fontWeight: 400, color: T.gold, fontSize: 10 }}> (typed total)</span> : ""}</td><td></td><td></td><td style={{ textAlign: "right", fontWeight: 600 }}>{fmtMoney(orderAmount(o, true), 2)} {orderCurrency(o)}</td></tr>
+            </tbody>
+          </table>
+          {o.corrected && <div style={{ fontSize: 10, color: T.gold, marginTop: 4 }}>✎ Products / freight corrected by hand {editable && <a style={{ cursor: "pointer", marginLeft: 6 }} onClick={undoEdits}>go back to the PDF's numbers</a>}</div>}
+          {editable && <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center" }}>
+            <button className="btn-gold" style={{ padding: "5px 14px", fontSize: 11 }} onClick={() => { setLines(startLines().length ? startLines() : [{ sku: "", desc: "", qty: "", price: "" }]); setFreight(startFreight()); setEditing(true); }}>✎ Edit products & freight</button>
+            {isZero && !o.override?.zeroOk && <button className="btn" onClick={zeroOk} title="Take it off the $0 list in Settings">It's right at $0</button>}
+          </div>}
+        </> : (
+          <div style={{ background: T.cardBg, border: `1px solid ${T.gold}`, borderRadius: 3, padding: 10 }}>
+            <datalist id={"skus-" + o.orderNo}>{products.map(p => <option key={p.sku} value={p.sku}>{p.product}</option>)}</datalist>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead><tr style={{ fontSize: 10, color: T.tableHeadText, textTransform: "uppercase" }}><th style={{ textAlign: "left", width: 150 }}>SKU</th><th style={{ textAlign: "left" }}>Description</th><th style={{ width: 80, textAlign: "right" }}>Qty</th><th style={{ width: 100, textAlign: "right" }}>Price</th><th style={{ width: 100, textAlign: "right" }}>Amount</th><th style={{ width: 24 }} /></tr></thead>
+              <tbody>
+                {lines.map((l, i) => <tr key={i}>
+                  <td style={{ padding: 2 }}><input list={"skus-" + o.orderNo} value={l.sku} onChange={e => setLine(i, { sku: e.target.value })} placeholder="SKU" style={{ ...inp, fontFamily: "monospace" }} /></td>
+                  <td style={{ padding: 2 }}><input value={l.desc} onChange={e => setLine(i, { desc: e.target.value })} placeholder="Description" style={inp} /></td>
+                  <td style={{ padding: 2 }}><input type="number" step="any" value={l.qty} onChange={e => setLine(i, { qty: e.target.value })} style={{ ...inp, textAlign: "right" }} /></td>
+                  <td style={{ padding: 2 }}><input type="number" step="any" value={l.price} onChange={e => setLine(i, { price: e.target.value })} placeholder="$" style={{ ...inp, textAlign: "right" }} /></td>
+                  <td style={{ padding: "2px 6px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtMoney(n(l.qty) * n(l.price), 2)}</td>
+                  <td><button className="btn-del" style={{ padding: "0 6px" }} title="Remove this line" onClick={() => setLines(ls => ls.filter((_, j) => j !== i))}>×</button></td>
+                </tr>)}
+                <tr><td colSpan={6} style={{ padding: "4px 2px" }}><button className="btn" style={{ fontSize: 10 }} onClick={() => setLines(ls => [...ls, { sku: "", desc: "", qty: "", price: "" }])}>＋ Add product</button></td></tr>
+                <tr><td></td><td style={{ textAlign: "right", paddingRight: 8, color: T.subtext }}>Freight</td><td /><td style={{ padding: 2 }}><input type="number" step="any" value={freight} onChange={e => setFreight(e.target.value)} placeholder="$0" style={{ ...inp, textAlign: "right" }} /></td><td style={{ padding: "2px 6px", textAlign: "right" }}>{fmtMoney(n(freight), 2)}</td><td /></tr>
+                {others ? <tr><td></td><td style={{ textAlign: "right", paddingRight: 8, color: T.subtext }}>Other charges (from the PDF)</td><td /><td /><td style={{ padding: "2px 6px", textAlign: "right" }}>{fmtMoney(others, 2)}</td><td /></tr> : null}
+                <tr style={{ borderTop: `1px solid ${T.border}` }}><td></td><td style={{ textAlign: "right", paddingRight: 8, fontWeight: 700 }}>Total before tax</td><td /><td /><td style={{ padding: "6px 6px", textAlign: "right", fontWeight: 700 }}>{fmtMoney(newTotal, 2)} {ov.currency || o.currency || "CAD"}</td><td /></tr>
+              </tbody>
+            </table>
+            <div style={{ fontSize: 10, color: T.tableHeadText, marginTop: 4 }}>Pick a SKU from the Products list to fill in its description and list price, then change the price to what was charged. Before tax.</div>
+          </div>
+        )}
       </div>
       <div style={{ flex: "1 1 260px", display: "flex", flexDirection: "column", gap: 4, color: T.subtext }}>
         <div><b style={{ color: T.text }}>Sold to (on OC):</b> {o.customer}</div>
@@ -677,12 +748,13 @@ function OrderDetail({ T, db, o, editable }) {
                 <option value="">Currency: auto ({o.currency})</option><option value="CAD">CAD</option><option value="USD">USD</option>
               </select>
               <input type="date" value={ov.date || o.date} onChange={e => setOv({ ...ov, date: e.target.value })} title="Order date" style={{ height: 26, fontSize: 11 }} />
-              <input type="number" placeholder={o.hasPricing ? "Override total" : "Enter order total"} value={ov.total} onChange={e => setOv({ ...ov, total: e.target.value })} style={{ height: 26, fontSize: 11, width: 130 }} />
             </div>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button className="btn" onClick={save}>Save corrections</button>
+            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+              <button className="btn-gold" style={{ padding: "5px 14px", fontSize: 11 }} onClick={save}>Save{editing ? " order" : " corrections"}</button>
+              {editing && <button className="btn" onClick={() => setEditing(false)}>Cancel</button>}
               <button className="btn-del" onClick={remove}>Remove order</button>
             </div>
+            {msg && <div style={{ fontSize: 11, color: /Couldn/.test(msg) ? "#e8472c" : "#34c77b", fontWeight: 600 }}>{msg}</div>}
           </div>
         )}
       </div>
@@ -1075,7 +1147,7 @@ function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMo
         <Card T={T} title={`What they ordered — FY${fy}`} pad={0}><ProductTable T={T} rows={products} mode={currencyMode} /></Card>
         <Card T={T} title="What they ordered — all years" pad={0}><ProductTable T={T} rows={allProducts} mode={currencyMode} /></Card>
       </div>
-      <Card T={T} title={`Orders (${mine.length})`} pad={0}><OrderTable T={T} db={db} orders={mine} opts={opts} openAccount={() => {}} editable={editable} /></Card>
+      <Card T={T} title={`Orders (${mine.length})`} pad={0}><OrderTable T={T} db={db} orders={mine} opts={opts} openAccount={() => {}} editable={editable} products={productList} /></Card>
     </div>
   );
 }
@@ -1579,7 +1651,21 @@ function AutoSyncCard({ T, settings, connected }) {
   );
 }
 
-function SettingsView({ T, db, orders, settings, saveSettings, connected, setConnected, seenCount, loginName, openAccount, logos, gaps = [], issues = {}, products = [] }) {
+// Orders that came out at $0 / no price — open one to fix the products & freight, or confirm it's really $0
+function ZeroOrdersCard({ T, db, orders, opts, openAccount, settings, saveSettings, products }) {
+  const list = orders.filter(needsLook);
+  return (
+    <Card T={T} title={`Orders at $0 — check these (${list.length})`} pad={0}>
+      <div style={{ fontSize: 11, color: T.tableHeadText, padding: "8px 12px" }}>
+        Orders whose amount came out at $0 or with no price (e.g. the PDF couldn't be read, or only a bill of lading was found). Click one to add its products and freight, or "It's right at $0" if it really was free.
+      </div>
+      {list.length ? <OrderTable T={T} db={db} orders={list} opts={opts} openAccount={openAccount} settings={settings} saveSettings={saveSettings} products={products} editable />
+        : <div style={{ fontSize: 12, color: "#34c77b", padding: "4px 12px 12px" }}>✓ None — every order has an amount.</div>}
+    </Card>
+  );
+}
+
+function SettingsView({ T, db, orders, opts, settings, saveSettings, connected, setConnected, seenCount, loginName, openAccount, logos, gaps = [], issues = {}, products = [] }) {
   const [folders, setFolders] = useState(settings.folders.join("\n"));
   const [since, setSince] = useState(settings.since);
   const [rate, setRate] = useState(settings.usdToCad);
@@ -1672,6 +1758,7 @@ function SettingsView({ T, db, orders, settings, saveSettings, connected, setCon
 
       <SkuCleanup T={T} orders={orders} products={products} settings={settings} saveSettings={saveSettings} />
 
+      <ZeroOrdersCard T={T} db={db} orders={orders} opts={opts} openAccount={openAccount} settings={settings} saveSettings={saveSettings} products={products} />
       <Card T={T} title={`Missing order numbers (${gaps.length})`} right={
         Object.keys(issues).length > 0 && <button className="btn" onClick={() => setDoc(doc(db, "config", "salesSyncSeen"), { files: Object.fromEntries(Object.keys(issues).map(id => [id, deleteField()])) }, { merge: true }).then(() => alert("Those PDFs will be tried again on the next Refresh."))}>Retry problem PDFs on next refresh</button>}>
         <div style={{ fontSize: 11, color: T.tableHeadText, marginBottom: 8 }}>

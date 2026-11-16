@@ -63,7 +63,7 @@ export default function PipelineDashboard({ T, quotes, leads, adSpend, canSeeLea
 
   return (
     <div style={{ flex: 1, overflow: "auto", padding: 16 }}>
-      <div style={{ maxWidth: 1200 }}>
+      <div>
         <Heading T={T} right={<button className="btn" onClick={() => go("pipeline")}>Open Pipeline →</button>}>Pipeline{ownOnly ? " — your quotes" : ""}</Heading>
         <Row>
           <Tile T={T} label="Open quotes" value={d.open.length} sub={`${fmtMoney(d.openV)} still in play`} onClick={() => go("pipeline")} />

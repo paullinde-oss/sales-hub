@@ -41,7 +41,7 @@ export default function PriceListsView({ T, db, products, categories = {}, subCa
   if (open) return <VersionEditor {...common} v={open} back={() => setOpenId(null)} />;
   return (
     <div style={{ flex: 1, overflow: "auto", padding: 16 }}>
-      <div style={{ maxWidth: 1100 }}>
+      <div>
         {!current ? <SetUp {...common} usdRate={usdRate} /> : <>
           <Card T={T} title="Current price list — what quotes use" right={<button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} onClick={async () => {
             const y = (+yearOf(current) || new Date().getFullYear()) + 1;

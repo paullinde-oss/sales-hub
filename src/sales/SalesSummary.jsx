@@ -273,7 +273,7 @@ function Dashboard({ T, orders, opts, currencyMode, openAccount, mobile }) {
   const detailOrders = selDay ? weekOrders.filter(o => o.date === selDay) : weekOrders;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 1400 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* Week navigation */}
       {mobile ? (
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -307,11 +307,13 @@ function Dashboard({ T, orders, opts, currencyMode, openAccount, mobile }) {
           : <BestOf T={T} pool={pool} opts={opts} mode={currencyMode} fy={fy} mobile={mobile} />}
       </Card>
 
-      <Card T={T} title={selDay ? `Orders on ${weekdayName(selDay)} ${fmtDate(selDay)}` : "Orders this week"}>
-        {mobile ? <MobileOrderList T={T} orders={detailOrders} opts={opts} /> : <OrderTable T={T} orders={detailOrders} opts={opts} openAccount={openAccount} compact />}
-      </Card>
-
-      {!mobile && <Breakdown T={T} orders={pool} opts={opts} mode={currencyMode} weekStart={weekStart} refDate={ref} openAccount={openAccount} />}
+      {/* On a wide screen the orders and the breakdown sit side by side */}
+      <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "repeat(auto-fit, minmax(680px, 1fr))", gap: 16, alignItems: "start" }}>
+        <Card T={T} title={selDay ? `Orders on ${weekdayName(selDay)} ${fmtDate(selDay)}` : "Orders this week"}>
+          {mobile ? <MobileOrderList T={T} orders={detailOrders} opts={opts} /> : <OrderTable T={T} orders={detailOrders} opts={opts} openAccount={openAccount} compact />}
+        </Card>
+        {!mobile && <Breakdown T={T} orders={pool} opts={opts} mode={currencyMode} weekStart={weekStart} refDate={ref} openAccount={openAccount} />}
+      </div>
     </div>
   );
 }
@@ -591,7 +593,7 @@ function OrdersView({ T, db, orders, opts, currencyMode, openAccount, settings, 
     ["Date", "Order #", "Location", "Customer account", "Sold To (as on OC)", "Rep", "Type", "Ship-to city", "PO", "SKU", "Description", "Qty", "Price", "Line amount", "Currency", "Freight", "Order total before tax"],
     list.flatMap(o => (o.lines?.length ? o.lines : [{}]).map((l, i) => [o.date, o.orderNo, o.location, o.cust.name, o.customer, o.cust.rep, o.cust.type, [o.city, o.region].filter(Boolean).join(", "), o.po, l.sku, l.desc, l.qty, l.price, l.amount, orderCurrency(o), i === 0 ? o.freight : "", i === 0 ? orderAmount(o, true) : ""])));
   return (
-    <div style={{ maxWidth: 1500 }}>
+    <div style={{}}>
       <FilterBar T={T} orders={orders} fl={fl} />
       <div style={{ display: "flex", gap: 16, alignItems: "baseline", marginBottom: 10, fontSize: 12, color: T.subtext }}>
         <span><b style={{ color: T.text, fontSize: 16 }}>{fmtMoney(displayValue(sum, currencyMode), 2)}</b> {currencyMode === "combined" ? "CAD (combined)" : currencyMode}</span>
@@ -848,7 +850,7 @@ function AccountsView({ T, orders, settings, opts, currencyMode, openAccount, lo
   const green = "#5a9e5a", red = "#c86a5a";
 
   return (
-    <div style={{ maxWidth: 1500 }}>
+    <div style={{}}>
       <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
         <input placeholder="Search customers" value={q} onChange={e => setQ(e.target.value)} style={{ ...st, width: 200 }} />
         <select value={fy} onChange={e => setFy(+e.target.value)} style={st}>{fys.map(y => <option key={y} value={y}>Fiscal {y} (Dec {y - 1} – Nov {y})</option>)}</select>
@@ -1010,7 +1012,7 @@ function AccountDetail({ T, db, orders, settings, saveSettings, opts, currencyMo
   const editable = !ownOnly;
 
   return (
-    <div style={{ maxWidth: 1300, display: "flex", flexDirection: "column", gap: 14 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <button className="btn" onClick={back}>← All accounts</button>
         <div onClick={() => editable && fileRef.current?.click()} title={editable ? (logo ? "Click to replace the logo" : "Click to add a logo (PNG or JPG)") : ""}
@@ -1323,7 +1325,7 @@ function ReportsView({ T, db, orders, settings, opts, currencyMode, openAccount,
 
   const shownRows = ts.apply(rows, r => r, r => r[0] === "Total");
   return (
-    <div style={{ display: "flex", gap: 16, maxWidth: 1500 }}>
+    <div style={{ display: "flex", gap: 16,}}>
       <div style={{ width: 230, flexShrink: 0, display: "flex", flexDirection: "column", gap: 2 }}>
         {REPORTS.filter(r => (r[2] !== "leads" || canSeeLeads) && (r[2] !== "margins" || canCosts)).map(([k, l], i) => k === "__h" ? (
           // Section heading: gold title with a rule running under it, extra space above each new section
@@ -1581,7 +1583,7 @@ function QuoteMatchesView({ T, matches, wonAudit = [], loginName, settings, save
   const qTotal = q => quoteValue(q); // options: the average (or the won option)
 
   return (
-    <div style={{ maxWidth: 1200, display: "flex", flexDirection: "column", gap: 14 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ fontSize: 12, color: T.subtext, lineHeight: 1.5 }}>
         These orders look like they came from a quote in the Quote Maker — same customer, the same SKUs, and quoted before the order date.
         Mark the quote <b>Won</b> to keep Pipeline and Lead Tracking accurate, or dismiss it if it's not the same deal.
@@ -1694,7 +1696,7 @@ function SettingsView({ T, db, orders, opts, settings, saveSettings, connected, 
   const lbl = { fontSize: 10, textTransform: "uppercase", letterSpacing: ".06em", color: T.tableHeadText, marginBottom: 4 };
 
   return (
-    <div style={{ maxWidth: 1100, display: "flex", flexDirection: "column", gap: 14 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <Card T={T} title="Dropbox">
         <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12, marginBottom: 12 }}>
           <span style={{ color: connected ? "#5a9e5a" : "#c8a030" }}>●</span>

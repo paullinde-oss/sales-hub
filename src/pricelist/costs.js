@@ -91,7 +91,7 @@ export function lowestMargin(p, cost) {
 // row of SKU headings ("BMP - BDNS08") with a "Total Cost:" row below each (Canada section first).
 // Turbidity Curtain calculator: one sheet per type with columns "5' Depth", "7.5' Depth" … and a
 // "Total Cost:" row; the SKU is TBC + depth code + 50 (ft) + type, e.g. TBC0550T3DOT.
-const DEPTH = { "2.5": "0250", "5": "0550", "7.5": "7550", "10": "1050", "12.5": "1250", "15": "1550", "20": "2050", "25": "2550", "30": "3050" };
+const DEPTH = { "2.5": "2.550", "5": "0550", "7.5": "7550", "10": "1050", "12.5": "1250", "15": "1550", "20": "2050", "25": "2550", "30": "3050" };
 const CURTAIN_TYPE = { "type 1 industrial": "T1IND", "type 1 dot": "T1DOT", "type 2 dot": "T2DOT", "type 2 industrial": "T2IND", "type 3 dot": "T3DOT" };
 const BOOMS = [[/^18"/, "OCB1850"], [/^12"/, "OCB1250"]];
 const isTotal = c => typeof c === "string" && /^total cost:?$/i.test(c.trim());

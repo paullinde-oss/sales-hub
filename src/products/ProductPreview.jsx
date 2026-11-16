@@ -4,7 +4,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Loader } from "../Loader";
 import { PRICE_FIELDS, FIELD_LABEL } from "../pricelist/priceLists";
 import { openProductPage } from "./ProductPage";
-import { useProductPages, previewFor, resolveSku, setSkuPage, setPreviewOpener, openPreview, FAMILIES, skuKey, pageUrl, SITE } from "./webPages";
+import { useProductPages, previewFor, resolveSku, setSkuPage, setPreviewOpener, openPreview, FAMILIES, skuKey, skuId, pageUrl, SITE } from "./webPages";
 
 // A SKU you can click for the website preview. Renders as plain text styling of the caller.
 export function SkuLink({ sku, product, style, children }) {
@@ -54,11 +54,11 @@ export function ProductPreviewHost({ T, products, extras }) {
   const product = useMemo(() => {
     if (!open) return null;
     if (open.product) return open.product;
-    const k = skuKey(open.sku);
-    return (products || []).find(p => skuKey(p.sku) === k) || null;
+    const k = skuId(open.sku);
+    return (products || []).find(p => skuId(p.sku) === k) || null;
   }, [open, products]);
   // Prices always come from the current CAD price list (the Products list), whatever list the click came from
-  const listed = useMemo(() => { if (!open) return null; const k = skuKey(open.sku); return (products || []).find(x => skuKey(x.sku) === k) || null; }, [open, products]);
+  const listed = useMemo(() => { if (!open) return null; const k = skuId(open.sku); return (products || []).find(x => skuId(x.sku) === k) || null; }, [open, products]);
   if (!open) return null;
 
   const p = previewFor(open.sku, data, product);

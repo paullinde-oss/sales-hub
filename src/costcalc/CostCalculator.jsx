@@ -10,7 +10,8 @@ import { PRICE_FIELDS, FIELD_LABEL, up } from "../pricelist/priceLists";
 const GREEN = "#34c77b", RED = "#e8472c", AMBER = "#e8a23a";
 const clone = o => JSON.parse(JSON.stringify(o));
 const money = v => v == null || !isFinite(v) ? "—" : (v < 0 ? "−$" : "$") + Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const skuKey = s => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/^BMP(?=[A-Z])/, "");
+// Exact SKU match — dots matter (TBC2.550T1DOT = 2.5' is not TBC2550T1DOT = 25')
+const skuKey = s => String(s || "").toUpperCase().replace(/[\s\-_]/g, "").replace(/^BMP(?=[A-Z])/, "");
 const BASIS = [["$", "$"], ["pctPrice", "% of price"], ["pctCost", "% of materials + labour"]];
 const MARKET = [["both", "Canada & USA"], ["ca", "Canada only"], ["us", "USA only"]];
 
@@ -29,6 +30,19 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
     const warn = e => { if (dirty) { e.preventDefault(); e.returnValue = ""; } };
     window.addEventListener("beforeunload", warn); return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
+  // One-time fix for calculators imported before Nov 2026: 2.5' curtains were named "TBC0250…" but the
+  // price list writes them "TBC2.550…" — rename where that SKU is on the list (then Save to update the costs)
+  useEffect(() => {
+    const listed = new Set(productsCAD.map(p => skuKey(p.sku)));
+    let n = 0;
+    const next = clone(book);
+    next.calcs.forEach(c => c.columns.forEach(col => {
+      const m = String(col.sku || "").toUpperCase().match(/^TBC0250(.+)$/);
+      if (m && listed.has(skuKey("TBC2.550" + m[1]))) { col.sku = "TBC2.550" + m[1]; n++; }
+    }));
+    if (n) { setBook(next); setDirty(true); setBusy(`Fixed ${n} 2.5' curtain SKU${n > 1 ? "s" : ""} to match the price list (TBC2.550…) — click Save changes to update the costs.`); }
+  }, [productsCAD.length, stored.book]); // eslint-disable-line
+
   // Opened from a product page: jump to that SKU's calculator and column
   useEffect(() => {
     if (!focusSku) return;

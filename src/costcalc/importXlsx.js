@@ -10,7 +10,7 @@
 // Custom one-offs are skipped (any sheet or column with "custom" in its name, Data, Sheet1).
 import { uid } from "./model";
 
-const DEPTH = { "2.5": "0250", "5": "0550", "7.5": "7550", "10": "1050", "12.5": "1250", "15": "1550", "17.5": "1750", "20": "2050", "25": "2550", "30": "3050", "40": "4050" };
+const DEPTH = { "2.5": "2.550", "5": "0550", "7.5": "7550", "10": "1050", "12.5": "1250", "15": "1550", "17.5": "1750", "20": "2050", "25": "2550", "30": "3050", "40": "4050" };
 const CURTAIN_TYPE = { "type 1 industrial": "T1IND", "type 1 dot": "T1DOT", "type 2 dot": "T2DOT", "type 2 industrial": "T2IND", "type 3 dot": "T3DOT" };
 const SKIP_SHEET = /^(data|sheet\d*|currency rates|labour and overhead lookup|donuts|production cost calculator)$|custom|xr5/i;
 const norm = s => String(s ?? "").replace(/\s+/g, " ").trim();

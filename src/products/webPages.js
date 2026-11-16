@@ -21,6 +21,9 @@ export const DOC = ["config", "productPages"];
 
 // SKU → matching key: upper case, letters and digits only, no "BMP" prefix.
 // "BMP- BDNS08JR" → "BDNS08JR", "TBC2.550T1IND" → "TBC2550T1IND", "BMPSTK06" → "STK06"
+// Exact product match (prices, sales, costs): only spaces, dashes and a leading "BMP" are ignored —
+// dots matter, e.g. TBC2.550T1DOT (2.5') is not TBC2550T1DOT (25').
+export const skuId = s => String(s || "").toUpperCase().replace(/[\s\-_]/g, "").replace(/^BMP(?=[A-Z])/, "");
 export const skuKey = s => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/^BMP(?=[A-Z])/, "");
 
 // One rule per product family. `re` is tested against skuKey(sku); the first rule that matches

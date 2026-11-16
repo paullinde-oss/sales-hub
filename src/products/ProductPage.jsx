@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader } from "../Loader";
 import { doc, onSnapshot } from "firebase/firestore";
-import { useProductPages, previewFor, skuKey } from "./webPages";
+import { useProductPages, previewFor, skuId } from "./webPages";
 import { PRICE_FIELDS, FIELD_LABEL } from "../pricelist/priceLists";
 import { costOf, marginPct } from "../pricelist/costs";
 import { listenOrders } from "../sales/orderStore";
@@ -30,9 +30,9 @@ export function ProductPageHost(props) {
 
 function ProductPage({ T, db, sku, onClose, productsCAD = [], productsUSD = [], categories = {}, quotes = [], extras, user, loginName, usdToCad = 1.37, canCosts, costs, onCostCalc }) {
   const data = useProductPages();
-  const k = skuKey(sku);
-  const product = productsCAD.find(p => skuKey(p.sku) === k) || null;
-  const usd = productsUSD.find(p => skuKey(p.sku) === k) || null;
+  const k = skuId(sku);
+  const product = productsCAD.find(p => skuId(p.sku) === k) || null;
+  const usd = productsUSD.find(p => skuId(p.sku) === k) || null;
   const p = previewFor(sku, data, product);
   const realSku = product?.sku || sku;
   const [more, setMore] = useState(null);
@@ -52,7 +52,7 @@ function ProductPage({ T, db, sku, onClose, productsCAD = [], productsUSD = [], 
     const cur = blank(), prev = blank(), prevSame = blank();
     let last = null;
     orders.forEach(o => (o.lines || []).forEach(l => {
-      if (skuKey(l.sku) !== k) return;
+      if (skuId(l.sku) !== k) return;
       const amt = (l.amount || 0) * (orderCurrency(o) === "USD" ? usdToCad : 1);
       const into = g => { g.qty += l.qty || 0; g.amt += amt; g.orders.add(o.orderNo); const n = o.cust?.name || o.customer; g.custs.set(n, (g.custs.get(n) || 0) + amt); };
       if (o.date >= from) into(cur);
@@ -64,10 +64,10 @@ function ProductPage({ T, db, sku, onClose, productsCAD = [], productsUSD = [], 
 
   const quoteInfo = useMemo(() => {
     const qs = (quotes || []).filter(q => q.saved !== false && (!ownOnly || q.savedBy === loginName));
-    const withSku = qs.filter(q => (q.lineItems || []).some(li => skuKey(li.sku) === k));
+    const withSku = qs.filter(q => (q.lineItems || []).some(li => skuId(li.sku) === k));
     const status = q => q.quoteStatus || "inprogress";
     const open = withSku.filter(q => ["inprogress", "followed"].includes(status(q)));
-    const lineVal = q => (q.lineItems || []).filter(li => skuKey(li.sku) === k).reduce((s, li) => s + (parseFloat(li.qty) || 0) * (parseFloat(li.unitPrice) || 0) * (q.currency === "USD" ? usdToCad : 1), 0);
+    const lineVal = q => (q.lineItems || []).filter(li => skuId(li.sku) === k).reduce((s, li) => s + (parseFloat(li.qty) || 0) * (parseFloat(li.unitPrice) || 0) * (q.currency === "USD" ? usdToCad : 1), 0);
     return { total: withSku.length, open: open.length, openVal: open.reduce((s, q) => s + lineVal(q), 0), won: withSku.filter(q => status(q) === "won").length, lost: withSku.filter(q => ["lost", "cold"].includes(status(q))).length };
   }, [quotes, k, ownOnly, loginName]);
 

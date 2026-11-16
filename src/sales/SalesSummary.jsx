@@ -38,7 +38,7 @@ const DEFAULT_SETTINGS = {
   dismissedMatches: {},
   lastSync: null,
 };
-const AUTO_SYNC_HOURS = 1;
+const AUTO_SYNC_MINUTES = 10; // opening Sales Summary syncs if the last sync was longer ago than this (Paul, Nov 2026)
 const VIEWS = [
   ["dashboard", "Dashboard"], ["orders", "Orders"], ["accounts", "Accounts"],
   ["reports", "Reports"], ["quotes", "Quote Matches"], ["settings", "Settings"],
@@ -141,13 +141,13 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
     setSync(null);
   }, [sync, ready, dbError, rawOrders, settings, seen, oldFiles, issues, db, loginName, saveSettings]);
 
-  // Auto-sync once a day-ish for whoever has Dropbox connected
+  // Auto-sync on opening (if the last sync was over 10 minutes ago) for whoever has Dropbox connected
   useEffect(() => {
     // Wait until everything has loaded (and the one-time reorganise is done) before deciding
     if (autoTried.current || !ready || sync || !connected || !canSync) return;
     autoTried.current = true;
     const last = stored.lastSync?.at ? new Date(stored.lastSync.at) : null;
-    if (!last || Date.now() - last > AUTO_SYNC_HOURS * 3600e3) runSync(true);
+    if (!last || Date.now() - last > AUTO_SYNC_MINUTES * 60e3) runSync(true);
   }, [ready, sync, stored, connected, runSync]);
 
   const openAccount = key => { setAccountKey(key); setView("accounts"); };

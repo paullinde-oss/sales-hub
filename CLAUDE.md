@@ -179,10 +179,10 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   or Square invoice (read from file name + pre-tax Subtotal, flagged).
 - File name wins over the PDF for the order number; dates: if PDF and file name differ by >7 days,
   use the one closer to the Dropbox save time. "January 0, 1900" = blank date.
-- Sync runs when someone with Dropbox connected opens Sales Summary — computer or phone (if last sync >1 h) or clicks
+- Sync runs when someone with Dropbox connected opens Sales Summary — computer or phone (if last sync >10 min, `AUTO_SYNC_MINUTES`) or clicks
   ↻ Refresh. It only reads new/changed PDFs. **Never sync unless orders, settings and sync history
   have loaded** (a blind sync can let a BOL overwrite its priced OC).
-- **Hourly automatic sync**: `.github/workflows/autosync.yml` (cron :17 every hour) runs
+- **"Hourly" automatic sync** (GitHub runs it only every ~4–8 h in practice — scheduled jobs are best effort): `.github/workflows/autosync.yml` (cron :17 every hour) runs
   `npm run autosync` → `scripts/autosync.mjs` (esbuild-bundled; Node pdfjs legacy build) with the
   `DROPBOX_REFRESH_TOKEN` repo secret (Paul copies it via Settings → Automatic sync). It uses the same
   `runFullSync` (`src/sales/syncRunner.js`) as ↻ Refresh, reads the 48 packs (~50 reads/run), and

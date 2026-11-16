@@ -99,11 +99,11 @@ function ProductPage({ T, db, sku, onClose, productsCAD = [], productsUSD = [], 
           {/* Left: photo + description + packaging */}
           <div>
             {p.image ? <div style={{ ...card, background: "#fff", padding: 8, display: "flex", justifyContent: "center" }}><img src={p.image} alt={p.name} style={{ maxWidth: "100%", maxHeight: 320, objectFit: "contain" }} /></div>
-              : <div style={{ ...card, ...muted, textAlign: "center", padding: 30 }}>{p.slug ? "Photo appears after the weekly website read." : "No website page for this product."}</div>}
+              : <div style={{ ...card, ...muted, textAlign: "center", padding: 30 }}>{p.slug ? "Photo appears after the monthly website read." : "No website page for this product."}</div>}
             <div style={card}>
               <div style={head}>Description</div>
               <div style={{ fontSize: 13, lineHeight: 1.6, color: T.subtext, whiteSpace: "pre-line" }}>{p.desc || product?.description || "—"}</div>
-              {!p.fromSite && p.desc && <div style={{ ...muted, fontSize: 10, marginTop: 6 }}>From the Products list (the website's copy appears after the weekly read).</div>}
+              {!p.fromSite && p.desc && <div style={{ ...muted, fontSize: 10, marginTop: 6 }}>From the Products list (the website's copy appears after the monthly read).</div>}
             </div>
             <div style={card}>
               <div style={head}>Packaging & dimensions (DIMS)</div>

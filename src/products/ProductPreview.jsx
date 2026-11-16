@@ -138,7 +138,7 @@ export function ProductPreviewHost({ T, products, extras }) {
             ? <>
                 <a href={p.url} target="_blank" rel="noopener noreferrer" onClick={() => setOpen(null)}
                   style={{ display: "block", textAlign: "center", textDecoration: "none", padding: "8px 12px", fontSize: 12, fontWeight: 600, letterSpacing: ".04em", borderRadius: 3, background: "#c8a96e", color: "#0a0a0a" }}>View on website ↗</a>
-                {!p.fromSite && <div style={{ fontSize: 10, color: T.tableHeadText, marginTop: 8 }}>Photo and website description appear after the weekly website read.</div>}
+                {!p.fromSite && <div style={{ fontSize: 10, color: T.tableHeadText, marginTop: 8 }}>Photo and website description appear after the monthly website read.</div>}
               </>
             : <div style={{ fontSize: 11, color: T.tableHeadText }}>No website page for this product{p.how === "picked" ? " (set on Products & Price List → Website pages)" : p.family ? "" : " — not part of a known product family"}. Pick one on Products & Price List → Website pages.</div>}
         </div>
@@ -147,7 +147,7 @@ export function ProductPreviewHost({ T, products, extras }) {
   );
 }
 
-// Every page the weekly job found, plus pages named by the rules (in case the job hasn't run yet)
+// Every page the monthly job found, plus pages named by the rules (in case the job hasn't run yet)
 export function pageOptions(data) {
   const m = new Map();
   Object.entries(data?.pages || {}).forEach(([slug, pg]) => m.set(slug, pg.name || slug));
@@ -222,7 +222,7 @@ export function WebsitePagesView({ T, products, loginName }) {
         <div style={{ fontSize: 11, color: f?.ok === false ? "#c86a5a" : T.tableHeadText, marginBottom: 14 }}>
           {f?.at
             ? <>Website last read {new Date(f.at).toLocaleString("en-CA", { dateStyle: "medium", timeStyle: "short" })} — {f.ok ? `${f.count} product pages found.` : `failed: ${f.error || "unknown error"} (the previous copy is kept).`} Read again automatically every week.</>
-            : <>The website hasn't been read yet — photos and website descriptions appear after the first weekly read. "View more" links work already.</>}
+            : <>The website hasn't been read yet — photos and website descriptions appear after the first monthly read. "View more" links work already.</>}
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
           <input placeholder="Search SKU or product" value={q} onChange={e => setQ(e.target.value)} style={{ width: 220, height: 28, fontSize: 12 }} />

@@ -50,8 +50,8 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   page on bmpsupplies.com (Wix) with "View more". SKUs find their page by **product family** (`FAMILIES`
   regexes on the SKU without "BMP"/dashes; size digits ignored), not exact SKU; a hand-picked page wins
   (Products & Price List → **Website pages**, or the ✏ Edit row). Firestore `config/productPages`: `pages`
-  + `fetch` written only by the **weekly job** (`.github/workflows/productpages.yml` → `npm run productpages`
-  → `scripts/productPages.mjs`, reads the Wix store sitemap + each page's JSON-LD/Open Graph; keeps the old
+  + `fetch` written only by the **monthly job** (3rd of each month; `.github/workflows/productpages.yml` → `npm run productpages`
+  → `scripts/productPages.mjs`, reads the Wix store sitemap + each page's JSON-LD/Open Graph, 3 s apart with waits + retries when Wix answers 429; a page it can't read keeps its last copy; keeps the old
   copy on failure); `links` {SKUKEY: slug | "" = no page} written by the picker. One listener = 1 read per open.
   New product family on the Products list → add a rule to `FAMILIES`.
 - **Cost Calculator** (left-hand area, "Costs & margins" people only; `src/costcalc/`): one calculator per

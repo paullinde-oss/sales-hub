@@ -1,11 +1,11 @@
-name: Weekly website product pages
+name: Monthly website product pages
 
-# Reads the product pages on bmpsupplies.com once a week and saves their photo, name and short
+# Reads the product pages on bmpsupplies.com once a month (Paul, Nov 2026) and saves their photo, name and short
 # description in the Sales Hub (scripts/productPages.mjs) for the SKU preview pop-up.
-# Run it sooner from GitHub → Actions → "Weekly website product pages" → Run workflow.
+# Run it sooner from GitHub → Actions → "Monthly website product pages" → Run workflow.
 on:
   schedule:
-    - cron: "43 10 * * 1" # Mondays 10:43 UTC (early morning in Alberta)
+    - cron: "43 10 3 * *" # the 3rd of every month, 10:43 UTC (early morning in Alberta)
   workflow_dispatch:
 
 permissions:
@@ -18,7 +18,7 @@ concurrency:
 jobs:
   read:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

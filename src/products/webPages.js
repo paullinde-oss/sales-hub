@@ -4,8 +4,8 @@
 //
 // • The website is read once a week by a GitHub job (scripts/productPages.mjs,
 //   .github/workflows/productpages.yml) and saved in Firestore config/productPages:
-//     pages: { slug: { url, name, desc, image } }   ← written by the weekly job only
-//     fetch: { at, ok, count, error }               ← how the last weekly read went
+//     pages: { slug: { url, name, desc, image } }   ← written by the monthly job only
+//     fetch: { at, ok, count, error }               ← how the last monthly read went
 //     links: { SKUKEY: slug | "" }                  ← hand-picked pages (Products & Price List →
 //                                                     Website pages, or a product's ✏ Edit row);
 //                                                     "" = "no website page" for that SKU
@@ -100,7 +100,7 @@ export function resolveSku(sku, data) {
   return { slug: "", how: "none", family };
 }
 
-// Everything the pop-up needs: website copy when the weekly job has read the page, otherwise the
+// Everything the pop-up needs: website copy when the monthly job has read the page, otherwise the
 // Products list's own name/description with a link to the page.
 export function previewFor(sku, data, product) {
   const r = resolveSku(sku, data);

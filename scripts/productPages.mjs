@@ -11,15 +11,25 @@ import { firebaseConfig } from "../src/firebaseConfig.js";
 import { SITE, DOC, FAMILIES, pageUrl } from "../src/products/webPages.js";
 
 const UA = "Mozilla/5.0 (compatible; BMP-Sales-Hub/1.0; weekly product page read)";
+const wait = ms => new Promise(res => setTimeout(res, ms));
+// The website (Wix) answers "429 Too Many Requests" if pages are read too quickly: wait and try again
 const get = async url => {
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 5; i++) {
     try {
       const r = await fetch(url, { headers: { "user-agent": UA, accept: "text/html,application/xml" }, redirect: "follow" });
       if (r.status === 404) return null;
+      if (r.status === 429) {
+        const after = parseInt(r.headers.get("retry-after") || "", 10);
+        const ms = (after > 0 ? after * 1000 : 30000 * (i + 1));
+        console.log(`  … website asked to slow down — waiting ${Math.round(ms / 1000)}s`);
+        await wait(ms);
+        continue;
+      }
       if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
       return await r.text();
-    } catch (e) { if (i === 2) throw new Error(`${url}: ${e.message || e}`); await new Promise(res => setTimeout(res, 2000 * (i + 1))); }
+    } catch (e) { if (i === 4) throw new Error(`${url}: ${e.message || e}`); await wait(3000 * (i + 1)); }
   }
+  throw new Error(`${url}: still busy after several tries`);
 };
 
 const ENT = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", rsquo: "’", lsquo: "‘", rdquo: "”", ldquo: "“", ndash: "–", mdash: "—", deg: "°", sup2: "²", frac12: "½", reg: "®", trade: "™", copy: "©", hellip: "…" };
@@ -83,11 +93,16 @@ const save = async patch => {
 try {
   const urls = await productUrls();
   console.log(`${urls.length} product pages listed on ${SITE}`);
-  const pages = {}, missing = [];
+  const pages = {}, missing = [], skipped = [];
+  // Last copy, so a page that can't be read this time keeps what we had
+  const before = await getDoc(ref).then(s => (s.exists() ? s.data().pages || {} : {})).catch(() => ({}));
   for (const url of urls) {
     const slug = decodeURIComponent(url.split("/product-page/")[1] || "").replace(/[/?#].*$/, "");
     if (!slug) continue;
-    const html = await get(url);
+    await wait(3000); // go gently — one page every few seconds
+    let html;
+    try { html = await get(url); }
+    catch (e) { console.log(`  ⚠ ${slug}: couldn't read (${e.message || e}) — keeping the last copy`); skipped.push(slug); if (before[slug]) pages[slug] = before[slug]; continue; }
     if (!html) { missing.push(slug); continue; }
     pages[slug] = readPage(html, `${SITE}/product-page/${slug}`);
     console.log(`  ${slug} — ${pages[slug].name}${pages[slug].image ? "" : " (no photo)"}`);
@@ -97,7 +112,7 @@ try {
   const broken = FAMILIES.filter(f => f.slug && !pages[f.slug]);
   broken.forEach(f => console.log(`  ⚠ Family "${f.label}" points at ${f.slug}, which isn't on the website`));
   missing.forEach(s => console.log(`  ⚠ ${s}: page not found`));
-  await save({ pages, fetch: { at: new Date().toISOString(), ok: true, count: Object.keys(pages).length, error: "" } });
+  await save({ pages, fetch: { at: new Date().toISOString(), ok: true, count: Object.keys(pages).length, error: skipped.length ? `${skipped.length} page(s) kept from last time: ${skipped.join(", ")}`.slice(0, 300) : "" } });
   console.log(`Saved ${Object.keys(pages).length} product pages.`);
   await terminate(db);
   process.exit(0);

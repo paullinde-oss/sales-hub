@@ -4,6 +4,7 @@
 // stock from the stock sheets; sales from order confirmations; quotes from the Quote Maker; and, for
 // "Costs & margins" people, the cost (Cost Calculator) and margins.
 import { useEffect, useMemo, useState } from "react";
+import { Loader } from "../Loader";
 import { doc, onSnapshot } from "firebase/firestore";
 import { useProductPages, previewFor, skuKey } from "./webPages";
 import { PRICE_FIELDS, FIELD_LABEL } from "../pricelist/priceLists";
@@ -106,7 +107,7 @@ function ProductPage({ T, db, sku, onClose, productsCAD = [], productsUSD = [], 
             </div>
             <div style={card}>
               <div style={head}>Packaging & dimensions (DIMS)</div>
-              {!more ? <div style={muted}>Loading…</div> : !more.dims ? <div style={muted}>Couldn't read the DIMS sheet</div> : !more.dims.length ? <div style={muted}>Not on the DIMS sheet</div> : (
+              {!more ? <div style={muted}><Loader T={T} inline label="Loading…" /></div> : !more.dims ? <div style={muted}>Couldn't read the DIMS sheet</div> : !more.dims.length ? <div style={muted}>Not on the DIMS sheet</div> : (
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                   <thead><tr style={{ color: T.tableHeadText, fontSize: 10, textTransform: "uppercase" }}><th style={{ textAlign: "left" }}>Unit</th><th style={{ textAlign: "right" }}>Pieces</th><th style={{ textAlign: "right" }}>L × W × H</th><th style={{ textAlign: "right" }}>Weight</th><th style={{ textAlign: "left", paddingLeft: 8 }}>Location</th></tr></thead>
                   <tbody>{more.dims.map((d, i) => <tr key={i} style={{ borderTop: `1px solid ${T.border}` }}>
@@ -142,7 +143,7 @@ function ProductPage({ T, db, sku, onClose, productsCAD = [], productsUSD = [], 
 
             <div style={card}>
               <div style={head}>Stock</div>
-              {!more ? <div style={muted}>Loading…</div> : !more.stock ? <div style={muted}>Couldn't read the stock sheets</div> : !more.stock.rows.length ? <div style={muted}>Not on the stock sheets</div>
+              {!more ? <div style={muted}><Loader T={T} inline label="Loading…" /></div> : !more.stock ? <div style={muted}>Couldn't read the stock sheets</div> : !more.stock.rows.length ? <div style={muted}>Not on the stock sheets</div>
                 : more.stock.rows.map(r => <div key={r.sheet} style={{ display: "flex", gap: 10, fontSize: 13, marginBottom: 3 }}>
                     <span style={{ flex: 1, color: T.subtext }}>{r.sheet}</span>
                     <b style={{ color: r.main.n == null ? T.subtext : r.main.n <= 0 ? "#e8472c" : "#34c77b" }}>{r.main.n == null ? r.main.value || "—" : r.main.n <= 0 ? "Out of stock" : `${r.main.value}${r.main.label === "Rolls" ? " rolls" : ""} in stock`}</b>
@@ -152,7 +153,7 @@ function ProductPage({ T, db, sku, onClose, productsCAD = [], productsUSD = [], 
 
             <div style={card}>
               <div style={head}>Sales{ownOnly ? " (your accounts)" : ""}</div>
-              {!sales ? <div style={muted}>Loading orders…</div> : (
+              {!sales ? <div style={muted}><Loader T={T} inline label="Loading orders…" /></div> : (
                 <>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 10 }}>
                     {[[`FY${sales.fy} so far`, sales.cur, sales.prevSame], [`FY${sales.fy - 1}`, sales.prev, null]].map(([l, g, cmp]) => (

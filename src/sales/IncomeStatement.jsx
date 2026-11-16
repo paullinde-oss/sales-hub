@@ -6,6 +6,7 @@
 // Sheet layout used: A1 title, A2 source line, A4:G5 summary boxes (labels / values), and the data
 // table in AA:AJ — Account, FY…, FY…, $ Change, % Change, FY…, FY…, RowType, ShowInSummary, Section.
 import { useEffect, useRef, useState } from "react";
+import { Loader } from "../Loader";
 
 const AA = 26; // column AA
 function parseCSV(text) {
@@ -117,7 +118,7 @@ export default function IncomeStatement({ T, costs, loginName }) {
       </div>
       {sheet?.source && <div style={{ fontSize: 11, fontStyle: "italic", color: T.subtext, padding: "6px 14px", background: T.tableHead }}>{sheet.source}</div>}
       {err && <div style={{ fontSize: 12, color: "#e8472c", padding: 12 }}>{err}</div>}
-      {!sheet && !err && <div style={{ fontSize: 12, color: T.tableHeadText, padding: 12 }}>Reading the sheet…</div>}
+      {!sheet && !err && <Loader T={T} label="Reading the Income Statement…" />}
       {sheet && <>
         {/* Summary boxes — straight from the sheet's A4:G5 */}
         <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(150px, 1fr))`, gap: 2, margin: "10px 0" }}>

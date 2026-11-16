@@ -202,6 +202,11 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
 - Avoid reading the live database from scripts unless needed; one full read of orders ≈ 48 reads
   (packs) — never page through `salesOrders` (≈1,500+ reads).
 
+## Loading animation
+Leon's BMP "stripes" loader (five logo-proportion bars filling in turn): `src/Loader.jsx` (`Loader` card, `Loader inline`
+for status lines, `Stripes`), dark/light colours from the hub theme; the same markup is in `index.html` inside `#root`
+so it shows before the app starts. Use `<Loader T={T} label="…"/>` for anything that loads — no other spinners/GIFs.
+
 ## Logos
 logo.dev CDN: each account's **Website** + publishable key (`pk_…`, saved in Settings). An uploaded
 logo on a customer page wins. Dropbox logos were dropped.

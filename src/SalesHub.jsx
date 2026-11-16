@@ -1390,7 +1390,7 @@ ${quoteNumLine}
             {shipSection==="curtain"&&<ShippingTab T={T}/>}
             {shipSection==="dims"&&<DimsTab dims={dims} setDims={setDims} T={T}/>}
           </TabPage>}
-          {activeTab==="costcalc"&&canSeeCosts(currentUser)&&<TabPage T={T} title="COST CALCULATOR"><div style={{flex:1,minHeight:0,display:"flex",overflow:"hidden"}}><CostGate T={T} costs={costs}>{costBook.status!=="ready"?<div style={{padding:16,fontSize:12,color:T.tableHeadText}}>{costBook.status==="locked"?"The Cost Calculator is locked — sign out and back in with your own password.":"Loading…"}</div>:<CostCalculator T={T} book={costBook} saveBook={costBook.save} costs={costs} loginName={loginName} productsCAD={productsCAD} productsUSD={productsUSD} hubUsdRate={exchangeRate?1/exchangeRate:1.38} focusSku={costFocus} onFocusDone={()=>setCostFocus(null)}/>}</CostGate></div></TabPage>}
+          {activeTab==="costcalc"&&canSeeCosts(currentUser)&&<TabPage T={T} title="COST CALCULATOR"><div style={{flex:1,minHeight:0,display:"flex",overflow:"hidden"}}><CostGate T={T} costs={costs}>{costBook.status!=="ready"?<div style={{padding:16,fontSize:12,color:T.tableHeadText}}>{costBook.status==="locked"?"The Cost Calculator is locked — sign out and back in with your own password.":<Loader T={T} label="Loading the Cost Calculator…"/>}</div>:<CostCalculator T={T} book={costBook} saveBook={costBook.save} costs={costs} loginName={loginName} productsCAD={productsCAD} productsUSD={productsUSD} hubUsdRate={exchangeRate?1/exchangeRate:1.38} focusSku={costFocus} onFocusDone={()=>setCostFocus(null)}/>}</CostGate></div></TabPage>}
           {activeTab==="admin"&&canSee(currentUser,"admin")&&<TabPage T={T} title="USERS & ACCESS"><AdminTab T={T} db={db} users={users||DEFAULT_USERS} loginName={loginName} logins={logins} masterOff={!!masterAuth?.off} onOwnToken={setAuthHash}/></TabPage>}
           </TabErrorBoundary>
         </div>
@@ -2590,7 +2590,7 @@ function StockCheck({ quote, T }) {
         {errors.length > 0 && <span style={{ color: RED, textTransform: "none", letterSpacing: 0 }}>Couldn't read: {errors.join(", ")}</span>}
         <button className="btn" style={{ fontSize: 9, padding: "1px 8px" }} disabled={busy} onClick={() => refresh(true)}>{busy ? "…" : "⟳"}</button>
       </div>
-      {!data ? <div style={{ padding: "10px 14px", fontSize: 11, color: T.muted }}>Checking stock…</div> : (
+      {!data ? <div style={{ padding: "10px 14px", fontSize: 11, color: T.muted }}><Loader T={T} inline label="Checking stock…"/></div> : (
         <div style={{ display: "flex", flexWrap: "wrap" }}>
           {[...boxes, ...(missing.length ? [{ key: "none", label: "Not on the stock sheets", items: missing.map(m => ({ ...m, have: undefined })) }] : [])].map(b => (
             <div key={b.key} style={{ padding: "8px 14px", borderRight: `1px solid ${T.border}`, minWidth: 200 }}>
@@ -2705,7 +2705,7 @@ function StockLevelsTab({T}) {
             )}
             {!sec.error && sec.rows.length===0 && (
               <div style={{fontSize:11,color:T.muted,fontStyle:"italic"}}>
-                {loading ? <Loader T={T} size={40}/> : `No SKUs with stock activity${search?" matching your search":""}.`}
+                {loading ? <Loader T={T}/> : `No SKUs with stock activity${search?" matching your search":""}.`}
               </div>
             )}
             {sec.rows.length>0 && (

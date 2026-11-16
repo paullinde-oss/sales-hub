@@ -3,6 +3,7 @@
 // prices) and inside a draft price list (margins at the new prices + projection from real orders).
 // Only people with "Costs & margins" in Users & Access; the costs themselves are encrypted (costs.js).
 import { useMemo, useRef, useState, useEffect } from "react";
+import { Loader } from "../Loader";
 import { readCalculator, estimateBlankets, costOf, lowestMargin, marginPct } from "./costs";
 import { PRICE_FIELDS, FIELD_LABEL, priceNum, up, parseCSV } from "./priceLists";
 import { listFiles, downloadFile, isDropboxConnected } from "../sales/dropbox";
@@ -21,7 +22,7 @@ export function marginColor(m, target) {
 }
 
 export function CostGate({ T, costs, children }) {
-  if (costs.status === "loading") return <div style={{ fontSize: 12, color: T.tableHeadText }}>Loading costs…</div>;
+  if (costs.status === "loading") return <Loader T={T} label="Loading costs…" />;
   if (costs.status === "hidden") return <div style={{ fontSize: 12, color: T.tableHeadText }}>Costs and margins are only shown to people with "Costs &amp; margins" in Users &amp; Access.</div>;
   if (costs.status === "ready") return children;
   const box = { background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 3, padding: 16, maxWidth: 620 };

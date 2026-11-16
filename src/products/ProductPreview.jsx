@@ -1,6 +1,7 @@
 // ─── Product preview pop-up, SKU links and the "Website page" picker ─────────
 // See webPages.js for how a SKU finds its page on bmpsupplies.com.
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Loader } from "../Loader";
 import { PRICE_FIELDS, FIELD_LABEL } from "../pricelist/priceLists";
 import { openProductPage } from "./ProductPage";
 import { useProductPages, previewFor, resolveSku, setSkuPage, setPreviewOpener, openPreview, FAMILIES, skuKey, pageUrl, SITE } from "./webPages";
@@ -107,7 +108,7 @@ export function ProductPreviewHost({ T, products, extras }) {
           {/* Dimensions (DIMS sheet) */}
           <div style={sec}>
             <div style={head}>Dimensions</div>
-            {!more ? <div style={{ fontSize: 11, color: T.tableHeadText }}>Loading…</div>
+            {!more ? <div style={{ fontSize: 11, color: T.tableHeadText }}><Loader T={T} inline label="Loading…" /></div>
               : more.dims == null ? <div style={{ fontSize: 11, color: T.tableHeadText }}>Couldn't read the DIMS sheet</div>
               : !more.dims.length ? <div style={{ fontSize: 11, color: T.tableHeadText }}>Not on the DIMS sheet</div>
               : more.dims.map((d, i) => (
@@ -121,7 +122,7 @@ export function ProductPreviewHost({ T, products, extras }) {
           {/* Stock (the 3 stock sheets) */}
           <div style={sec}>
             <div style={head}>Stock</div>
-            {!more ? <div style={{ fontSize: 11, color: T.tableHeadText }}>Loading…</div>
+            {!more ? <div style={{ fontSize: 11, color: T.tableHeadText }}><Loader T={T} inline label="Loading…" /></div>
               : more.stock == null ? <div style={{ fontSize: 11, color: T.tableHeadText }}>Couldn't read the stock sheets</div>
               : !more.stock.rows.length ? <div style={{ fontSize: 11, color: T.tableHeadText }}>Not on the stock sheets</div>
               : more.stock.rows.map(r => (

@@ -176,7 +176,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
         </label>
         {ownOnly && <span style={{ fontSize: 10, color: T.tableHeadText }}>Showing your accounts only</span>}
         {<div style={{ fontSize: 10, color: T.tableHeadText, textAlign: "right", lineHeight: 1.3, minWidth: mobile ? 0 : 120 }}>
-          {sync ? <span style={{ color: T.gold, display: "inline-flex", alignItems: "center", gap: 6 }}><Loader T={T} size={18} inline />{sync.stage}{sync.total ? ` ${sync.done}/${sync.total}` : ""}</span>
+          {sync ? <span style={{ color: T.gold, display: "inline-flex", alignItems: "center", gap: 6 }}><Loader T={T} inline label="" />{sync.stage}{sync.total ? ` ${sync.done}/${sync.total}` : ""}</span>
             : settings.lastSync ? <>Last synced {timeAgo(settings.lastSync.at)}<br />by {settings.lastSync.by || "—"}</> : "Never synced"}
         </div>}
         {/* The hourly automatic sync covers everyone, so only admins are offered "Connect Dropbox";
@@ -1859,7 +1859,7 @@ function FolderPicker({ T, title, onPick, onClose }) {
         </div>
         <div style={{ border: `1px solid ${T.border}`, borderRadius: 2, height: 320, overflowY: "auto", background: T.panelBg }}>
           {err ? <div style={{ padding: 12, fontSize: 12, color: "#c86a5a" }}>{err}</div>
-            : !data ? <Loader T={T} size={40} />
+            : !data ? <Loader T={T} />
             : !data.folders.length ? <div style={{ padding: 12, fontSize: 12, color: T.tableHeadText, lineHeight: 1.5 }}>
                 No folders here{data.files ? ` (${data.files} files)` : ""}.
                 {!path && <><br /><br />If you expected to see your Dropbox folders, the Dropbox app is probably set to <b>App folder</b> access. In dropbox.com/developers/apps, create the app again with <b>Full Dropbox</b> access, tick files.metadata.read and files.content.read, add the same redirect URIs, and send me the new App key.</>}

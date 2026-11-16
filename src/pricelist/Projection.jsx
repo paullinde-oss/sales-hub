@@ -4,6 +4,7 @@
 // Customer-specific prices (White Cap) get the same % as the master SKU, so the % applies to what
 // they actually paid. Freight, fees and tax aren't product lines, so they're left out.
 import { useEffect, useMemo, useState } from "react";
+import { Loader } from "../Loader";
 import { doc, onSnapshot } from "firebase/firestore";
 import { listenOrders } from "../sales/orderStore";
 import { enrichOrders, orderCurrency, today, addDays, fyOf, fyStart, fyEnd, fmtMoney } from "../sales/salesUtils";
@@ -61,7 +62,7 @@ export default function Projection({ T, db, current, draft, categories = {}, cos
       {sub && <div style={{ fontSize: 11, color: T.subtext }}>{sub}</div>}
     </div>
   );
-  if (!res) return <div style={{ fontSize: 12, color: T.tableHeadText }}>Loading orders…</div>;
+  if (!res) return <Loader T={T} label="Loading orders…" />;
   const { tot } = res;
   return (
     <div>

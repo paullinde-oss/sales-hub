@@ -101,6 +101,17 @@ export function applyCorrections(o) {
 // Orders that came out at $0 (or with no price) and haven't been confirmed as really $0
 export const needsLook = o => orderAmount(o, true) === 0 && !o.override?.zeroOk;
 
+// Older OCs have Yd²/M² columns: a quantity can be read from the square-yards column (300 rolls → "30000").
+// When qty × price is 10× or more off the line's amount, use the quantity the amount implies.
+export function fixQty(l) {
+  const q = Number(l.qty) || 0, p = Number(l.price) || 0, a = Number(l.amount) || 0;
+  if (!(p > 0 && a > 0 && q > 0)) return l;
+  const implied = a / p;
+  if (Math.abs(q * p - a) <= Math.max(1, a * 0.01) || q / implied < 10) return l;
+  if (Math.abs(implied - Math.round(implied)) > 0.02) return l; // only clear whole-number cases
+  return { ...l, qty: Math.round(implied), qtyFixed: q };
+}
+
 export function enrichOrders(orders, settings, products = []) {
   const accounts = settings.accounts, aliases = settings.aliases || {}, custTypes = settings.custTypes || {};
   // A corrected date wins; orders still without a valid date are left out of the date-based views
@@ -112,7 +123,7 @@ export function enrichOrders(orders, settings, products = []) {
   const skuMap = settings.skuMap || {};
   // Lines marked in the clean-up as not a product at all (tax / freight / fee)
   const kindOverride = l => { const v = skuMap[lineKey(l)]; return ["__tax", "__freight", "__fee"].includes(v) ? v.slice(2) : null; };
-  const cleaned = orders.map(o => cleanOrder(applyCorrections(o), kindOverride)); // freight/tax/fees typed in as line items on older OCs
+  const cleaned = orders.map(o => cleanOrder(applyCorrections(o), kindOverride)).map(o => (o.lines || []).some(l => fixQty(l) !== l) ? { ...o, lines: o.lines.map(fixQty) } : o); // freight/tax/fees typed in as line items on older OCs
   const catalog = buildCatalog(products, cleaned.flatMap(o => o.lines || []));
   return normalizeCities(cleaned) // "CALGARY", "Calgary, Alberta", "Calgary (pickup)" → "Calgary, AB"
     // Fill in a blank/numeric SKU from other orders with the same description first, then standardise it

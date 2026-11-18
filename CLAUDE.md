@@ -114,6 +114,10 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   numbers" removes them. Settings → **"Orders at $0 — check these"** lists `needsLook` orders ($0 / no price, not
   `override.zeroOk`); count badge on the Settings tab; "It's right at $0" sets `zeroOk`.
 - **Quantity sanity check** (`fixQty` in salesUtils.js, in `enrichOrders`): if qty × price is ≥10× off the line amount and amount ÷ price is a whole number, that number is the qty (old OCs with Yd² columns — BRO10471 read 30000 for 300 rolls).
+- **Order tidy-ups** (`tidyOrder` in salesUtils.js, in `enrichOrders` after `cleanOrder`; Nov 2026 health check):
+  a `TBC2550…` line whose description says 2.5' → `TBC2.550…` (older Calgary OCs used the 25' SKU); charges named
+  GST/PST/HST/Subtotal dropped; discount/credit charges made negative; a total that equals lines × 1.05/1.11–1.15
+  is the pre-tax sum. SKU loose matching (`skus.js` `loosen`) keeps dots.
 - **"CUSTOM" SKU can be anything** — match those lines by description, never treat as one product.
 - SKUs are standardised to the **Products list** (Settings → Product SKU clean-up for the rest).
   Renaming a SKU on the Products tab also maps past orders' old SKU to the new one.

@@ -10,8 +10,10 @@
 const GENERIC = /^(?:|custom|misc|-|#n\/a|n\/a|tbd|other|item)$/i;
 export const isGenericSku = s => GENERIC.test(String(s || "").trim());
 
-const squash = s => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-const noPrefix = s => squash(s).replace(/^BMP/, "");
+const squash = s => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); // saved clean-up keys use this
+// Loose matching (case, spaces, dashes, "BMP-") keeps dots: TBC2.550T2DOT (2.5') must not match TBC2550T2DOT (25')
+const loosen = s => String(s || "").toUpperCase().replace(/[^A-Z0-9.]/g, "");
+const noPrefix = s => loosen(s).replace(/^BMP/, "");
 const descKey = d => String(d || "").toLowerCase().replace(/\s+/g, " ").trim();
 // The key a clean-up choice is saved under
 export const lineKey = l => (isGenericSku(l.sku) ? `desc:${descKey(l.desc)}` : `sku:${squash(l.sku)}`);
@@ -23,7 +25,7 @@ export function buildCatalog(products, orderLines = []) {
   const exact = new Map(), loose = new Map();
   for (const p of list) {
     exact.set(p.sku.toUpperCase(), p);
-    loose.set(squash(p.sku), p);
+    loose.set(loosen(p.sku), p);
     if (!loose.has(noPrefix(p.sku))) loose.set(noPrefix(p.sku), p);
   }
   // SKUs used on orders but not on the Products list: group spellings that differ only by
@@ -31,7 +33,7 @@ export function buildCatalog(products, orderLines = []) {
   const counts = new Map();
   for (const l of orderLines) {
     const raw = String(l.sku || "").trim();
-    if (!raw || isGenericSku(raw) || /^[\d,.]+$/.test(raw) || exact.has(raw.toUpperCase()) || loose.has(squash(raw)) || loose.has(noPrefix(raw))) continue;
+    if (!raw || isGenericSku(raw) || /^[\d,.]+$/.test(raw) || exact.has(raw.toUpperCase()) || loose.has(loosen(raw)) || loose.has(noPrefix(raw))) continue;
     const k = noPrefix(raw);
     const g = counts.get(k) || new Map();
     const e = g.get(raw) || { n: 0, desc: l.desc || "" };
@@ -50,7 +52,7 @@ export function buildCatalog(products, orderLines = []) {
 export function standardiseLine(l, catalog, skuMap = {}) {
   const raw = String(l.sku || "").trim();
   // A saved choice for this exact spelling, or for the group of spellings it belongs to
-  const grouped = !isGenericSku(raw) && (catalog.loose.get(squash(raw)) || catalog.loose.get(noPrefix(raw)));
+  const grouped = !isGenericSku(raw) && (catalog.loose.get(loosen(raw)) || catalog.loose.get(noPrefix(raw)));
   const choice = skuMap[lineKey(l)] || (grouped ? skuMap[`sku:${squash(grouped.sku)}`] : undefined);
   if (choice) {
     // "Keep as its own SKU" — other spellings of it still report under the one SKU
@@ -62,7 +64,7 @@ export function standardiseLine(l, catalog, skuMap = {}) {
   if (isGenericSku(raw)) return { ...l, skuStatus: "unmatched" };
   const hit = catalog.exact.get(raw.toUpperCase());
   if (hit) return { ...l, sku: hit.sku, skuStatus: "catalog" };
-  const auto = catalog.loose.get(squash(raw)) || catalog.loose.get(noPrefix(raw));
+  const auto = catalog.loose.get(loosen(raw)) || catalog.loose.get(noPrefix(raw));
   if (auto && auto.source === "Products list") return { ...l, sku: auto.sku, desc: auto.desc || l.desc, origSku: raw, skuStatus: "auto" };
   // Not on the Products list: still grouped with its other spellings, and listed for review
   if (auto) return { ...l, sku: auto.sku, origSku: auto.sku !== raw ? raw : undefined, skuStatus: "unmatched" };

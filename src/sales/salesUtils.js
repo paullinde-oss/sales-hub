@@ -112,6 +112,39 @@ export function fixQty(l) {
   return { ...l, qty: Math.round(implied), qtyFixed: q };
 }
 
+// Clean-ups found by the Nov 2026 order health check (applied to every order on the fly):
+//  • a "TBC2550…" line whose description says 2.5' is the 2.5' curtain (TBC2.550…), not the 25'
+//  • GST / PST / HST / "Subtotal" read as charges are not charges
+//  • discounts and credits read as charges reduce the order
+//  • a total that is exactly the lines + GST/HST is the pre-tax amount
+const TAXISH = /^(?:gst|pst|hst|qst|gts)\b|^sub-?\s?total\b|^total\b/i;
+export function tidyOrder(o) {
+  let changed = false, warn = [];
+  const lines = (o.lines || []).map(l => {
+    const m = String(l.sku || "").toUpperCase().match(/^TBC2550(.+)$/);
+    if (m && /^\s*2\.5\s*['’]/.test(l.desc || "")) { changed = true; return { ...l, sku: "TBC2.550" + m[1], skuFixed: l.sku }; }
+    return l;
+  });
+  let charges = o.charges || [];
+  const taxCharges = charges.filter(c => TAXISH.test(c.label || ""));
+  if (taxCharges.length) { changed = true; charges = charges.filter(c => !TAXISH.test(c.label || "")); }
+  charges = charges.map(c => (/discount|credit/i.test((c.label || "") + " " + (c.note || "")) && c.amount > 0 ? (changed = true, { ...c, amount: -c.amount }) : c));
+  if (!changed && !(o.total > 0)) return o;
+  const r2 = n => Math.round((n || 0) * 100) / 100;
+  const isFr = c => c.kind === "freight" || /freight|shipping|delivery|^frt\b/i.test(c.label || "");
+  const productTotal = r2(lines.reduce((t, l) => t + (l.amount || 0), 0));
+  const freight = r2(charges.filter(isFr).reduce((t, c) => t + (c.amount || 0), 0));
+  const otherCharges = r2(charges.filter(c => !isFr(c)).reduce((t, c) => t + (c.amount || 0), 0));
+  const sum = r2(productTotal + freight + otherCharges);
+  let total = o.total;
+  if (sum > 0 && o.total > sum && !o.override?.total && [1.05, 1.11, 1.12, 1.13, 1.14, 1.15].some(k => Math.abs(sum * k - o.total) < 0.06)) {
+    total = sum; changed = true; warn.push(`Tax (${r2(o.total - sum)}) was in the total — taken out`);
+  }
+  if (!changed) return o;
+  return { ...o, lines, charges, productTotal, freight, otherCharges, total, taxes: [...(o.taxes || []), ...taxCharges.filter(c => /gst|pst|hst|qst|gts/i.test(c.label)).map(c => ({ label: c.label, amount: c.amount }))],
+    warnings: [...(o.warnings || []).filter(w => !/don't add up/i.test(w)), ...warn] };
+}
+
 export function enrichOrders(orders, settings, products = []) {
   const accounts = settings.accounts, aliases = settings.aliases || {}, custTypes = settings.custTypes || {};
   // A corrected date wins; orders still without a valid date are left out of the date-based views
@@ -123,7 +156,7 @@ export function enrichOrders(orders, settings, products = []) {
   const skuMap = settings.skuMap || {};
   // Lines marked in the clean-up as not a product at all (tax / freight / fee)
   const kindOverride = l => { const v = skuMap[lineKey(l)]; return ["__tax", "__freight", "__fee"].includes(v) ? v.slice(2) : null; };
-  const cleaned = orders.map(o => cleanOrder(applyCorrections(o), kindOverride)).map(o => (o.lines || []).some(l => fixQty(l) !== l) ? { ...o, lines: o.lines.map(fixQty) } : o); // freight/tax/fees typed in as line items on older OCs
+  const cleaned = orders.map(o => tidyOrder(cleanOrder(applyCorrections(o), kindOverride))).map(o => (o.lines || []).some(l => fixQty(l) !== l) ? { ...o, lines: o.lines.map(fixQty) } : o); // freight/tax/fees typed in as line items on older OCs
   const catalog = buildCatalog(products, cleaned.flatMap(o => o.lines || []));
   return normalizeCities(cleaned) // "CALGARY", "Calgary, Alberta", "Calgary (pickup)" → "Calgary, AB"
     // Fill in a blank/numeric SKU from other orders with the same description first, then standardise it

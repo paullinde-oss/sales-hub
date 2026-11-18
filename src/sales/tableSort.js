@@ -26,13 +26,25 @@ export function useTableSort() {
     const text = c => String(typeof c === "object" && c !== null ? c.text : c ?? "").toLowerCase();
     const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
     let body = rows.filter(r => !isTotal(r)), tail = rows.filter(isTotal);
-    if (words.length) body = body.filter(r => { const t = cellsOf(r).map(text).join(" "); return words.every(w => t.includes(w)); });
-    if (sort) body = [...body].sort((a, b) => {
+    const matches = r => { const t = cellsOf(r).map(text).join(" "); return words.every(w => t.includes(w)); };
+    const cmp = (a, b) => {
       const x = sortVal(cellsOf(a)[sort.col]), y = sortVal(cellsOf(b)[sort.col]);
       if (x == null || y == null) return x == null ? (y == null ? 0 : 1) : -1; // blanks last
       if (typeof x !== typeof y) return typeof x === "number" ? -1 : 1;
       return (x < y ? -1 : x > y ? 1 : 0) * sort.dir;
-    });
+    };
+    // Grouped tables (rows carry grp; the group's heading row has head: true): rows only ever sort
+    // inside their own group, and the groups are ordered by their heading rows
+    if (body.some(r => r.grp != null)) {
+      const groups = new Map();
+      body.forEach(r => { const k = r.grp ?? "\u0000" + groups.size; if (!groups.has(k)) groups.set(k, { head: null, rows: [] }); const g = groups.get(k); if (r.head) g.head = r; else g.rows.push(r); });
+      let list = [...groups.values()];
+      if (words.length) list = list.map(g => (g.head && matches(g.head) ? g : { ...g, rows: g.rows.filter(matches) })).filter(g => g.rows.length || (g.head && matches(g.head)));
+      if (sort) { list = list.map(g => ({ ...g, rows: [...g.rows].sort(cmp) })); list.sort((a, b) => (a.head && b.head ? cmp(a.head, b.head) : 0)); }
+      return [...list.flatMap(g => [...(g.head ? [g.head] : []), ...g.rows]), ...(words.length ? [] : tail)];
+    }
+    if (words.length) body = body.filter(matches);
+    if (sort) body = [...body].sort(cmp);
     return [...body, ...(words.length ? [] : tail)];
   };
   return { sort, q, setQ, toggle, arrow, apply, reset: () => { setSort(null); setQ(""); } };

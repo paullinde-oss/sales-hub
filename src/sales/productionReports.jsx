@@ -79,8 +79,8 @@ function grouped(items, catOf, numFrom, fmt = qtyTxt) {
     const list = by.get(c).sort((a, b) => a.sku.localeCompare(b.sku, undefined, { numeric: true }));
     const n = list[0].vals.length;
     const tot = Array.from({ length: n }, (_, i) => list.reduce((t, it) => t + (Number(it.vals[i]) || 0), 0));
-    rows.push({ group: true, bg: "rgba(200,169,110,.12)", cells: [`${c} (${list.length})`, ...Array(numFrom - 1).fill(""), ...tot.map(fmt)] });
-    list.forEach(it => rows.push({ cells: [`   ${it.sku}`, ...it.lead, ...it.vals.map(fmt)] }));
+    rows.push({ group: true, grp: c, head: true, bg: "rgba(200,169,110,.12)", cells: [`${c} (${list.length})`, ...Array(numFrom - 1).fill(""), ...tot.map(fmt)] });
+    list.forEach(it => rows.push({ grp: c, cells: [`   ${it.sku}`, ...it.lead, ...it.vals.map(fmt)] }));
   });
   return rows;
 }
@@ -254,7 +254,7 @@ export function ProductionReport({ T, rep, orders, products = [], categories = {
     const fmt1 = n => (n ? (Math.round(n * 10) / 10).toLocaleString("en-CA") : "—");
     const rows = [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0])).flatMap(([k, g]) => {
       const tp = g.pallets.reduce((a, b) => a + b, 0), tt = g.trucks.reduce((a, b) => a + b, 0);
-      return tp ? [{ cells: [k, "Pallets", ...g.pallets.map(fmt1), fmt1(tp)] }, { cells: ["", "Truckloads", ...g.trucks.map(fmt1), fmt1(tt)] }] : [];
+      return tp ? [{ grp: k, head: true, cells: [k, "Pallets", ...g.pallets.map(fmt1), fmt1(tp)] }, { grp: k, cells: ["", "Truckloads", ...g.trucks.map(fmt1), fmt1(tt)] }] : [];
     });
     const totP = [...groups.values()].reduce((t, g) => t + g.pallets.reduce((a, b) => a + b, 0), 0), totT = [...groups.values()].reduce((t, g) => t + g.trucks.reduce((a, b) => a + b, 0), 0);
     return <ReportTable T={T} title="Pallets & truckloads shipped" sub={`Fiscal ${fy} (Dec – Nov)`}

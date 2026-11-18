@@ -52,7 +52,7 @@ export function ReportTable({ T, title, sub, note, headers, rows, csvRows, right
           <table className="data-table">
             <thead><tr>{headers.map((h, i) => <th key={i} onClick={() => ts.toggle(i)} title="Click to sort" style={{ textAlign: isRight(i) ? "right" : "left", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none" }}>{h}{ts.arrow(i)}</th>)}</tr></thead>
             <tbody>{shown.map((r, i) => (
-              <tr key={i} onClick={r.onClick} style={{ fontWeight: r.bold ? 600 : 400, cursor: r.onClick ? "pointer" : "default", background: r.bg }}>
+              <tr key={i} onClick={r.onClick} style={{ fontWeight: r.bold || r.group ? 600 : 400, cursor: r.onClick ? "pointer" : "default", background: r.bg }}>
                 {r.cells.map((c, j) => {
                   const o = typeof c === "object" && c !== null ? c : { text: c };
                   return <td key={j} style={{ textAlign: isRight(j) ? "right" : "left", color: o.color, fontVariantNumeric: "tabular-nums", whiteSpace: j === 0 ? "normal" : "nowrap" }}>{o.text}</td>;

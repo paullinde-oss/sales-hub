@@ -1356,7 +1356,7 @@ ${quoteNumLine}
             productsCAD={productsCAD} productsUSD={productsUSD} effectiveProductsUSD={effectiveProductsUSD} createNewQuote={createNewQuote}
             setActiveQuote={setActiveQuote} saveQuote={saveQuote} editQuote={q=>setActiveQuote({...q,saved:false})}
             openEmailModal={openEmailModal} generatePDF={generatePDF} deleteConfirm={deleteConfirm} setDeleteConfirm={setDeleteConfirm} deleteQuote={deleteQuote} duplicateQuote={duplicateQuote} quoteSort={quoteSort} setQuoteSort={setQuoteSort} closeConfirm={closeConfirm} setCloseConfirm={setCloseConfirm} exchangeRate={exchangeRate} onQuoteStatusChange={updateQuoteStatus} T={T}/></TabPage>}
-          {activeTab==="sales"&&canSee(currentUser,"sales")&&<SalesSummary T={T} db={db} quotes={quotes} updateQuoteStatus={updateQuoteStatus} loginName={loginName} user={currentUser} bmpLogo={BMP_LOGO_FULL} leads={leads} adSpend={adSpend} canSeeLeads={canSee(currentUser,"leads")} products={productsCAD} categories={categories} subCategories={subCategories} costs={costs} canCosts={canSeeCosts(currentUser)}/>}
+          {activeTab==="sales"&&canSee(currentUser,"sales")&&<SalesSummary T={T} db={db} quotes={quotes} updateQuoteStatus={updateQuoteStatus} loginName={loginName} user={currentUser} bmpLogo={BMP_LOGO_FULL} leads={leads} adSpend={adSpend} canSeeLeads={canSee(currentUser,"leads")} products={productsCAD} categories={categories} subCategories={subCategories} costs={costs} canCosts={canSeeCosts(currentUser)} loadStock={()=>loadStockSheets(false).then(stockBySku)}/>}
           {activeTab==="pipeline"&&(()=>{
             const sections=[["dashboard","Dashboard"],["pipeline","Pipeline"],...(canSee(currentUser,"leads")?[["leads","Leads"]]:[])];
             const sec=sections.some(x=>x[0]===pipeSection)?pipeSection:"dashboard";
@@ -2516,7 +2516,8 @@ function stockBySku(data) {
       if (key === "blankets") {
         const pal = cols.find(c => /pallet/i.test(c.label)), trk = cols.find(c => /truck/i.test(c.label));
         if (pal?.n == null && trk?.n == null) return;
-        e = { loc: STOCK_LOC[key], n: pal?.n ?? trk?.n, text: `${pal?.value || 0} pallets · ${trk?.value || 0} trucks`, title: cols.filter(c => c.value).map(c => `${c.label}: ${c.value}`).join(" · ") };
+        const rolls = cols.find(c => /roll/i.test(c.label));
+        e = { loc: STOCK_LOC[key], n: pal?.n ?? trk?.n, units: rolls?.n ?? null, text: `${pal?.value || 0} pallets · ${trk?.value || 0} trucks`, title: cols.filter(c => c.value).map(c => `${c.label}: ${c.value}`).join(" · ") };
       } else {
         const c = cols[0]; if (c.n == null && !c.value) return;
         e = { loc: STOCK_LOC[key], n: c.n, text: c.value || "0", title: `${sheet.label}: ${c.value || 0}` };

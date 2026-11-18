@@ -142,6 +142,14 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   A4:G5 summary boxes, table in AA:AJ (Account, 6 value cols, RowType, ShowInSummary, Section); "Show detail
   for" = None / All / a section. The published-CSV link is stored **inside the encrypted cost store**
   (`costs.__incomeSheet`) — never commit it; figures are read fresh, never saved in Firestore.
+- **Production reports** (Reports → Production; `src/sales/productionReports.jsx`): quantities only (each product's
+  unit), Brooks + Calgary, BOLs included, CUSTOM/LABELS left out; product picker = any mix of categories + SKUs.
+  Units sold by month (FY Dec→Nov or chosen months; "Compare to previous year" toggle, off by default) · Next-year
+  build plan (per-month average of past FYs' finished months × this FY's YTD growth vs last year, capped −50%…+100%,
+  + manual %) · Seasonality (avg share of FY volume per month) · Stock vs demand (stock sheets via `loadStock` prop →
+  `stockBySku`, blankets in rolls; avg of last 12 full months; flags short vs same 3 months last year) · Upcoming demand
+  from open quotes (qty × 12-month win rate; option lines ÷ number of options) · Pallets & truckloads (qty ÷ pallet qty;
+  trucks = ÷ truck qty or 26 pallets).
 - Quote Matches: only suggest when the quote total is **within $3,000** of the order; skip quotes
   already marked Won.
 - **Every Won quote should have an order attached** (Paul). Quote Matches → "Won quotes without an order"

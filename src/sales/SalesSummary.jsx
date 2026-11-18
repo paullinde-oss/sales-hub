@@ -20,6 +20,7 @@ import WrappedReport from "./WrappedReport";
 import { buildCatalog, suggestSkus, isGenericSku } from "./skus";
 import { SkuLink } from "../products/ProductPreview";
 import IncomeStatement from "./IncomeStatement";
+import { ProductionReport, PRODUCTION_REPORTS } from "./productionReports";
 import { QuoteWinRateReport, OpenPipelineReport, QuoteToOrderReport, LeadReport, SalesForecastReport, ReorderReport, ProductTrendsReport } from "./pipelineReports";
 import {
   today, mondayOf, addDays, monthStart, monthEnd, fyOf, fyStart, fyEnd, daysBetween, parseYmd,
@@ -45,7 +46,7 @@ const VIEWS = [
 ];
 
 // mobile: phone layout — only the Dashboard, no syncing or other sections
-export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginName, user, bmpLogo, leads = [], adSpend = {}, canSeeLeads = false, products = [], categories = {}, subCategories = {}, mobile = false, costs = null, canCosts = false }) {
+export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginName, user, bmpLogo, leads = [], adSpend = {}, canSeeLeads = false, products = [], categories = {}, subCategories = {}, mobile = false, costs = null, canCosts = false, loadStock = null }) {
   // "own" scope (e.g. John) only sees accounts where they're the rep; admins also get Settings
   const ownOnly = user?.salesScope === "own";
   const isAdmin = !!user?.admin;
@@ -152,7 +153,7 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
 
   const openAccount = key => { setAccountKey(key); setView("accounts"); };
   const gaps = useMemo(() => findGaps(rawOrders, issues, settings, listing), [rawOrders, issues, settings, listing]);
-  const ctx = { T, db, orders, settings, saveSettings, opts, currencyMode, openAccount, loginName, logos, bmpLogo, ownOnly, products, categories, subCategories, costs, canCosts };
+  const ctx = { T, db, orders, settings, saveSettings, opts, currencyMode, openAccount, loginName, logos, bmpLogo, ownOnly, products, categories, subCategories, costs, canCosts, loadStock };
   const views = mobile ? [] : VIEWS.filter(([id]) => id !== "settings" || isAdmin);
 
   return (
@@ -1185,6 +1186,13 @@ const REPORTS = [
   ["wintype", "Win rate: Distributors vs End Users"],
   ["pipeline", "Open pipeline & expected wins"],
   ["quoteorder", "Won quotes → orders"],
+  ["__h", "Production"],
+  ["punits", "Units sold by month"],
+  ["pplan", "Next-year build plan"],
+  ["pseason", "Seasonality"],
+  ["pstock", "Stock vs demand"],
+  ["pquotes", "Upcoming demand from open quotes"],
+  ["ppallets", "Pallets & truckloads shipped"],
   ["__h", "Financials", "margins"],
   ["income", "Income Statement", "margins"],
   ["__h", "Margins", "margins"],
@@ -1219,7 +1227,7 @@ function SkuGroupPicker({ T, value, onChange, products, categories, orders }) {
   );
 }
 
-function ReportsView({ T, db, orders, settings, opts, currencyMode, openAccount, logos, bmpLogo, quotes, leads, adSpend, canSeeLeads, ownOnly, loginName, products = [], categories = {}, subCategories = {}, costs, canCosts }) {
+function ReportsView({ T, db, orders, settings, opts, currencyMode, openAccount, logos, bmpLogo, quotes, leads, adSpend, canSeeLeads, ownOnly, loginName, products = [], categories = {}, subCategories = {}, costs, canCosts, loadStock }) {
   const [rep, setRep] = useState("salesrep");
   const [pick, setPick] = useState(""); // "cat:Name" | "sub:Name" | "sku:SKU" for "Who buys a product"
   const ts = useTableSort();
@@ -1334,7 +1342,8 @@ function ReportsView({ T, db, orders, settings, opts, currencyMode, openAccount,
           <button key={k} onClick={() => setRep(k)} style={{ textAlign: "left", background: rep === k ? T.activeBg : "transparent", border: "none", borderLeft: `2px solid ${rep === k ? T.gold : "transparent"}`, color: rep === k ? T.text : T.subtext, padding: "7px 10px 7px 14px", fontSize: 12 }}>{l}</button>
         ))}
       </div>
-      {rep === "income" && canCosts ? <div style={{ flex: 1, minWidth: 0 }}><CostGate T={T} costs={costs} loginName={loginName}><IncomeStatement T={T} costs={costs} loginName={loginName} /></CostGate></div>
+      {PRODUCTION_REPORTS.includes(rep) ? <div style={{ flex: 1, minWidth: 0 }}><ProductionReport key={rep} T={T} rep={rep} orders={orders} products={products} categories={categories} quotes={quotes} loadStock={loadStock} /></div>
+      : rep === "income" && canCosts ? <div style={{ flex: 1, minWidth: 0 }}><CostGate T={T} costs={costs} loginName={loginName}><IncomeStatement T={T} costs={costs} loginName={loginName} /></CostGate></div>
       : MARGIN_REPORTS.includes(rep) && canCosts ? <div style={{ flex: 1, minWidth: 0 }}><CostGate T={T} costs={costs} loginName={loginName}><MarginReport key={rep} T={T} rep={rep} orders={orders} settings={settings} costs={costs?.costs || {}} categories={categories} /></CostGate></div>
       : PIPELINE_REPORTS.includes(rep) ? (() => {
         const pp = { T, orders, opts, currencyMode, settings, quotes, ownOnly, loginName, openAccount };

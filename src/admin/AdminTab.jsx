@@ -1,6 +1,6 @@
 // ─── Admin tab: users, what they can see, and each person's password ────────
 import { useState, useEffect } from "react";
-import { ALL_TABS, saveUsers, userTabs, canEditPriceLists, canSeeCosts } from "./users";
+import { ALL_TABS, saveUsers, userTabs, canEditPriceLists, canSeeCosts, canProspect } from "./users";
 import { setUserPassword, removeCostAccess, removeLogin, turnOffMaster, userKey } from "../sales/auth";
 import { costKeyToGive } from "../pricelist/costs";
 
@@ -74,7 +74,7 @@ export default function AdminTab({ T, db, users, loginName, logins = {}, masterO
           <div style={{ padding: "10px 14px", fontSize: 11, color: T.tableHeadText, lineHeight: 1.5 }}>
             People sign in with their first name and <b>their own password</b> (set it with "Set password"; they can change it from the 🔑 button at the top). Tick the areas each person can see. "↳ Leads section" shows Lead Tracking inside Pipeline &amp; Leads (and lead numbers on its dashboard).
             <b> Sales data</b>: "All customers" or "Own accounts only" (only customers where they're the rep in Sales Summary → Settings → Customer accounts).
-            <b> Edit price lists</b>: see and build new price list drafts. <b>Costs &amp; margins</b>: product costs, margins and the Income Statement (opened by their own password).<b> Admin</b> can open this page and Sales Summary settings.
+            <b> Edit price lists</b>: see and build new price list drafts. <b>Costs &amp; margins</b>: product costs, margins and the Income Statement (opened by their own password). <b>Prospecting</b>: the Prospecting area and the Grok bot.<b> Admin</b> can open this page and Sales Summary settings.
             {msg && <div style={{ marginTop: 6, color: T.text }}>{msg}</div>}
             {pwMsg && <div style={{ marginTop: 6, color: "#34c77b", fontWeight: 600 }}>{pwMsg}</div>}
           </div>
@@ -83,7 +83,7 @@ export default function AdminTab({ T, db, users, loginName, logins = {}, masterO
               <thead><tr>
                 <th>Name</th>
                 {ALL_TABS.map(t => <th key={t.id} style={{ ...th, fontStyle: t.sub ? "italic" : "normal" }}>{t.label}</th>)}
-                <th style={th}>Sales data</th><th style={th}>Edit price lists</th><th style={th}>Costs &amp; margins</th><th style={th}>Admin</th><th style={{ ...th, textAlign: "left" }}>Password</th><th></th>
+                <th style={th}>Sales data</th><th style={th}>Edit price lists</th><th style={th}>Costs &amp; margins</th><th style={th}>Prospecting</th><th style={th}>Admin</th><th style={{ ...th, textAlign: "left" }}>Password</th><th></th>
               </tr></thead>
               <tbody>{list.map((u, i) => (
                 <tr key={i}>
@@ -96,6 +96,7 @@ export default function AdminTab({ T, db, users, loginName, logins = {}, masterO
                   </select></td>
                   <td style={{ textAlign: "center" }}><input type="checkbox" checked={canEditPriceLists(u)} onChange={e => upd(i, { priceDrafts: e.target.checked })} /></td>
                   <td style={{ textAlign: "center" }}><input type="checkbox" checked={canSeeCosts(u)} onChange={e => upd(i, { costs: e.target.checked })} /></td>
+                  <td style={{ textAlign: "center" }}><input type="checkbox" checked={canProspect(u)} onChange={e => upd(i, { prospecting: e.target.checked })} /></td>
                   <td style={{ textAlign: "center" }}><input type="checkbox" checked={!!u.admin} onChange={e => upd(i, { admin: e.target.checked })} /></td>
                   <td style={{ whiteSpace: "nowrap", fontSize: 11 }}>
                     {setting && userKey(setting.name) === userKey(u.name)

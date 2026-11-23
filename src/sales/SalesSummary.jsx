@@ -46,7 +46,7 @@ const VIEWS = [
 ];
 
 // mobile: phone layout — only the Dashboard, no syncing or other sections
-export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginName, user, bmpLogo, leads = [], adSpend = {}, canSeeLeads = false, products = [], categories = {}, subCategories = {}, mobile = false, costs = null, canCosts = false, loadStock = null }) {
+export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginName, user, bmpLogo, leads = [], adSpend = {}, canSeeLeads = false, products = [], categories = {}, subCategories = {}, mobile = false, costs = null, canCosts = false, loadStock = null, focus = null }) {
   // "own" scope (e.g. John) only sees accounts where they're the rep; admins also get Settings
   const ownOnly = user?.salesScope === "own";
   const isAdmin = !!user?.admin;
@@ -152,6 +152,8 @@ export default function SalesSummary({ T, db, quotes, updateQuoteStatus, loginNa
   }, [ready, sync, stored, connected, runSync]);
 
   const openAccount = key => { setAccountKey(key); setView("accounts"); };
+  // Jump to one customer (from Prospecting → "Open the customer")
+  useEffect(() => { if (focus?.key) openAccount(focus.key); }, [focus?.n]); // eslint-disable-line
   const gaps = useMemo(() => findGaps(rawOrders, issues, settings, listing), [rawOrders, issues, settings, listing]);
   const ctx = { T, db, orders, settings, saveSettings, opts, currencyMode, openAccount, loginName, logos, bmpLogo, ownOnly, products, categories, subCategories, costs, canCosts, loadStock };
   const views = mobile ? [] : VIEWS.filter(([id]) => id !== "settings" || isAdmin);

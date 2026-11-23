@@ -6,6 +6,7 @@
 //   admin       — can open the Admin tab (users, password) and Sales Summary settings
 //   priceDrafts — can see and edit price list drafts (Products & Price List → Price Lists)
 //   costs       — can see product costs and margins
+//   prospecting — can open Prospecting
 // These rules decide what the app shows; they are not database-level security.
 import { useEffect, useState } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
@@ -57,7 +58,9 @@ const LEGACY = { loadcalc: "shipping", dims: "shipping" };
 export const canSee = (user, tab) => !!user && (tab === "admin" ? !!user.admin : userTabs(user).includes(LEGACY[tab] || tab));
 
 // Price list drafts and costs: an explicit tick wins; until one is saved, Paul's defaults apply
-const PRICE_EDITORS = ["paul", "mark", "jeff"], COST_VIEWERS = ["paul", "mark", "jeff", "grant"];
+const PRICE_EDITORS = ["paul", "mark", "jeff"], COST_VIEWERS = ["paul", "mark", "jeff", "grant"], PROSPECTORS = ["paul", "mark", "grant", "jeff"];
 const firstName = u => String(u?.name || "").trim().toLowerCase();
 export const canEditPriceLists = u => !!u && (u.priceDrafts ?? PRICE_EDITORS.includes(firstName(u)));
 export const canSeeCosts = u => !!u && (u.costs ?? COST_VIEWERS.includes(firstName(u)));
+// Prospecting (left-hand area): Paul, Mark, Grant, Jeff by default — never John unless ticked
+export const canProspect = u => !!u && (u.prospecting ?? PROSPECTORS.includes(firstName(u)));

@@ -17,7 +17,9 @@ import { listenCustomerPrices } from "./pricelist/store";
 import { customerListFor, withCustomerPrices } from "./pricelist/priceLists";
 import SalesSummary from "./sales/SalesSummary";
 import AdminTab from "./admin/AdminTab";
-import { useUsers, findUser, canSee, DEFAULT_USERS, canEditPriceLists, canSeeCosts } from "./admin/users";
+import { useUsers, findUser, canSee, DEFAULT_USERS, canEditPriceLists, canSeeCosts, canProspect } from "./admin/users";
+import ProspectingTab from "./prospecting/ProspectingTab";
+import { useProspecting } from "./prospecting/store";
 import { signIn, tokenValid, listenLogins, listenMaster, changeOwnPassword } from "./sales/auth";
 import { setCostKey } from "./pricelist/costs";
 import { ProductPageHost } from "./products/ProductPage";
@@ -60,6 +62,7 @@ const LIGHT = {
 const Icon = ({ name, size=18, color="currentColor" }) => {
   const paths = {
     quote: <><rect x="3" y="3" width="18" height="18" rx="2" stroke={color} strokeWidth="1.5" fill="none"/><line x1="7" y1="8" x2="17" y2="8" stroke={color} strokeWidth="1.5"/><line x1="7" y1="12" x2="14" y2="12" stroke={color} strokeWidth="1.5"/><line x1="7" y1="16" x2="11" y2="16" stroke={color} strokeWidth="1.5"/></>,
+    target: <><circle cx="12" cy="12" r="9" stroke={color} strokeWidth="1.5" fill="none"/><circle cx="12" cy="12" r="5" stroke={color} strokeWidth="1.5" fill="none"/><circle cx="12" cy="12" r="1.5" fill={color}/></>,
     calc: <><rect x="4" y="2" width="16" height="20" rx="2" stroke={color} strokeWidth="1.5" fill="none"/><rect x="7" y="5" width="10" height="4" stroke={color} strokeWidth="1.5" fill="none"/><circle cx="8.5" cy="13" r="1" fill={color}/><circle cx="12" cy="13" r="1" fill={color}/><circle cx="15.5" cy="13" r="1" fill={color}/><circle cx="8.5" cy="17" r="1" fill={color}/><circle cx="12" cy="17" r="1" fill={color}/><circle cx="15.5" cy="17" r="1" fill={color}/></>,
     truck: <><rect x="1" y="6" width="14" height="12" rx="1" stroke={color} strokeWidth="1.5" fill="none"/><path d="M15 9h4l3 4v5h-7V9z" stroke={color} strokeWidth="1.5" fill="none"/><circle cx="5" cy="19" r="2" stroke={color} strokeWidth="1.5" fill="none"/><circle cx="18" cy="19" r="2" stroke={color} strokeWidth="1.5" fill="none"/></>,
     leads: <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke={color} strokeWidth="1.5" fill="none"/><circle cx="9" cy="7" r="4" stroke={color} strokeWidth="1.5" fill="none"/><path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke={color} strokeWidth="1.5" fill="none"/><path d="M16 3.13a4 4 0 0 1 0 7.75" stroke={color} strokeWidth="1.5" fill="none"/></>,
@@ -770,6 +773,11 @@ export default function SalesHub() {
   const [exchangeRate, setExchangeRate] = useLocalStorage('bmp_exchange_rate', 0.73);
   const [leads, setLeadsState] = useState([]);      // synced from Firebase (collection "leads")
   const [adSpend, setAdSpendState] = useState({});  // {year: {google, other}}, synced from Firebase (config/adSpend)
+  // Prospecting (Paul, Mark, Grant, Jeff) — also handles the Grok bot's inbox while the hub is open
+  const [prospectSection, setProspectSection] = useLocalStorage('bmp_prospect_section', 'list');
+  const [salesFocus, setSalesFocus] = useState(null); // {key, n}: open this customer in Sales Summary
+  const [leadFocus, setLeadFocus] = useState(null);   // {id, n}: show this lead in Leads
+  const prospecting = useProspecting({ db, enabled: authed && canProspect(currentUser), leads, loginName });
   const [productCurrency, setProductCurrency] = useState("CAD");
   const [productSearch, setProductSearch] = useState("");
   const [emailModal, setEmailModal] = useState(null);
@@ -1240,12 +1248,13 @@ ${quoteNumLine}
     {id:"quotes",   label:"Quotes",                icon:"quote"},
     {id:"sales",    label:"Sales Summary",         icon:"sales"},
     {id:"pipeline", label:"Pipeline & Leads",      icon:"pipeline"},
+    {id:"prospecting", label:"Prospecting",        icon:"target"},
     {id:"products", label:"Products & Price List", icon:"products"},
     {id:"shipping", label:"Shipping",              icon:"truck"},
     {id:"costcalc", label:"Cost Calculator",       icon:"calc"},
     {id:"admin",    label:"Users & Access",        icon:"admin"},
   ];
-  const TABS = ALL_SIDEBAR_TABS.filter(t => t.id === "costcalc" ? canSeeCosts(currentUser) : canSee(currentUser, t.id));
+  const TABS = ALL_SIDEBAR_TABS.filter(t => t.id === "costcalc" ? canSeeCosts(currentUser) : t.id === "prospecting" ? canProspect(currentUser) : canSee(currentUser, t.id));
   // If someone lands on a tab they can't see (e.g. after permissions change), move them to one they can
   useEffect(() => {
     if (authed && TABS.length && !TABS.some(t => t.id === activeTab)) setActiveTab(TABS[0].id);
@@ -1356,14 +1365,14 @@ ${quoteNumLine}
             productsCAD={productsCAD} productsUSD={productsUSD} effectiveProductsUSD={effectiveProductsUSD} createNewQuote={createNewQuote}
             setActiveQuote={setActiveQuote} saveQuote={saveQuote} editQuote={q=>setActiveQuote({...q,saved:false})}
             openEmailModal={openEmailModal} generatePDF={generatePDF} deleteConfirm={deleteConfirm} setDeleteConfirm={setDeleteConfirm} deleteQuote={deleteQuote} duplicateQuote={duplicateQuote} quoteSort={quoteSort} setQuoteSort={setQuoteSort} closeConfirm={closeConfirm} setCloseConfirm={setCloseConfirm} exchangeRate={exchangeRate} onQuoteStatusChange={updateQuoteStatus} T={T}/></TabPage>}
-          {activeTab==="sales"&&canSee(currentUser,"sales")&&<SalesSummary T={T} db={db} quotes={quotes} updateQuoteStatus={updateQuoteStatus} loginName={loginName} user={currentUser} bmpLogo={BMP_LOGO_FULL} leads={leads} adSpend={adSpend} canSeeLeads={canSee(currentUser,"leads")} products={productsCAD} categories={categories} subCategories={subCategories} costs={costs} canCosts={canSeeCosts(currentUser)} loadStock={()=>loadStockSheets(false).then(stockBySku)}/>}
+          {activeTab==="sales"&&canSee(currentUser,"sales")&&<SalesSummary T={T} db={db} quotes={quotes} updateQuoteStatus={updateQuoteStatus} loginName={loginName} user={currentUser} bmpLogo={BMP_LOGO_FULL} leads={leads} adSpend={adSpend} canSeeLeads={canSee(currentUser,"leads")} products={productsCAD} categories={categories} subCategories={subCategories} costs={costs} canCosts={canSeeCosts(currentUser)} loadStock={()=>loadStockSheets(false).then(stockBySku)} focus={salesFocus}/>}
           {activeTab==="pipeline"&&(()=>{
             const sections=[["dashboard","Dashboard"],["pipeline","Pipeline"],...(canSee(currentUser,"leads")?[["leads","Leads"]]:[])];
             const sec=sections.some(x=>x[0]===pipeSection)?pipeSection:"dashboard";
             return <TabPage T={T} title="PIPELINE & LEADS" sections={sections} active={sec} onSelect={setPipeSection}>
               {sec==="dashboard"&&<PipelineDashboard T={T} quotes={quotes} leads={leads} adSpend={adSpend} canSeeLeads={canSee(currentUser,"leads")} usdToCad={exchangeRate?1/exchangeRate:1.37} ownOnly={currentUser?.salesScope==="own"} loginName={loginName} go={setPipeSection}/>}
               {sec==="pipeline"&&<PipelineTab quotes={quotes} setQuotes={setQuotes} T={T} loginName={loginName} setActiveQuote={setActiveQuote} setActiveTab={setActiveTab} leads={leads} setLeads={setLeads}/>}
-              {sec==="leads"&&<LeadTrackingTab leads={leads} setLeads={setLeads} adSpend={adSpend} setAdSpend={setAdSpend} quotes={quotes} setQuotes={setQuotes} T={T} loginName={loginName}/>}
+              {sec==="leads"&&<LeadTrackingTab leads={leads} setLeads={setLeads} adSpend={adSpend} setAdSpend={setAdSpend} quotes={quotes} setQuotes={setQuotes} T={T} loginName={loginName} focus={leadFocus}/>}
             </TabPage>;
           })()}
           {activeTab==="products"&&(()=>{
@@ -1385,6 +1394,12 @@ ${quoteNumLine}
                 loginName={loginName} logo={BMP_LOGO_FULL} usdRate={exchangeRate} costs={costs} canCosts={canSeeCosts(currentUser)}/>}
             </TabPage>;
           })()}
+          {activeTab==="prospecting"&&canProspect(currentUser)&&<TabPage T={T} title="PROSPECTING" sections={[["list","Prospects"],["bot",`Grok bot${prospecting.inbox.length?` (${prospecting.inbox.length} waiting)`:""}`]]} active={prospectSection==="bot"?"bot":"list"} onSelect={setProspectSection}>
+            <ProspectingTab T={T} pro={prospecting} section={prospectSection} loginName={loginName}
+              owners={(users||DEFAULT_USERS).filter(canProspect).map(u=>u.name)}
+              onOpenCustomer={key=>{setSalesFocus({key,n:Date.now()});setActiveTab("sales");}}
+              onOpenLead={id=>{setLeadFocus({id,n:Date.now()});setPipeSection("leads");setActiveTab("pipeline");}}/>
+          </TabPage>}
           {activeTab==="shipping"&&<TabPage T={T} title="SHIPPING" sections={[["loadcalc","Load Calculator"],["curtain","Turbidity Curtain Shipping"],["dims","Package Dimensions"]]} active={shipSection} onSelect={setShipSection}>
             {shipSection==="loadcalc"&&<LoadCalcTab T={T}/>}
             {shipSection==="curtain"&&<ShippingTab T={T}/>}
@@ -6692,9 +6707,19 @@ function PipelineTab({quotes, setQuotes, T, loginName, setActiveQuote, setActive
 }
 
 // ─── Lead Tracking Tab ─────────────────────────────────────────────────────────
-function LeadTrackingTab({leads, setLeads, adSpend, setAdSpend, quotes, setQuotes, T, loginName}) {
+function LeadTrackingTab({leads, setLeads, adSpend, setAdSpend, quotes, setQuotes, T, loginName, focus}) {
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
+  // Jump to one lead (from Prospecting → "Open the lead"): its year, highlighted, scrolled into view
+  const [hiLead, setHiLead] = useState(null);
+  useEffect(() => {
+    if (!focus) return;
+    const l = (leads||[]).find(x => String(x.id) === String(focus.id));
+    if (!l) return;
+    setSelectedYear(l.year||currentYear); setHiLead(String(l.id));
+    setTimeout(() => document.getElementById("lead-row-"+l.id)?.scrollIntoView({block:"center",behavior:"smooth"}), 150);
+    const t = setTimeout(() => setHiLead(null), 6000); return () => clearTimeout(t);
+  }, [focus?.n, leads.length]); // eslint-disable-line
   const [showMatrix, setShowMatrix] = useState(false);
   const [sortF, setSortF] = useState('lastContact');
   const [sortD, setSortD] = useState(-1);
@@ -7091,10 +7116,10 @@ function LeadTrackingTab({leads, setLeads, adSpend, setAdSpend, quotes, setQuote
                 </tr>
               );
               return (
-                <tr key={lead.id}
-                  style={{background:T.cardBg}}
+                <tr key={lead.id} id={"lead-row-"+lead.id}
+                  style={{background:hiLead===String(lead.id)?T.activeBg:T.cardBg,outline:hiLead===String(lead.id)?`2px solid ${T.gold}`:undefined}}
                   onMouseOver={e=>e.currentTarget.style.background=T.rowHover}
-                  onMouseOut={e=>e.currentTarget.style.background=T.cardBg}>
+                  onMouseOut={e=>e.currentTarget.style.background=hiLead===String(lead.id)?T.activeBg:T.cardBg}>
                   <td style={{...tdStyle,fontWeight:600}}>{lead.company}</td>
                   <td style={tdStyle}>{lead.contact}</td>
                   <td style={tdStyle}>

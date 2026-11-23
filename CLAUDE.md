@@ -68,6 +68,20 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   website photo/name/description, current CAD/USD prices, DIMS rows, stock, sales (this FY vs last, top customers,
   last order; own accounts for John), quotes; cost + margins and a 🧮 Cost Calculator jump for cost viewers.
 - `src/pipeline/PipelineDashboard.jsx` — Pipeline & Leads dashboard (lead tiles hidden without "leads").
+- **Prospecting** (left-hand area; `src/prospecting/`; Users & Access → "Prospecting" tick, default Paul, Mark, Grant, Jeff —
+  **never John**; `canProspect` in users.js). Firestore `prospects/{id}` + `prospectActivities/{id}` (cachedCollection — write with
+  `putDoc`/`dropDoc`). Rules all in `rules.js` (tested: `npm test` → `tests/prospecting.test.mjs`, node:test via esbuild): statuses
+  new→enriched→drafted→approved→sent→replied→meeting→no→on_hold; **every status change writes an activity**; touches max 4, next
+  touch +3/+7/+14 days; dedupe email → LinkedIn → name+company (warn, "Add anyway"); **block** companies that are customers
+  (Sales Summary accounts via `matchAccount`, or a name we have orders from — exact or as the start of the prospect's name) or open
+  leads (not won/lost/cold), with a link to that customer/lead; do-not-contact can't be approved/sent; Convert to Lead (people only,
+  status replied/meeting) → lead source "Outreach/Prospecting", `prospectId` on the lead, `converted_lead_id` on the prospect =
+  read-only. 5 `example: true` prospects seeded once (`config/prospectingBot.examplesSeeded`), "Delete examples" button.
+  **Grok bot = no server (Paul chose "B")**: it POSTs `{json:"<request>"}` to `prospectInbox` via the Firestore REST API and reads
+  `config/prospectingBot` (`listJson` prospects, `avoidJson` customers/open leads, `recentJson` results) — 1 read. `useProspecting`
+  (store.js, mounted in SalesHub for prospecting users) runs `processInbox` when everything has loaded, then deletes the requests.
+  Bot = `{api:true}` actor: up to Approved unless `botCanSend`; never converts; switch `botOn` off = refused. Bot instructions in
+  `botGuide.js` (shown on Prospecting → Grok bot) and `docs/prospecting-bot.md`.
 - `src/admin/` — Users & Access: per-user area access (+ "leads" sub-permission; old ids loadcalc/dims
   map to shipping via `userTabs`), sales-data scope, and **each person's password** (Set password / Reset).
 - **Sign-in** (`src/sales/auth.js`): first name + **own password** (Paul, Nov 2026 — hard switch). `config/logins`

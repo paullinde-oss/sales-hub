@@ -54,7 +54,15 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   → `scripts/productPages.mjs`, reads the Wix store sitemap + each page's JSON-LD/Open Graph, 3 s apart with waits + retries when Wix answers 429; a page it can't read keeps its last copy; keeps the old
   copy on failure); `links` {SKUKEY: slug | "" = no page} written by the picker. One listener = 1 read per open.
   New product family on the Products list → add a rule to `FAMILIES`.
-- **Cost Calculator** (left-hand area, "Costs & margins" people only; `src/costcalc/`): one calculator per
+- **Costs & Margins = the Cost Calculator** (Nov 2026, Paul): Products & Price List → Costs & Margins (`src/costcalc/CostsArea.jsx`)
+  has two views — **Overview** (`CostsView`: every SKU's cost, read-only, source links to its calculator, margin at the lowest price vs
+  category target, "Problems only") and **Calculators**. The left-hand "Cost Calculator" area is gone (old `costcalc` tab id → products).
+  **Calculators are the ONLY source of costs**: the cost list = `costMapFromBook` (`src/costcalc/sync.js`) — replaced, not merged, on
+  every calculator Save, and re-synced when Costs & Margins opens if it differs (this cleared the old typed/CSV costs). Products bought
+  in rather than made get a calculator too: "＋ Bought-in products" (family "Bought-in products", lines Purchase price / Freight in /
+  Overhead % — blank, typed in). Reports → Margins → **Price list margin check** (`PriceMarginCheck` in marginReports.jsx): every
+  product's margin at each price level vs target, no-cost / under-target / losing-money first.
+- **Cost Calculator** (inside Costs & Margins, "Costs & margins" people only; `src/costcalc/`): one calculator per
   product type (family › name, e.g. Turbidity Curtains › Type 2 DOT) with a column per size/SKU and lines in
   Materials / Labour / Overhead & other. Cells: number, link to another cell × factor, or a shared rate
   (blanket labour = employees × wage × hours ÷ rolls/day; blanket overhead from the rolls/day table; your own

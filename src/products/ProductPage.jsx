@@ -137,7 +137,7 @@ function ProductPage({ T, db, sku, onClose, productsCAD = [], productsUSD = [], 
             {canCosts && <div style={card}>
               <div style={head}>Cost</div>
               {costs?.status !== "ready" ? <div style={muted}>Costs are locked — sign in again with your own password.</div>
-                : cost == null ? <div style={muted}>No cost yet. Open the <b>Cost Calculator</b> to add one.</div>
+                : cost == null ? <div style={muted}>No cost yet — add a calculator for it (Products &amp; Price List → Costs &amp; Margins → Calculators).</div>
                 : <div style={{ fontSize: 13 }}><b style={{ fontSize: 18 }}>{money(cost)}</b> <span style={muted}>per unit · {costSrc || "cost list"}</span></div>}
             </div>}
 

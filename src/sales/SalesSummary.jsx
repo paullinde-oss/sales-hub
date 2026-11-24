@@ -8,7 +8,7 @@ import { isDropboxConnected, startDropboxAuth, disconnectDropbox, redirectUri, b
 import { syncOrders } from "./sync";
 import { Loader } from "../Loader";
 import { useTableSort } from "./tableSort";
-import { MarginReport, MARGIN_REPORTS } from "./marginReports";
+import { MarginReport, MARGIN_REPORTS, PriceMarginCheck } from "./marginReports";
 import { CostGate } from "../pricelist/CostsView";
 import { quoteValue, hasOptions, pickWonOption, closestOption } from "../quoteOptions";
 import { runFullSync, SYNC_DEFAULTS, PARSER_VERSION } from "./syncRunner";
@@ -1198,6 +1198,7 @@ const REPORTS = [
   ["__h", "Financials", "margins"],
   ["income", "Income Statement", "margins"],
   ["__h", "Margins", "margins"],
+  ["mcheck", "Price list margin check", "margins"],
   ["mproduct", "Profit by product (SKU)", "margins"],
   ["mcustomer", "Profit by customer", "margins"],
   ["mcategory", "Profit by category", "margins"],
@@ -1346,6 +1347,7 @@ function ReportsView({ T, db, orders, settings, opts, currencyMode, openAccount,
       </div>
       {PRODUCTION_REPORTS.includes(rep) ? <div style={{ flex: 1, minWidth: 0 }}><ProductionReport key={rep} T={T} rep={rep} orders={orders} products={products} categories={categories} quotes={quotes} loadStock={loadStock} /></div>
       : rep === "income" && canCosts ? <div style={{ flex: 1, minWidth: 0 }}><CostGate T={T} costs={costs} loginName={loginName}><IncomeStatement T={T} costs={costs} loginName={loginName} /></CostGate></div>
+      : rep === "mcheck" && canCosts ? <div style={{ flex: 1, minWidth: 0 }}><CostGate T={T} costs={costs} loginName={loginName}><PriceMarginCheck T={T} products={products} categories={categories} costs={costs?.costs || {}} /></CostGate></div>
       : MARGIN_REPORTS.includes(rep) && canCosts ? <div style={{ flex: 1, minWidth: 0 }}><CostGate T={T} costs={costs} loginName={loginName}><MarginReport key={rep} T={T} rep={rep} orders={orders} settings={settings} costs={costs?.costs || {}} categories={categories} /></CostGate></div>
       : PIPELINE_REPORTS.includes(rep) ? (() => {
         const pp = { T, orders, opts, currencyMode, settings, quotes, ownOnly, loginName, openAccount };

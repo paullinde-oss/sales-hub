@@ -5,6 +5,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { SECTIONS, compute, costsFromBook, describeCell, newCalc, rateValues, uid, RATE_LABELS } from "./model";
 import { importWorkbook } from "./importXlsx";
+import { costMapFromBook } from "./sync";
 import { PRICE_FIELDS, FIELD_LABEL, up } from "../pricelist/priceLists";
 
 const GREEN = "#34c77b", RED = "#e8472c", AMBER = "#e8a23a";
@@ -15,7 +16,7 @@ const skuKey = s => String(s || "").toUpperCase().replace(/[\s\-_]/g, "").replac
 const BASIS = [["$", "$"], ["pctPrice", "% of price"], ["pctCost", "% of materials + labour"]];
 const MARKET = [["both", "Canada & USA"], ["ca", "Canada only"], ["us", "USA only"]];
 
-export default function CostCalculator({ T, book: stored, saveBook, costs, loginName, productsCAD = [], productsUSD = [], hubUsdRate, focusSku, onFocusDone }) {
+export default function CostCalculator({ T, book: stored, saveBook, costs, loginName, productsCAD = [], productsUSD = [], hubUsdRate, focusSku, onFocusDone, categories = {} }) {
   const [book, setBook] = useState(() => clone(stored.book));
   const [dirty, setDirty] = useState(false);
   const [sel, setSel] = useState(() => stored.book.calcs[0]?.id || "start");
@@ -24,6 +25,7 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
   const [linkEdit, setLinkEdit] = useState(null); // { lineId, colId }
   const [hiCol, setHiCol] = useState(null);
   const [pending, setPending] = useState(null); // imported calculators waiting for "which category?"
+  const [buyIn, setBuyIn] = useState(false);    // "＋ Bought-in products" box
   // Someone else saved while we have no unsaved changes → take their version
   useEffect(() => { if (!dirty) setBook(clone(stored.book)); }, [stored.book]); // eslint-disable-line
   useEffect(() => {
@@ -100,11 +102,8 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
       const next = { ...book, log };
       await saveBook(next, loginName);
       // Totals → product costs (Canada), so margins everywhere use them
-      const fromCalc = costsFromBook({ ...next, rates }, (s, m) => priceOf(s, m, "price"));
-      const map = { ...(costs.costs || {}) };
-      const k2 = new Map(productsCAD.map(p => [skuKey(p.sku), p.sku]));
-      Object.entries(fromCalc).forEach(([sku, v]) => { const real = k2.get(skuKey(sku)) || sku; map[up(real)] = { ...v, at, by: loginName }; });
-      await costs.save(map, loginName);
+      // (the calculators are the only source of costs — the list is replaced, not merged)
+      await costs.save(costMapFromBook(next, costs.costs || {}, productsCAD, productsUSD, hubUsdRate, loginName, at), loginName);
       setBook(next); setDirty(false); setBusy("Saved ✓"); setTimeout(() => setBusy(""), 2000);
     } catch (e) { setBusy(""); alert("Couldn't save: " + e.message); }
   };
@@ -175,6 +174,7 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
             const name = prompt("Calculator name (e.g. Type 2 DOT):"); if (!name) return;
             const c = newCalc(family.trim(), name.trim()); change(b => b.calcs.push(c)); setSel(c.id);
           }} style={{ display: "block", width: "100%", textAlign: "left", padding: "6px 14px", border: "none", background: "transparent", color: T.subtext, fontSize: 12, cursor: "pointer" }}>＋ New calculator</button>
+          <button onClick={() => setBuyIn(true)} title="Products you buy in rather than make: purchase price + freight in" style={{ display: "block", width: "100%", textAlign: "left", padding: "6px 14px", border: "none", background: "transparent", color: T.subtext, fontSize: 12, cursor: "pointer" }}>＋ Bought-in products</button>
         </div>
       </div>
 
@@ -309,7 +309,7 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
                     ["TOTAL COST", r => money(r.total), { fontWeight: 700, fontSize: 13 }],
                     ["Price", null, {}],
                     ["Profit", r => <span style={{ color: r.profit == null ? undefined : r.profit >= 0 ? GREEN : RED }}>{money(r.profit)}</span>, { fontWeight: 600 }],
-                    ["Margin", r => r.margin == null ? "—" : <span><b style={{ color: r.margin >= 30 ? GREEN : r.margin >= 15 ? AMBER : RED }}>{r.margin.toFixed(1)}%</b><span style={{ fontSize: 9, color: T.tableHeadText }}> · markup {r.markup.toFixed(0)}%</span></span>, {}],
+                    ["Margin", r => r.margin == null ? "—" : <span><b style={{ color: r.margin >= 30 ? GREEN : r.margin >= 15 ? AMBER : RED }}>{r.margin.toFixed(1)}%</b>{r.markup != null && <span style={{ fontSize: 9, color: T.tableHeadText }}> · markup {r.markup.toFixed(0)}%</span>}</span>, {}],
                   ].map(([label, fn, st]) => (
                     <tr key={label} style={{ borderTop: `1px solid ${T.border}`, ...(label === "TOTAL COST" ? { background: "rgba(200,169,110,.15)" } : {}) }}>
                       <td style={{ position: "sticky", left: 0, background: label === "TOTAL COST" ? T.tableHead : T.cardBg, padding: "6px 8px", ...st }}>{label}{label === "Price" && <span style={{ fontSize: 9, color: T.tableHeadText }}> ({FIELD_LABEL[calc.priceField || "price"]}{market === "us" ? ", USD → CAD" : ""})</span>}</td>
@@ -329,7 +329,7 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
               <datalist id="cc-skus">{productsCAD.map(p => <option key={p.sku} value={p.sku}>{p.product}</option>)}</datalist>
             </div>
             <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-              <button className="btn-del" onClick={() => { if (confirm(`Delete the ${calc.name} calculator? (Product costs it already set stay until you change them.)`)) { change(b => { b.calcs = b.calcs.filter(c => c.id !== calc.id); }); setSel(book.calcs.find(c => c.id !== calc.id)?.id || "rates"); } }}>Delete this calculator</button>
+              <button className="btn-del" onClick={() => { if (confirm(`Delete the ${calc.name} calculator? (Its products lose their cost when you Save.)`)) { change(b => { b.calcs = b.calcs.filter(c => c.id !== calc.id); }); setSel(book.calcs.find(c => c.id !== calc.id)?.id || "rates"); } }}>Delete this calculator</button>
             </div>
           </>
         )}
@@ -356,6 +356,8 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
           </div>
         </div>
       </div>}
+      {buyIn && <BoughtInModal T={T} inp={inp} book={book} productsCAD={productsCAD} categories={categories} onClose={() => setBuyIn(false)}
+        onCreate={c => { change(b => b.calcs.push(c)); setSel(c.id); setBuyIn(false); }} />}
       {linkEdit && calc && <LinkModal T={T} calc={calc} R={R} target={linkEdit} inp={inp} onClose={() => setLinkEdit(null)} onSet={v => { setCell(linkEdit.lineId, linkEdit.colId, v); setLinkEdit(null); }} />}
     </div>
   );
@@ -451,4 +453,53 @@ function LogView({ T, log, card }) {
       )}
     </div>
   );
+}
+
+// ＋ Bought-in products: one calculator per category for products BMP buys rather than makes —
+// a column per SKU and the lines Purchase price, Freight in (materials) and Overhead (% of price).
+// Starts blank: the numbers are typed in (no cost numbers in the code).
+function BoughtInModal({ T, inp, book, productsCAD, categories, onClose, onCreate }) {
+  const covered = new Set(book.calcs.filter(c => c.forCosts !== false).flatMap(c => c.columns.map(col => skuKey(col.sku))).filter(Boolean));
+  const open = productsCAD.filter(p => p.sku && !covered.has(skuKey(p.sku)));
+  const catOf = p => categories[p.sku] || categories[up(p.sku)] || "Uncategorized";
+  const cats = [...new Set(open.map(catOf))].sort();
+  const [cat, setCat] = useState(cats[0] || "");
+  const [name, setName] = useState(cats[0] || "");
+  const inCat = open.filter(p => catOf(p) === cat);
+  const [picked, setPicked] = useState(() => new Set(inCat.map(p => p.sku)));
+  const pickCat = c => { setCat(c); setName(c); setPicked(new Set(open.filter(p => catOf(p) === c).map(p => p.sku))); };
+  const create = () => {
+    const cols = inCat.filter(p => picked.has(p.sku)).map(p => ({ id: uid(), label: String(p.description || p.product || p.sku).slice(0, 40), sku: p.sku }));
+    if (!cols.length) return;
+    onCreate({ id: uid(), family: "Bought-in products", name: name.trim() || cat, priceField: "price", columns: cols, manualPrice: { ca: {}, us: {} },
+      lines: [
+        { id: uid(), section: "materials", name: "Purchase price", basis: "$", market: "both", values: {} },
+        { id: uid(), section: "materials", name: "Freight in", basis: "$", market: "both", values: {} },
+        { id: uid(), section: "other", name: "Overhead", basis: "pctPrice", market: "both", values: {} },
+      ] });
+  };
+  return <div className="modal-overlay" onClick={onClose}>
+    <div className="modal" style={{ maxWidth: 620 }} onClick={e => e.stopPropagation()}>
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Bought-in products</div>
+      <div style={{ fontSize: 11, color: T.subtext, marginBottom: 10, lineHeight: 1.5 }}>
+        For products you buy rather than make (stakes, staples, silt fence…). Makes a calculator with a column for each product and the lines
+        <b> Purchase price</b>, <b>Freight in</b> and <b>Overhead</b> (% of price) — type the numbers in, add lines if you need them, then Save.
+        Only products that don't have a calculator yet are listed.</div>
+      {!cats.length ? <div style={{ fontSize: 12, color: T.subtext }}>Every product on the price list already has a calculator. 🎉</div> : <>
+        <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+          <label style={{ fontSize: 11, color: T.subtext }}>Category <select value={cat} onChange={e => pickCat(e.target.value)} style={{ ...inp, width: 220 }}>{cats.map(c => <option key={c}>{c}</option>)}</select></label>
+          <label style={{ fontSize: 11, color: T.subtext }}>Calculator name <input value={name} onChange={e => setName(e.target.value)} style={{ ...inp, width: 200 }} /></label>
+        </div>
+        <div style={{ maxHeight: 300, overflowY: "auto", border: `1px solid ${T.border}`, padding: 6 }}>
+          {inCat.map(p => <label key={p.sku} style={{ display: "flex", gap: 8, fontSize: 12, padding: "2px 0" }}>
+            <input type="checkbox" checked={picked.has(p.sku)} onChange={e => { const n = new Set(picked); e.target.checked ? n.add(p.sku) : n.delete(p.sku); setPicked(n); }} />
+            <span style={{ fontFamily: "monospace", minWidth: 130 }}>{p.sku}</span><span style={{ color: T.subtext }}>{p.description || p.product}</span></label>)}
+        </div>
+      </>}
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+        <button className="btn" onClick={onClose}>Cancel</button>
+        {!!cats.length && <button className="btn-gold" disabled={!picked.size} onClick={create}>Make calculator ({inCat.filter(p => picked.has(p.sku)).length} products)</button>}
+      </div>
+    </div>
+  </div>;
 }

@@ -7,7 +7,7 @@ import { useMemo, useState } from "react";
 import { fmtMoney, fmtMonth, fmtDate, orderCurrency, fyOf, fyStart, fyEnd, today } from "./salesUtils";
 import { ReportTable, Kpis, RangePicker, useRange } from "./pipelineReports";
 import { costOf } from "../pricelist/costs";
-import { up } from "../pricelist/priceLists";
+import { up, PRICE_FIELDS } from "../pricelist/priceLists";
 
 const GREEN = "#4f9a5a", RED = "#c8553f", AMBER = "#c8a030";
 const pct = (a, b) => (b ? (a / b) * 100 : null);
@@ -83,3 +83,48 @@ export function MarginReport({ T, rep, orders, settings, costs, categories = {} 
     ]} />}
     headers={headers} right={right} rows={rows} />;
 }
+
+// ── Price list margin check: every product on the current price list, its cost from the calculators
+// and the margin at each price level, against the category's target. Problems first.
+export function PriceMarginCheck({ T, products = [], categories = {}, costs = {} }) {
+  const [problemsOnly, setProblemsOnly] = useState(false);
+  const [cat, setCat] = useState("All");
+  const targets = costs.__targets || {};
+  const catOf = p => categories[p.sku] || categories[up(p.sku)] || "Uncategorized";
+  const num = v => { const n = parseFloat(String(v ?? "").replace(/[^0-9.\-]/g, "")); return isNaN(n) || !n ? null : n; };
+  const all = useMemo(() => products.filter(p => p.sku).map(p => {
+    const c = costOf(costs, p.sku), t = targets[catOf(p)], tgt = t === undefined || t === "" ? null : Number(t);
+    const ms = PRICE_FIELDS.map(f => { const pr = num(p[f]); return pr && c ? ((pr - c) / pr) * 100 : null; });
+    const have = ms.filter(m => m !== null), low = have.length ? Math.min(...have) : null;
+    const under = PRICE_FIELDS.filter((f, i) => ms[i] !== null && tgt !== null && ms[i] < tgt).map(f => SHORT[f]);
+    const losing = PRICE_FIELDS.filter((f, i) => ms[i] !== null && ms[i] < 0).map(f => SHORT[f]);
+    const status = !c ? { rank: 1, text: "No cost — needs a calculator", color: AMBER }
+      : losing.length ? { rank: 0, text: `Loses money at ${losing.join(", ")}`, color: RED }
+      : under.length ? { rank: 0.5, text: `Under the ${tgt}% target at ${under.join(", ")}`, color: RED }
+      : tgt !== null && low !== null && low < tgt + 5 ? { rank: 2, text: "Within 5 points of target", color: AMBER }
+      : { rank: 3, text: tgt === null ? "OK (no target set)" : "OK", color: GREEN };
+    return { p, c, ms, low, tgt, status, cat: catOf(p) };
+  }), [products, costs, categories]); // eslint-disable-line
+  const cats = ["All", ...[...new Set(all.map(x => x.cat))].sort()];
+  const shown = all.filter(x => (cat === "All" || x.cat === cat) && (!problemsOnly || x.status.rank < 2))
+    .sort((a, b) => a.status.rank - b.status.rank || (a.low ?? 999) - (b.low ?? 999) || a.p.sku.localeCompare(b.p.sku));
+  const mc = (m, tgt) => ({ text: fmtPct(m), color: m === null ? undefined : m < 0 || (tgt !== null && m < tgt) ? RED : tgt !== null && m < tgt + 5 ? AMBER : undefined });
+  const headers = ["SKU", "Description", "Category", "Cost", ...PRICE_FIELDS.map(f => SHORT[f]), "Target", "Check"];
+  const rows = shown.map(x => ({ cells: [x.p.sku, x.p.description || x.p.product || "", x.cat, x.c ? fmtMoney(x.c, 2) : { text: "—", color: AMBER },
+    ...x.ms.map(m => mc(m, x.tgt)), x.tgt !== null ? `${x.tgt}%` : "—", { text: x.status.text, color: x.status.color }] }));
+  const n = k => all.filter(k).length;
+  const costed = all.filter(x => x.low !== null);
+  return <ReportTable T={T} title="Price list margin check" sub="Current CAD price list · costs from Costs & Margins → Calculators"
+    note="Margin = (price − cost) ÷ price at each price level. Red = under the category's target (set on Costs & Margins → Overview) or losing money; amber = within 5 points of the target, or no cost yet (make a calculator for it). Problems are listed first."
+    controls={<><select value={cat} onChange={e => setCat(e.target.value)} style={{ height: 28, fontSize: 11 }}>{cats.map(c => <option key={c}>{c}</option>)}</select>
+      <label style={{ fontSize: 11 }}><input type="checkbox" checked={problemsOnly} onChange={e => setProblemsOnly(e.target.checked)} /> Problems only</label></>}
+    summary={<Kpis T={T} items={[
+      ["Products", String(all.length), `${costed.length} with a cost`],
+      ["Losing money", String(n(x => x.status.rank === 0)), "at some price level", n(x => x.status.rank === 0) ? RED : GREEN],
+      ["Under target", String(n(x => x.status.rank === 0.5)), "at some price level", n(x => x.status.rank === 0.5) ? RED : GREEN],
+      ["No cost yet", String(n(x => !x.c)), "need a calculator", n(x => !x.c) ? AMBER : GREEN],
+      ["Avg lowest margin", fmtPct(costed.length ? costed.reduce((s, x) => s + x.low, 0) / costed.length : null), "biggest discount, products with a cost"],
+    ]} />}
+    headers={headers} right={[3, 4, 5, 6, 7, 8, 9]} rows={rows} />;
+}
+const SHORT = { price: "Unit", palletPrice: "Pallet", prepaid: "Prepaid", prepaidPallet: "Prepaid pallet", truckPrice: "FTL" };

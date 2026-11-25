@@ -70,6 +70,25 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
   const editCalc = fn => change(n => { const c = n.calcs.find(x => x.id === sel); if (c) fn(c, n); });
   const setCell = (lineId, colId, v) => editCalc(c => { const l = c.lines.find(x => x.id === lineId); if (v === "" || v == null) delete l.values[colId]; else l.values[colId] = v; });
   const families = [...new Set(book.calcs.map(c => c.family))];
+  // A new SKU column: a copy of an existing one (all its numbers, SKU left blank) placed right after it, or a
+  // blank one at the end that only keeps the % lines (overhead etc.). Then scrolls to it and highlights it.
+  const addColumn = fromId => {
+    const id = uid();
+    editCalc(c => {
+      const from = c.columns.find(x => x.id === fromId);
+      if (from) {
+        c.columns.splice(c.columns.indexOf(from) + 1, 0, { id, label: (from.label || "Size") + " copy", sku: "" });
+        c.lines.forEach(l => { if (l.values[from.id] != null) l.values[id] = clone(l.values[from.id]); });
+        Object.values(c.manualPrice || {}).forEach(m => { if (m && m[from.id] != null) m[id] = m[from.id]; });
+      } else {
+        const last = c.columns[c.columns.length - 1];
+        c.columns.push({ id, label: "New SKU", sku: "" });
+        if (last) c.lines.forEach(l => { if (l.basis !== "$" && l.values[last.id] != null) l.values[id] = clone(l.values[last.id]); });
+      }
+    });
+    setHiCol(id);
+    setTimeout(() => document.getElementById("cc-col-" + id)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" }), 50);
+  };
 
   // ── save: change log + product costs ──
   const save = async () => {
@@ -151,7 +170,7 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
   );
 
   return (
-    <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
+    <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: "flex" }}>
       {/* Left: calculators by family */}
       <div style={{ width: 230, flexShrink: 0, borderRight: `1px solid ${T.border}`, overflowY: "auto", padding: "12px 0", background: T.sidebarBg || T.cardBg }}>
         {families.map(f => (
@@ -194,6 +213,11 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
             <label style={{ fontSize: 11, color: calc.forCosts === false ? AMBER : T.subtext }} title="Untick for a what-if scenario: it still calculates, but doesn't change the product costs">
               <input type="checkbox" checked={calc.forCosts !== false} onChange={e => editCalc(c => { c.forCosts = e.target.checked; })} /> Sets product costs</label>
             <label style={{ fontSize: 11, color: T.subtext }}>Price: <select value={calc.priceField || "price"} onChange={e => editCalc(c => { c.priceField = e.target.value; })} style={{ ...inp, height: 26 }}>{PRICE_FIELDS.map(f => <option key={f} value={f}>{FIELD_LABEL[f]}</option>)}</select></label>
+            <button className="btn" style={{ fontSize: 11, padding: "4px 10px" }} title="Add a blank SKU column at the end (keeps the % lines like overhead)" onClick={() => addColumn(null)}>＋ Add SKU</button>
+            <select value="" title="Start a new SKU from a copy of an existing one" onChange={e => e.target.value && addColumn(e.target.value)} style={{ ...inp, height: 26, width: 150 }}>
+              <option value="">⧉ Copy a SKU…</option>
+              {calc.columns.map(col => <option key={col.id} value={col.id}>{col.label}{col.sku ? ` (${col.sku})` : ""}</option>)}
+            </select>
           </> : <div style={{ fontSize: 15, fontWeight: 600 }}>{sel === "rates" ? "Shared rates" : sel === "log" ? "Change log" : "Cost Calculator"}</div>}
           <div style={{ flex: 1 }} />
           <ImportButton />
@@ -233,21 +257,18 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
                     {calc.columns.map(col => {
                       const onList = col.sku && findProduct(productsCAD, col.sku);
                       return (
-                        <th key={col.id} style={{ background: hiCol === col.id ? "rgba(200,169,110,.25)" : T.tableHead, padding: "6px 6px", minWidth: 118, verticalAlign: "top" }}>
+                        <th key={col.id} id={"cc-col-" + col.id} style={{ background: hiCol === col.id ? "rgba(200,169,110,.25)" : T.tableHead, padding: "6px 6px", minWidth: 118, verticalAlign: "top" }}>
                           <input value={col.label} title={col.label} onChange={e => editCalc(c => { c.columns.find(x => x.id === col.id).label = e.target.value; })} style={{ ...inp, width: 108, fontWeight: 600 }} />
                           <div style={{ display: "flex", gap: 3, marginTop: 3, alignItems: "center" }}>
                             <input list="cc-skus" value={col.sku || ""} placeholder="SKU" onChange={e => editCalc(c => { c.columns.find(x => x.id === col.id).sku = e.target.value.trim().toUpperCase(); })} style={{ ...inp, width: 86, fontSize: 10, fontFamily: "monospace", borderColor: col.sku ? (onList ? GREEN : AMBER) : T.border }} title={col.sku ? (onList ? "On the Products list" : "Not on the Products list") : "Which SKU this size is"} />
+                            <button title="Copy this SKU — a new column with the same numbers, right after this one (then type its SKU)" onClick={() => addColumn(col.id)} style={{ border: "none", background: "transparent", color: T.tableHeadText, cursor: "pointer", fontSize: 12, padding: 0 }}>⧉</button>
                             <button title="Remove this size" onClick={() => { if (confirm(`Remove ${col.label}?`)) editCalc(c => { c.columns = c.columns.filter(x => x.id !== col.id); c.lines.forEach(l => delete l.values[col.id]); }); }} style={{ border: "none", background: "transparent", color: T.tableHeadText, cursor: "pointer", fontSize: 12 }}>×</button>
                           </div>
                         </th>
                       );
                     })}
                     <th style={{ background: T.tableHead, padding: 6 }}>
-                      <button className="btn" style={{ fontSize: 10, padding: "3px 8px", whiteSpace: "nowrap" }} onClick={() => editCalc(c => {
-                        const last = c.columns[c.columns.length - 1], id = uid();
-                        c.columns.push({ id, label: "New size", sku: "" });
-                        if (last) c.lines.forEach(l => { if (l.values[last.id] != null) l.values[id] = clone(l.values[last.id]); });
-                      })}>＋ Size</button>
+                      <button className="btn" style={{ fontSize: 10, padding: "3px 8px", whiteSpace: "nowrap" }} onClick={() => addColumn(null)}>＋ SKU</button>
                     </th>
                   </tr>
                 </thead>
@@ -258,8 +279,8 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
                     return (
                       <Fragment key={sec}>
                         <tr><td colSpan={calc.columns.length + 2} style={{ background: T.border, padding: "5px 8px", fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase" }}>
-                          {secLabel}
-                          <button className="btn" style={{ marginLeft: 10, fontSize: 10, padding: "1px 8px", textTransform: "none", letterSpacing: 0 }} onClick={() => editCalc(c => { c.lines.push({ id: uid(), section: sec, name: "New line", basis: "$", market: sec === "other" ? market : "both", values: {} }); })}>＋ Add line</button>
+                          <span style={{ position: "sticky", left: 8, display: "inline-flex", alignItems: "center" }}>{secLabel}
+                          <button className="btn" style={{ marginLeft: 10, fontSize: 10, padding: "1px 8px", textTransform: "none", letterSpacing: 0 }} onClick={() => editCalc(c => { c.lines.push({ id: uid(), section: sec, name: "New line", basis: "$", market: sec === "other" ? market : "both", values: {} }); })}>＋ Add line</button></span>
                         </td></tr>
                         {lines.map(l => (
                           <tr key={l.id} style={{ borderBottom: `1px solid ${T.border}` }}>

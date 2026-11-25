@@ -64,7 +64,7 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   product's margin at each price level vs target, no-cost / under-target / losing-money first.
 - **Cost Calculator** (inside Costs & Margins, "Costs & margins" people only; `src/costcalc/`): one calculator per
   product type (family › name, e.g. Turbidity Curtains › Type 2 DOT) with a column per size/SKU and lines in
-  Materials / Labour / Overhead & other. Cells: number, link to another cell × factor, or a shared rate
+  Materials / Labour / Overhead & other. Add a SKU column with "＋ Add SKU" (blank, keeps % lines) or copy one ("⧉ Copy a SKU…" / ⧉ on a column → same numbers, placed after it, SKU blank); the grid scrolls sideways inside the page (root needs `minWidth: 0`). Cells: number, link to another cell × factor, or a shared rate
   (blanket labour = employees × wage × hours ÷ rolls/day; blanket overhead from the rolls/day table; your own
   rates). Other-cost lines can be $, % of price or % of materials+labour, and Canada / USA / both. Price =
   current price list (USA = USD list × USD rate), typed only when the SKU isn't listed. Margin = profit ÷ price

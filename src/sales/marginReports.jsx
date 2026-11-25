@@ -93,7 +93,7 @@ export function PriceMarginCheck({ T, products = [], categories = {}, costs = {}
   const catOf = p => categories[p.sku] || categories[up(p.sku)] || "Uncategorized";
   const num = v => { const n = parseFloat(String(v ?? "").replace(/[^0-9.\-]/g, "")); return isNaN(n) || !n ? null : n; };
   const all = useMemo(() => products.filter(p => p.sku).map(p => {
-    const c = costOf(costs, p.sku), t = targets[catOf(p)], tgt = t === undefined || t === "" ? null : Number(t);
+    const c = costOf(costs, p.sku), t = costs[up(p.sku)]?.target ?? targets[catOf(p)], tgt = t === undefined || t === "" ? null : Number(t); // target from its Costs & Margins product line
     const ms = PRICE_FIELDS.map(f => { const pr = num(p[f]); return pr && c ? ((pr - c) / pr) * 100 : null; });
     const have = ms.filter(m => m !== null), low = have.length ? Math.min(...have) : null;
     const under = PRICE_FIELDS.filter((f, i) => ms[i] !== null && tgt !== null && ms[i] < tgt).map(f => SHORT[f]);
@@ -114,8 +114,8 @@ export function PriceMarginCheck({ T, products = [], categories = {}, costs = {}
     ...x.ms.map(m => mc(m, x.tgt)), x.tgt !== null ? `${x.tgt}%` : "—", { text: x.status.text, color: x.status.color }] }));
   const n = k => all.filter(k).length;
   const costed = all.filter(x => x.low !== null);
-  return <ReportTable T={T} title="Price list margin check" sub="Current CAD price list · costs from Costs & Margins → Calculators"
-    note="Margin = (price − cost) ÷ price at each price level. Red = under the category's target (set on Costs & Margins → Overview) or losing money; amber = within 5 points of the target, or no cost yet (make a calculator for it). Problems are listed first."
+  return <ReportTable T={T} title="Price list margin check" sub="Current CAD price list · fully loaded costs from Costs & Margins"
+    note="Margin = (price − fully loaded cost) ÷ price at each price level. Red = under the target of its product line (Costs & Margins) or losing money; amber = within 5 points of the target, or no cost yet (make a calculator for it). Problems are listed first."
     controls={<><select value={cat} onChange={e => setCat(e.target.value)} style={{ height: 28, fontSize: 11 }}>{cats.map(c => <option key={c}>{c}</option>)}</select>
       <label style={{ fontSize: 11 }}><input type="checkbox" checked={problemsOnly} onChange={e => setProblemsOnly(e.target.checked)} /> Problems only</label></>}
     summary={<Kpis T={T} items={[

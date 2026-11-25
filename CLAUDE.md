@@ -17,7 +17,7 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
 - React 18 + Vite 5, Firebase Firestore (project `bmp-sales-hub`, **free Spark plan**), pdfjs-dist 3.11.174.
 - `src/SalesHub.jsx` — the original app (one very large file: all the older tabs, login, layout).
 - Left-hand areas (Paul's grouping): Quotes · Sales Summary · Pipeline & Leads (Dashboard /
-  Pipeline / Leads) · Products & Price List · Shipping (Load Calculator / Turbidity
+  Pipeline / Leads) · Products & Price List · Costs & Margins · Prospecting · Shipping (Load Calculator / Turbidity
   Curtain Shipping / Package Dimensions) · Users & Access. Every area uses `TabPage` (in
   `SalesHub.jsx`) for the same top bar as Sales Summary — keep new areas consistent with it.
 - `src/pricelist/` — **Price Lists** (Products & Price List → Price Lists; only users with "Edit price
@@ -54,27 +54,26 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   → `scripts/productPages.mjs`, reads the Wix store sitemap + each page's JSON-LD/Open Graph, 3 s apart with waits + retries when Wix answers 429; a page it can't read keeps its last copy; keeps the old
   copy on failure); `links` {SKUKEY: slug | "" = no page} written by the picker. One listener = 1 read per open.
   New product family on the Products list → add a rule to `FAMILIES`.
-- **Costs & Margins = the Cost Calculator** (Nov 2026, Paul): Products & Price List → Costs & Margins (`src/costcalc/CostsArea.jsx`)
-  has two views — **Overview** (`CostsView`: every SKU's cost, read-only, source links to its calculator, margin at the lowest price vs
-  category target, "Problems only") and **Calculators**. The left-hand "Cost Calculator" area is gone (old `costcalc` tab id → products).
-  **Calculators are the ONLY source of costs**: the cost list = `costMapFromBook` (`src/costcalc/sync.js`) — replaced, not merged, on
-  every calculator Save, and re-synced when Costs & Margins opens if it differs (this cleared the old typed/CSV costs). Products bought
-  in rather than made get a calculator too: "＋ Bought-in products" (family "Bought-in products", lines Purchase price / Freight in /
-  Overhead % — blank, typed in). Reports → Margins → **Price list margin check** (`PriceMarginCheck` in marginReports.jsx): every
-  product's margin at each price level vs target, no-cost / under-target / losing-money first.
-- **Cost Calculator** (inside Costs & Margins, "Costs & margins" people only; `src/costcalc/`): one calculator per
-  product type (family › name, e.g. Turbidity Curtains › Type 2 DOT) with a column per size/SKU and lines in
-  Materials / Labour / Overhead & other. Add a SKU column with "＋ Add SKU" (blank, keeps % lines) or copy one ("⧉ Copy a SKU…" / ⧉ on a column → same numbers, placed after it, SKU blank); the grid scrolls sideways inside the page (root needs `minWidth: 0`). Unsaved changes live in the module-level `DRAFT` (memory only, per signed-in person) so switching Overview/Calculators or areas never loses an import; only Save / Undo clears it. Cells: number, link to another cell × factor, or a shared rate
-  (blanket labour = employees × wage × hours ÷ rolls/day; blanket overhead from the rolls/day table; your own
-  rates). Other-cost lines can be $, % of price or % of materials+labour, and Canada / USA / both. Price =
-  current price list (USA = USD list × USD rate), typed only when the SKU isn't listed. Margin = profit ÷ price
-  (markup shown small). **Save** → change log + Canada totals written into the cost list (`costsFromBook`).
-  Stored encrypted in `config/costCalcs` ({v:2, box}) with the cost key (`useCostBook`). "Import from Excel"
-  (`importXlsx.js`, in the browser) builds calculators from Paul's xlsx calculators — standard sheets only
-  (custom/Data/Sheet1/Production Cost Calculator skipped; headings can be on any row; stacked scenarios become separate calculators, extra ones marked `forCosts:false` = what-if, only calcs that "Set product costs" feed the cost list; overhead under Total Cost counts as a cost; wattle SKUs guessed from 9"x25'/12"x20' + burlap/rapid/aspen); after reading, a "Where should these go?" box picks the category + name for each one. Category = dropdown in the header (＋ New category…), ✎ renames a category. **No cost numbers in the code** (DEFAULT_RATES is empty on purpose). SKU matching for prices/costs/sales uses `skuId` (webPages.js) — **dots matter**: 2.5' curtains are `TBC2.550…` on the price list, 25' are `TBC2550…` (`skuKey` strips dots and is only for website-page families). The importer names 2.5' columns `TBC2.550…`; older saved calculators with `TBC0250…` are renamed automatically on open (then Save).
+- **Costs & Margins** (own left-hand area, Nov 2026 — Grant's approach; everyone with "Costs & margins" = all but John; logging in
+  unlocks it, no extra password; `src/margins/`). Tabs: **Product costs** (product lines on the left; one row per SKU: Materials
+  [number, or ▸ itemised list using **shared prices** like Jute] + Labour [number / shared price / the line's "Labour for all SKUs"]
+  + **Overhead by the line's method** + Extra $ (shipping in) = **Fully loaded cost**; Price from the price list at the chosen level
+  (typed only if not listed); Net margin vs the line's **target tier**; 🇺🇸 USA view = USD list × USD rate + commission % + tariff %
+  + FOB $), **Overview** (every SKU, problems first, "not costed yet" list), **Overhead & targets** (company rate = Σ G&A ÷ Σ revenue of
+  the years typed in, or "rate used"; Brooks G&A × blanket share (75%) ÷ target rolls = $/roll, rest ÷ target wattles = $/wattle, with
+  tipping points; tier targets Exclusive 50 / Manufactured 30 / Commodity 20; USD rate; shared prices; blanket labour helper),
+  **Change log**. Overhead methods: company % of M+L · blanket $/roll · wattle $/wattle · fixed $ · none (`model.js`, tested in
+  `tests/costs.test.mjs`). Grant reviews the rates yearly; Paul, Mark, Jeff can change them. Book = `config/marginBook` {v:2, box}
+  (encrypted with the cost key, `useMarginBook`); one Save button for all tabs; unsaved changes kept in module `DRAFT`. Save (and
+  opening the area when they differ, only if the book has lines) rewrites **`config/productCosts`** = Canada fully loaded cost +
+  `target` per SKU (`costList`), so Reports → Margins, Price list margin check, product pages and price-list drafts all use it.
+  "Import from Excel" (`importExcel.js`): Grant's **BMP Combined Cost Calculator** (SUMMARY tab → lines/SKUs/materials/labour/prices;
+  each line's tab → method + rate, shipping column) and the **erosion blanket working file** (itemised materials per SKU → shared
+  prices when 2+ SKUs use the same name+price; USA commission/FOB). The old per-column Cost Calculator (`src/costcalc`, `config/costCalcs`)
+  was removed. **No cost numbers in the code** — test with made-up numbers.
 - **Product page** (`src/products/ProductPage.jsx`; "Open product page →" in the SKU pop-up): information only —
   website photo/name/description, current CAD/USD prices, DIMS rows, stock, sales (this FY vs last, top customers,
-  last order; own accounts for John), quotes; cost + margins and a 🧮 Cost Calculator jump for cost viewers.
+  last order; own accounts for John), quotes; cost + margins and a 🧮 Costs & Margins jump for cost viewers.
 - `src/pipeline/PipelineDashboard.jsx` — Pipeline & Leads dashboard (lead tiles hidden without "leads").
 - **Prospecting** (left-hand area; `src/prospecting/`; Users & Access → "Prospecting" tick, default Paul, Mark, Grant, Jeff —
   **never John**; `canProspect` in users.js). Firestore `prospects/{id}` + `prospectActivities/{id}` (cachedCollection — write with

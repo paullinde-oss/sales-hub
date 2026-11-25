@@ -91,7 +91,7 @@ function ProductPage({ T, db, sku, onClose, productsCAD = [], productsUSD = [], 
             <div style={muted}>{categories[realSku] || "Uncategorized"}{!product && " · not on the Products list"}</div>
           </div>
           {p.url && <a className="btn" href={p.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>View on website ↗</a>}
-          {canCosts && <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} onClick={() => { onClose(); onCostCalc?.(realSku); }}>🧮 Cost Calculator</button>}
+          {canCosts && <button className="btn-gold" style={{ padding: "6px 14px", fontSize: 11 }} onClick={() => { onClose(); onCostCalc?.(realSku); }}>🧮 Costs &amp; Margins</button>}
           <button onClick={onClose} aria-label="Close" style={{ background: "transparent", border: "none", color: T.subtext, fontSize: 20, cursor: "pointer" }}>✕</button>
         </div>
 
@@ -137,7 +137,7 @@ function ProductPage({ T, db, sku, onClose, productsCAD = [], productsUSD = [], 
             {canCosts && <div style={card}>
               <div style={head}>Cost</div>
               {costs?.status !== "ready" ? <div style={muted}>Costs are locked — sign in again with your own password.</div>
-                : cost == null ? <div style={muted}>No cost yet — add a calculator for it (Products &amp; Price List → Costs &amp; Margins → Calculators).</div>
+                : cost == null ? <div style={muted}>No cost yet — add it in <b>Costs &amp; Margins</b> → Product costs.</div>
                 : <div style={{ fontSize: 13 }}><b style={{ fontSize: 18 }}>{money(cost)}</b> <span style={muted}>per unit · {costSrc || "cost list"}</span></div>}
             </div>}
 

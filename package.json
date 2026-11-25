@@ -7,7 +7,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "autosync": "esbuild scripts/autosync.mjs --bundle --platform=node --format=esm --packages=external --log-level=warning --outfile=.autosync/run.mjs && node .autosync/run.mjs",
-    "test": "esbuild tests/prospecting.test.mjs --bundle --platform=node --format=esm --packages=external --log-level=warning --outfile=.autosync/tests.mjs && node --test .autosync/tests.mjs",
+    "test": "esbuild tests/*.test.mjs --bundle --platform=node --format=esm --packages=external --log-level=warning --outdir=.autosync/tests --out-extension:.js=.mjs && node --test .autosync/tests/*.mjs",
     "productpages": "esbuild scripts/productPages.mjs --bundle --platform=node --format=esm --packages=external --log-level=warning --outfile=.autosync/productpages.mjs && node .autosync/productpages.mjs"
   },
   "dependencies": {

@@ -59,7 +59,7 @@ export default function CostsView({ T, costs, loginName, products, draftProducts
         <span style={{ fontSize: 11, color: T.tableHeadText }}>{withCost} of {products.length} SKUs have a cost{costs.at ? ` · last saved ${when(costs.at)}${costs.by ? " by " + costs.by : ""}` : ""}</span>
       </div>
       <div style={{ fontSize: 11, color: T.tableHeadText, marginBottom: 10, lineHeight: 1.5 }}>
-        Every cost comes from the <b>Calculators</b> (Canada total) — change a cost there and Save. A product without a cost needs a calculator (bought-in products: Calculators → ＋ Bought-in products).
+        Every cost is the <b>fully loaded cost</b> from <b>Costs &amp; Margins</b> (left-hand menu) — change it there. Targets come from each product line there.
         Margin = (price − cost) ÷ price, shown for the <b>lowest</b> price of each SKU (its biggest discount — usually FTL or pallet). Hover for every price.
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
@@ -74,7 +74,7 @@ export default function CostsView({ T, costs, loginName, products, draftProducts
           <thead><tr><th>SKU</th><th>Description</th><th style={{ textAlign: "right" }}>Cost</th><th>Cost source</th><th style={{ textAlign: "right" }}>Margin now</th>{draftProducts && <><th style={{ textAlign: "right" }}>Margin at new prices</th><th style={{ textAlign: "right" }}>Change</th></>}</tr></thead>
           <tbody>{rows.map(p => {
             const c = costOf(map, p.sku), info = map[up(p.sku)], d = draftBy.get(up(p.sku));
-            const m0 = lowestMargin(p, c), m1 = d ? lowestMargin(d, c) : null, t = targets[catOf(p)];
+            const m0 = lowestMargin(p, c), m1 = d ? lowestMargin(d, c) : null, t = info?.target ?? targets[catOf(p)];
             const tip = pp => PRICE_FIELDS.filter(f => priceNum(pp[f])).map(f => `${FIELD_LABEL[f]} ${money(priceNum(pp[f]))}: ${pctTxt(marginPct(pp[f], c))}`).join("\n");
             return <tr key={p.sku}>
               <td style={{ fontFamily: "monospace", fontSize: 11, whiteSpace: "nowrap" }}>{p.sku}</td>

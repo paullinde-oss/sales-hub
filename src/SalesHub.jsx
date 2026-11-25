@@ -23,8 +23,8 @@ import { useProspecting } from "./prospecting/store";
 import { signIn, tokenValid, listenLogins, listenMaster, changeOwnPassword } from "./sales/auth";
 import { setCostKey } from "./pricelist/costs";
 import { ProductPageHost } from "./products/ProductPage";
-import CostsArea from "./costcalc/CostsArea";
-import { useCostBook } from "./costcalc/store";
+import CostsMargins from "./margins/CostsMargins";
+import { useMarginBook } from "./margins/store";
 import { SS_OPEN_TAB } from "./sales/dropbox";
 import { ProductPreviewHost, SkuLink, SkuInfoButton, WebsitePagePicker, WebsitePagesView } from "./products/ProductPreview";
 import { moveSkuPage, useProductPages } from "./products/webPages";
@@ -747,7 +747,7 @@ export default function SalesHub() {
   const [activeTab, setActiveTab] = useState(() => {
     const t = sessionStorage.getItem(SS_OPEN_TAB);
     if (t) sessionStorage.removeItem(SS_OPEN_TAB);
-    return ({leads:"pipeline", loadcalc:"shipping", dims:"shipping", costcalc:"products"})[t] || t || "quotes";
+    return ({leads:"pipeline", loadcalc:"shipping", dims:"shipping", costcalc:"costs"})[t] || t || "quotes";
   });
   // Section shown inside the grouped areas (remembered on this computer)
   const [pipeSection, setPipeSection] = useLocalStorage('bmp_pipe_section', 'dashboard');
@@ -758,9 +758,9 @@ export default function SalesHub() {
   useEffect(() => listenCustomerPrices(db, setCustomerPrices), []);
   // Product costs (encrypted; only for people with "Costs & margins")
   const costs = useCosts(db, canSeeCosts(currentUser));
-  const costBook = useCostBook(db, canSeeCosts(currentUser));
+  const marginBook = useMarginBook(db, canSeeCosts(currentUser));
   const [costFocus, setCostFocus] = useState(null); // a SKU to jump to in the Cost Calculator
-  const [costView, setCostView] = useLocalStorage('bmp_cost_view', 'overview'); // Costs & Margins: overview | calc
+  const [marginSection, setMarginSection] = useLocalStorage('bmp_margin_section', 'costs'); // Costs & Margins tab
   CUSTOMER_PRICES = customerPrices;
   const [productsCAD, setProductsCAD] = useLocalStorage('bmp_products_cad', INITIAL_PRODUCTS_CAD);
   const [productsUSD, setProductsUSD] = useLocalStorage('bmp_products_usd',
@@ -1250,11 +1250,12 @@ ${quoteNumLine}
     {id:"sales",    label:"Sales Summary",         icon:"sales"},
     {id:"pipeline", label:"Pipeline & Leads",      icon:"pipeline"},
     {id:"products", label:"Products & Price List", icon:"products"},
+    {id:"costs",    label:"Costs & Margins",       icon:"calc"},
     {id:"prospecting", label:"Prospecting",        icon:"target"},
     {id:"shipping", label:"Shipping",              icon:"truck"},
     {id:"admin",    label:"Users & Access",        icon:"admin"},
   ];
-  const TABS = ALL_SIDEBAR_TABS.filter(t => t.id === "prospecting" ? canProspect(currentUser) : canSee(currentUser, t.id));
+  const TABS = ALL_SIDEBAR_TABS.filter(t => t.id === "costs" ? canSeeCosts(currentUser) : t.id === "prospecting" ? canProspect(currentUser) : canSee(currentUser, t.id));
   // If someone lands on a tab they can't see (e.g. after permissions change), move them to one they can
   useEffect(() => {
     if (authed && TABS.length && !TABS.some(t => t.id === activeTab)) setActiveTab(TABS[0].id);
@@ -1263,7 +1264,7 @@ ${quoteNumLine}
   // ── Mobile layout ────────────────────────────────────────────────────────
   if (authed && isMobile) return (<>
     <ProductPreviewHost T={T} products={productsCAD} extras={productExtras}/>
-    <ProductPageHost T={T} db={db} productsCAD={productsCAD} productsUSD={productsUSD} categories={categories} quotes={quotes} extras={productExtras} user={currentUser} loginName={loginName} usdToCad={exchangeRate?1/exchangeRate:1.37} canCosts={canSeeCosts(currentUser)} costs={costs} onCostCalc={s=>{setCostFocus(s);setCostView("calc");setProductsSection("costs");setActiveTab("products");}}/>
+    <ProductPageHost T={T} db={db} productsCAD={productsCAD} productsUSD={productsUSD} categories={categories} quotes={quotes} extras={productExtras} user={currentUser} loginName={loginName} usdToCad={exchangeRate?1/exchangeRate:1.37} canCosts={canSeeCosts(currentUser)} costs={costs} onCostCalc={s=>{setCostFocus(s);setMarginSection("costs");setActiveTab("costs");}}/>
     <MobileLayout
       T={T} theme={theme} setTheme={setTheme}
       activeTab={mobileTab} setActiveTab={setMobileTab}
@@ -1378,12 +1379,11 @@ ${quoteNumLine}
           {activeTab==="products"&&(()=>{
             // Price Lists (versions, drafts, customer price lists) only for people with "Edit price lists"
             const plOk = canEditPriceLists(currentUser), costOk = canSeeCosts(currentUser);
-            const secs = [["products","Products"], ...(plOk?[["pricelists","Price Lists"]]:[]), ...(costOk?[["costs","Costs & Margins"]]:[]), ["webpages","Website pages"]];
+            const secs = [["products","Products"], ...(plOk?[["pricelists","Price Lists"]]:[]), ["webpages","Website pages"]];
             const sec = secs.some(x=>x[0]===productsSection) ? productsSection : "products";
             const catOrder = Array.isArray(subCatDefs?.categoryOrder)&&subCatDefs.categoryOrder.length?subCatDefs.categoryOrder:CATEGORY_ORDER;
             return <TabPage T={T} title="PRODUCTS & PRICE LIST" sections={secs.length>1?secs:null} active={sec} onSelect={setProductsSection}>
               {sec==="webpages" ? <WebsitePagesView T={T} products={productsCAD} loginName={loginName}/>
-              : sec==="costs" ? <CostsArea T={T} costs={costs} costBook={costBook} loginName={loginName} productsCAD={productsCAD} productsUSD={productsUSD} hubUsdRate={exchangeRate?1/exchangeRate:1.38} categories={categories} categoryOrder={catOrder} focusSku={costFocus} setFocus={setCostFocus} onFocusDone={()=>setCostFocus(null)} view={costView} setView={setCostView}/>
               : sec==="products" ? <ProductsTab products={filteredProducts} setProducts={setCurrentProducts}
             currency={productCurrency} setCurrency={setProductCurrency} search={productSearch} setSearch={setProductSearch}
             categories={categories} setCategories={setCurrentCategories}
@@ -1394,6 +1394,9 @@ ${quoteNumLine}
                 loginName={loginName} logo={BMP_LOGO_FULL} usdRate={exchangeRate} costs={costs} canCosts={canSeeCosts(currentUser)}/>}
             </TabPage>;
           })()}
+          {activeTab==="costs"&&canSeeCosts(currentUser)&&<TabPage T={T} title="COSTS & MARGINS" sections={[["costs","Product costs"],["overview","Overview"],["settings","Overhead & targets"],["log","Change log"]]} active={["costs","overview","settings","log"].includes(marginSection)?marginSection:"costs"} onSelect={setMarginSection}>
+            <CostsMargins T={T} section={marginSection} setSection={setMarginSection} mbook={marginBook} costs={costs} loginName={loginName} productsCAD={productsCAD} productsUSD={productsUSD} categories={categories} focusSku={costFocus} onFocusDone={()=>setCostFocus(null)}/>
+          </TabPage>}
           {activeTab==="prospecting"&&canProspect(currentUser)&&<TabPage T={T} title="PROSPECTING" sections={[["list","Prospects"],["bot",`Grok bot${prospecting.inbox.length?` (${prospecting.inbox.length} waiting)`:""}`]]} active={prospectSection==="bot"?"bot":"list"} onSelect={setProspectSection}>
             <ProspectingTab T={T} pro={prospecting} section={prospectSection} loginName={loginName}
               owners={(users||DEFAULT_USERS).filter(canProspect).map(u=>u.name)}
@@ -1412,7 +1415,7 @@ ${quoteNumLine}
 
       <WonOptionPicker T={T} fmt={fmtCur}/>
       <ProductPreviewHost T={T} products={productsCAD} extras={productExtras}/>
-    <ProductPageHost T={T} db={db} productsCAD={productsCAD} productsUSD={productsUSD} categories={categories} quotes={quotes} extras={productExtras} user={currentUser} loginName={loginName} usdToCad={exchangeRate?1/exchangeRate:1.37} canCosts={canSeeCosts(currentUser)} costs={costs} onCostCalc={s=>{setCostFocus(s);setCostView("calc");setProductsSection("costs");setActiveTab("products");}}/>
+    <ProductPageHost T={T} db={db} productsCAD={productsCAD} productsUSD={productsUSD} categories={categories} quotes={quotes} extras={productExtras} user={currentUser} loginName={loginName} usdToCad={exchangeRate?1/exchangeRate:1.37} canCosts={canSeeCosts(currentUser)} costs={costs} onCostCalc={s=>{setCostFocus(s);setMarginSection("costs");setActiveTab("costs");}}/>
       {/* PDF Modal */}
       {pdfQuote && (
         <PDFModal quote={pdfQuote} onClose={()=>setPdfQuote(null)}/>

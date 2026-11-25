@@ -4846,7 +4846,7 @@ function PDFModal({quote:q, onClose}) {
           <div style={{background:"#0d0d0d",border:"1px solid #1e1e1e",padding:"14px 16px",display:"flex",flexDirection:"column",gap:6}}>
             <div style={{fontSize:9,textTransform:"uppercase",letterSpacing:".14em",color:"#888",marginBottom:6,fontWeight:600}}>BMP Notes (appears on quote)</div>
             <textarea value={bmpNotes} onChange={e=>setBmpNotes(e.target.value)} placeholder="Internal notes or special instructions..."
-              style={{width:"100%",height:80,background:"#1e1e1e",border:"1px solid #333",color:"#e8e8e8",fontSize:13,padding:"8px 10px",resize:"vertical",fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",borderRadius:2,lineHeight:1.5}}/>
+              style={{width:"100%",flex:1,minHeight:140,background:"#1e1e1e",border:"1px solid #333",color:"#e8e8e8",fontSize:13,padding:"8px 10px",resize:"none",fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",borderRadius:2,lineHeight:1.5}}/>
             <div style={{marginTop:8,background:"#0a0a0a",border:"1px solid #1a1a1a",padding:"10px 12px"}}>
               {[
                 ["Subtotal", fmtCur(subtotal)],

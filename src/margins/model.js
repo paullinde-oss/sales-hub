@@ -148,7 +148,7 @@ export function describeChanges(before, after) {
     (l.skus || []).forEach(s => {
       const p = s0.get(s.id), name = s.sku || s.desc || "SKU";
       if (!p) { out.push([l.name, `Added ${name}`, "", ""]); return; }
-      ["sku", "desc", "materials", "labour", "extra", "target"].forEach(k => { if (f(p[k]) !== f(s[k])) out.push([l.name, `${name} · ${k}`, f(p[k]), f(s[k])]); });
+      ["sku", "desc", "materials", "labour", "extra", "target", "perTruck"].forEach(k => { if (f(p[k]) !== f(s[k])) out.push([l.name, `${name} · ${k}`, f(p[k]), f(s[k])]); });
       if (JSON.stringify(p.items || []) !== JSON.stringify(s.items || [])) out.push([l.name, `${name} · materials breakdown`, "", ""]);
       if (JSON.stringify(p.usa || {}) !== JSON.stringify(s.usa || {})) out.push([l.name, `${name} · USA costs`, JSON.stringify(p.usa || {}), JSON.stringify(s.usa || {})]);
       if (JSON.stringify(p.manualPrice || {}) !== JSON.stringify(s.manualPrice || {})) out.push([l.name, `${name} · typed price`, JSON.stringify(p.manualPrice || {}), JSON.stringify(s.manualPrice || {})]);

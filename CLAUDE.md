@@ -62,7 +62,7 @@ Live: https://saleshub.bmpsupplies.com (also https://paullinde-oss.github.io/sal
   + FOB $), **Overview** (every SKU, problems first, "not costed yet" list), **Overhead & targets** (company rate = Σ G&A ÷ Σ revenue of
   the years typed in, or "rate used"; Brooks G&A × blanket share (75%) ÷ target rolls = $/roll, rest ÷ target wattles = $/wattle, with
   tipping points; tier targets Exclusive 50 / Manufactured 30 / Commodity 20; USD rate; shared prices; blanket labour helper),
-  **Change log**. Overhead methods: company % of M+L · blanket $/roll · wattle $/wattle · fixed $ · none (`model.js`, tested in
+  **Volume & break-even** (`VolumeView.jsx`: blanket/wattle units sold in a FY or calendar year from the orders vs the tipping point, with an on-pace marker; profit per truckload per SKU, Canada/USA, with overhead and once it's covered — truck qty from the price list or typed `perTruck`), **Change log**. Overhead methods: company % of M+L · blanket $/roll · wattle $/wattle · fixed $ · none (`model.js`, tested in
   `tests/costs.test.mjs`). Grant reviews the rates yearly; Paul, Mark, Jeff can change them. Book = `config/marginBook` {v:2, box}
   (encrypted with the cost key, `useMarginBook`); one Save button for all tabs; unsaved changes kept in module `DRAFT`. Save (and
   opening the area when they differ, only if the book has lines) rewrites **`config/productCosts`** = Canada fully loaded cost +

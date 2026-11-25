@@ -7,6 +7,7 @@ import { Loader } from "../Loader";
 import { CostGate } from "../pricelist/CostsView";
 import * as M from "./model";
 import { readWorkbook } from "./importExcel";
+import VolumeView from "./VolumeView";
 
 const GREEN = "#34c77b", RED = "#e8472c", AMBER = "#e8a23a";
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -16,14 +17,14 @@ const numIn = v => v === "" ? "" : isNaN(+v) ? v : +v;
 const tierLabel = t => (M.TIERS.find(x => x[0] === t) || [, t])[1];
 let DRAFT = null; // unsaved changes survive switching tabs/areas (memory only, never stored)
 
-export default function CostsMargins({ T, section, setSection, mbook, costs, loginName, productsCAD = [], productsUSD = [], categories = {}, focusSku, onFocusDone }) {
+export default function CostsMargins({ T, db, section, setSection, mbook, costs, loginName, productsCAD = [], productsUSD = [], categories = {}, focusSku, onFocusDone }) {
   if (costs.status !== "ready") return <div style={{ padding: 16 }}><CostGate T={T} costs={costs}>{null}</CostGate></div>;
   if (mbook.status === "locked") return <div style={{ padding: 16, fontSize: 12, color: T.tableHeadText }}>Costs are locked on this computer — sign out and back in with your own password.</div>;
   if (mbook.status !== "ready") return <Loader T={T} label="Loading costs…" />;
-  return <Book T={T} section={section} setSection={setSection} mbook={mbook} costs={costs} loginName={loginName} productsCAD={productsCAD} productsUSD={productsUSD} categories={categories} focusSku={focusSku} onFocusDone={onFocusDone} />;
+  return <Book T={T} db={db} section={section} setSection={setSection} mbook={mbook} costs={costs} loginName={loginName} productsCAD={productsCAD} productsUSD={productsUSD} categories={categories} focusSku={focusSku} onFocusDone={onFocusDone} />;
 }
 
-function Book({ T, section, setSection, mbook, costs, loginName, productsCAD, productsUSD, categories, focusSku, onFocusDone }) {
+function Book({ T, db, section, setSection, mbook, costs, loginName, productsCAD, productsUSD, categories, focusSku, onFocusDone }) {
   const draft = DRAFT && DRAFT.by === loginName ? DRAFT : null;
   const [book, setBook] = useState(() => draft ? draft.book : clone(mbook.book));
   const [dirty, setDirty] = useState(() => !!draft);
@@ -81,6 +82,7 @@ function Book({ T, section, setSection, mbook, costs, loginName, productsCAD, pr
       <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: "flex" }}>
         {section === "overview" ? <Overview {...ctx} openSku={(lineId, skuId) => { setSection("costs"); setTimeout(() => window.dispatchEvent(new CustomEvent("bmp-margin-open", { detail: { lineId, skuId } })), 0); }} />
           : section === "settings" ? <Settings {...ctx} />
+          : section === "volume" ? <VolumeView T={T} db={db} R={R} book={book} priceOf={priceOf} productsCAD={productsCAD} change={change} />
           : section === "log" ? <ChangeLog T={T} log={book.log || []} />
           : <ProductCosts {...ctx} focusSku={focusSku} onFocusDone={onFocusDone} />}
       </div>

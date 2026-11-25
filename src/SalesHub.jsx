@@ -1394,8 +1394,8 @@ ${quoteNumLine}
                 loginName={loginName} logo={BMP_LOGO_FULL} usdRate={exchangeRate} costs={costs} canCosts={canSeeCosts(currentUser)}/>}
             </TabPage>;
           })()}
-          {activeTab==="costs"&&canSeeCosts(currentUser)&&<TabPage T={T} title="COSTS & MARGINS" sections={[["costs","Product costs"],["overview","Overview"],["settings","Overhead & targets"],["log","Change log"]]} active={["costs","overview","settings","log"].includes(marginSection)?marginSection:"costs"} onSelect={setMarginSection}>
-            <CostsMargins T={T} section={marginSection} setSection={setMarginSection} mbook={marginBook} costs={costs} loginName={loginName} productsCAD={productsCAD} productsUSD={productsUSD} categories={categories} focusSku={costFocus} onFocusDone={()=>setCostFocus(null)}/>
+          {activeTab==="costs"&&canSeeCosts(currentUser)&&<TabPage T={T} title="COSTS & MARGINS" sections={[["costs","Product costs"],["overview","Overview"],["volume","Volume & break-even"],["settings","Overhead & targets"],["log","Change log"]]} active={["costs","overview","volume","settings","log"].includes(marginSection)?marginSection:"costs"} onSelect={setMarginSection}>
+            <CostsMargins T={T} db={db} section={marginSection} setSection={setMarginSection} mbook={marginBook} costs={costs} loginName={loginName} productsCAD={productsCAD} productsUSD={productsUSD} categories={categories} focusSku={costFocus} onFocusDone={()=>setCostFocus(null)}/>
           </TabPage>}
           {activeTab==="prospecting"&&canProspect(currentUser)&&<TabPage T={T} title="PROSPECTING" sections={[["list","Prospects"],["bot",`Grok bot${prospecting.inbox.length?` (${prospecting.inbox.length} waiting)`:""}`]]} active={prospectSection==="bot"?"bot":"list"} onSelect={setProspectSection}>
             <ProspectingTab T={T} pro={prospecting} section={prospectSection} loginName={loginName}

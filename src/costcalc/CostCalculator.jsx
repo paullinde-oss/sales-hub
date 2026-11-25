@@ -173,7 +173,10 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
 
   const card = { background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 3 };
   const inp = { height: 26, fontSize: 12, padding: "0 6px", background: T.inputBg || T.cardBg, color: T.text, border: `1px solid ${T.border}`, borderRadius: 2 };
-  const ImportButton = ({ big }) => (
+  // A plain function (not a component made inside this one): a component type re-made on every redraw would swap
+  // the file box for a new one whenever a live update arrives while the file picker is open, and the chosen file
+  // would go nowhere ("nothing happens").
+  const importButton = big => (
     <label className={big ? "btn-gold" : "btn"} style={{ cursor: "pointer", ...(big ? { padding: "8px 16px", fontSize: 12, display: "inline-block" } : {}) }}>
       ⬆ Import from Excel
       <input type="file" accept=".xlsx,.xls,.csv" multiple style={{ display: "none" }} onChange={e => { const f = [...e.target.files]; e.target.value = ""; if (f.length) doImport(f); }} />
@@ -231,7 +234,7 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
             </select>
           </> : <div style={{ fontSize: 15, fontWeight: 600 }}>{sel === "rates" ? "Shared rates" : sel === "log" ? "Change log" : "Cost Calculator"}</div>}
           <div style={{ flex: 1 }} />
-          <ImportButton />
+          {importButton(false)}
           {dirty && <button className="btn" onClick={() => { if (confirm("Undo all changes since the last save?")) { setBook(clone(stored.book)); setDirty(false); } }}>Undo changes</button>}
           <button className="btn-gold" style={{ padding: "6px 16px", fontSize: 11, opacity: dirty ? 1 : .5 }} disabled={!dirty || busy === "Saving…"} onClick={save}>{dirty ? "Save changes" : "Saved"}</button>
         </div>
@@ -247,7 +250,7 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
               <b>You don't need to create anything first:</b> every standard type in each file (all the curtain types, all the blankets…) is built automatically, with the same lines and numbers; custom one-offs are left out.
               Nothing is saved until you check them and click <b>Save changes</b>.
             </div>
-            <ImportButton big />
+            {importButton(true)}
           </div>
         )}
 

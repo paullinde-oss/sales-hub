@@ -16,10 +16,16 @@ const skuKey = s => String(s || "").toUpperCase().replace(/[\s\-_]/g, "").replac
 const BASIS = [["$", "$"], ["pctPrice", "% of price"], ["pctCost", "% of materials + labour"]];
 const MARKET = [["both", "Canada & USA"], ["ca", "Canada only"], ["us", "USA only"]];
 
+// Unsaved changes are kept here (in memory only, never stored) so switching to Overview, another
+// area or another calculator and coming back doesn't lose them — only Save or "Undo changes" clears them.
+let DRAFT = null; // { by, book, sel }
+
 export default function CostCalculator({ T, book: stored, saveBook, costs, loginName, productsCAD = [], productsUSD = [], hubUsdRate, focusSku, onFocusDone, categories = {} }) {
-  const [book, setBook] = useState(() => clone(stored.book));
-  const [dirty, setDirty] = useState(false);
-  const [sel, setSel] = useState(() => stored.book.calcs[0]?.id || "start");
+  const draft = DRAFT && DRAFT.by === loginName ? DRAFT : null;
+  const [book, setBook] = useState(() => draft ? draft.book : clone(stored.book));
+  const [dirty, setDirty] = useState(() => !!draft);
+  const [sel, setSel] = useState(() => draft?.sel || stored.book.calcs[0]?.id || "start");
+  useEffect(() => { DRAFT = dirty ? { by: loginName, book, sel } : null; }, [book, dirty, sel, loginName]);
   const [market, setMarket] = useState("ca");
   const [busy, setBusy] = useState("");
   const [linkEdit, setLinkEdit] = useState(null); // { lineId, colId }
@@ -138,7 +144,12 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
       // Ask which category each one goes under (guessed from the file name; pick any existing one or type a new one)
       setPending({ results, names: files.map(f => f.name), rows: results.flatMap(r => r.calcs.map(c => ({ calc: c, family: c.family, name: c.name }))) });
       setBusy("");
-    } catch (e) { setBusy(""); alert("Couldn't read that file: " + e.message); }
+    } catch (e) {
+      setBusy("");
+      // The Excel reader is fetched the first time it's used; if the hub was updated since this page opened, that fails
+      if (/dynamically imported module|Failed to fetch|Importing a module script|Loading chunk/i.test(e.message || "")) alert("The hub was updated since you opened this page. Refresh the page (F5), then import the file again.");
+      else alert("Couldn't read that file: " + e.message);
+    }
   };
   const finishImport = () => {
     const { results, names, rows } = pending;
@@ -226,6 +237,7 @@ export default function CostCalculator({ T, book: stored, saveBook, costs, login
         </div>
 
         {busy && <div style={{ fontSize: 12, color: T.gold, fontWeight: 600, margin: "-4px 0 10px" }}>{busy}</div>}
+        {dirty && !busy && <div style={{ fontSize: 12, color: AMBER, fontWeight: 600, margin: "-4px 0 10px" }}>● Unsaved changes — click <b>Save changes</b> to keep them (they're held until you do, even if you switch screens).</div>}
         {(!book.calcs.length || sel === "start") && sel !== "rates" && sel !== "log" && (
           <div style={{ ...card, padding: 20, maxWidth: 680 }}>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>{book.calcs.length ? "Import from Excel" : "Set up the Cost Calculator"}</div>

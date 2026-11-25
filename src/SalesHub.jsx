@@ -1192,7 +1192,7 @@ export default function SalesHub() {
       ...(linesOf(q,0).length ? [`<tr>${cell("<b>Common to all options</b>")}</tr>${linesOf(q,0).map(rowHtml).join("")}`] : []),
     ].join("");
     const bottomRow = opts ? `<tr><td colspan="5" bgcolor="#F9F9F9" style="border:1px solid #000;padding:6px 12px;font-family:Calibri,Arial,sans-serif;font-size:12px;color:#555555;font-style:italic;background-color:#F9F9F9;">Please choose one option.${q.notes?" Notes: "+q.notes:""}</td></tr>` : `<tr>
-      <td colspan="3" bgcolor="#F9F9F9" style="border:1px solid #000;padding:6px 12px;font-family:Calibri,Arial,sans-serif;font-size:12px;color:#555555;font-style:italic;background-color:#F9F9F9;">${q.notes?"Notes: "+q.notes:""}</td>
+      <td colspan="3" bgcolor="#F9F9F9" style="border:1px solid #000;padding:6px 12px;font-family:Calibri,Arial,sans-serif;font-size:12px;color:#555555;font-style:italic;background-color:#F9F9F9;">${q.notes?"Notes: "+String(q.notes).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/\n/g,"<br>"):""}</td>
       <td bgcolor="#F5F5F5" style="border:1px solid #000;padding:6px 12px;text-align:right;font-family:Calibri,Arial,sans-serif;font-size:13px;font-weight:bold;background-color:#F5F5F5;color:#000000;">Total (${q.currency})</td>
       <td bgcolor="#F5F5F5" style="border:1px solid #000;padding:6px 12px;text-align:right;font-family:Calibri,Arial,sans-serif;font-size:13px;font-weight:bold;background-color:#F5F5F5;color:#000000;">${fmtCur(total)}</td>
     </tr>`;
@@ -2323,12 +2323,18 @@ function QuoteForm({quote,setQuote,productsCAD,productsUSD,onSave,onEdit,onEmail
       {/* Notes + Total */}
       <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:12,border:"1px solid #1e1e1e",padding:12}}>
         <div>
-          <div style={{fontSize:9,color:"#444",letterSpacing:".1em",textTransform:"uppercase",marginBottom:4}}>Quote Notes <span style={{color:"var(--muted)",fontWeight:300,textTransform:"none"}}>(printed on quote)</span></div>
-          <textarea disabled={ro} value={quote.notes} onChange={e=>upd("notes",e.target.value)}
-            style={{width:"100%",height:48,resize:"vertical",fontSize:11,background:"var(--input-bg)",border:"1px solid var(--border)",color:"var(--text)"}} placeholder="Notes for the customer…"/>
-          <div style={{fontSize:9,color:"var(--accent)",letterSpacing:".1em",textTransform:"uppercase",marginTop:8,marginBottom:4}}>Internal Notes <span style={{color:"var(--muted)",fontWeight:300,textTransform:"none"}}>(not on quote)</span></div>
-          <textarea disabled={ro} value={quote.internalNotes||""} onChange={e=>upd("internalNotes",e.target.value)}
-            style={{width:"100%",height:48,resize:"vertical",fontSize:11,background:"var(--input-bg)",border:`1px solid ${quote.internalNotes?"var(--accent)":"var(--border)"}`,color:"var(--text)"}} placeholder={`Internal notes by ${quote.savedBy||"you"}…`}/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div>
+              <div style={{fontSize:9,color:"#444",letterSpacing:".1em",textTransform:"uppercase",marginBottom:4}}>Quote Notes <span style={{color:"var(--muted)",fontWeight:300,textTransform:"none"}}>(printed on quote)</span></div>
+              <textarea disabled={ro} value={quote.notes} onChange={e=>upd("notes",e.target.value)} rows={8}
+                style={{width:"100%",resize:"vertical",fontSize:11,lineHeight:1.5,background:"var(--input-bg)",border:"1px solid var(--border)",color:"var(--text)"}} placeholder="Notes for the customer…"/>
+            </div>
+            <div>
+              <div style={{fontSize:9,color:"var(--accent)",letterSpacing:".1em",textTransform:"uppercase",marginBottom:4}}>Internal Notes <span style={{color:"var(--muted)",fontWeight:300,textTransform:"none"}}>(not on quote)</span></div>
+              <textarea disabled={ro} value={quote.internalNotes||""} onChange={e=>upd("internalNotes",e.target.value)} rows={8}
+                style={{width:"100%",resize:"vertical",fontSize:11,lineHeight:1.5,background:"var(--input-bg)",border:`1px solid ${quote.internalNotes?"var(--accent)":"var(--border)"}`,color:"var(--text)"}} placeholder={`Internal notes by ${quote.savedBy||"you"}…`}/>
+            </div>
+          </div>
           {/* Ship To Details */}
           <div style={{marginTop:10,padding:"10px 12px",background:T.tableHead,border:`1px solid ${T.border}`,borderRadius:3}}>
             <label style={{display:"flex",alignItems:"center",gap:8,cursor:ro?"default":"pointer",userSelect:"none"}}
@@ -4698,8 +4704,8 @@ function PDFModal({quote:q, onClose}) {
     <!-- Left: notes box -->
     <div style="padding-right:16px;">
       <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:#aaa;font-weight:700;margin-bottom:5px;">BMP Notes</div>
-      <div style="border:1px solid #d8d8d4;min-height:52px;padding:7px 10px;font-size:10.5px;color:#444;line-height:1.6;background:#fafaf8;">${bmpNotes||""}</div>
-      <div style="font-size:10px;color:#555;margin-top:6px;">${q.currency}</div>
+      <div style="border:1px solid #d8d8d4;min-height:52px;padding:7px 10px;font-size:10.5px;color:#444;line-height:1.6;background:#fafaf8;white-space:pre-wrap;">${String(bmpNotes||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</div>
+      <div style="font-size:10px;color:#555;margin-top:6px;">${q.currency||""}</div>
     </div>
     <!-- Right: quote fields -->
     <div style="padding-left:16px;border-left:1px solid #e8e8e4;">
